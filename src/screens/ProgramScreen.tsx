@@ -4,8 +4,15 @@ import { db } from '../db/db';
 import type { DaySlot, Exercise, GolfDay, MuscleId } from '../db/types';
 import { MUSCLES } from '../db/seed/muscles';
 import { friendlyDate, longDate, todayIso } from '../lib/format';
-import { GRIP_BUFFER_DAYS, buildWeek, golfWeekdaysFrom, WEEKDAY_LABEL } from '../lib/golf';
+import {
+  GRIP_BUFFER_DAYS,
+  WEEKDAY_LABEL,
+  buildWeek,
+  golfWeekdaysFrom,
+  weekdayOf,
+} from '../lib/golf';
 import { generateBlock, type GeneratedBlock } from '../lib/blockBuilder';
+import { readSchedules, writeSchedule } from '../lib/program';
 import { Card, Chip, Empty, Label, Screen, SegmentedToggle } from '../components/Layout';
 import { WeekStrip } from '../components/WeekStrip';
 import { shiftIso, weekStart } from '../lib/format';
@@ -20,7 +27,13 @@ function nextGolfStatus(current: GolfDay | undefined): GolfDay['status'] | undef
   return undefined;
 }
 
-export function ProgramScreen({ exercises }: { exercises: Exercise[] }) {
+export function ProgramScreen({
+  exercises,
+  onStartDay,
+}: {
+  exercises: Exercise[];
+  onStartDay: (slot: DaySlot) => void;
+}) {
   const [anchor, setAnchor] = useState(() => todayIso());
   const [sessionsPerWeek, setSessionsPerWeek] = useState<(typeof SESSION_COUNTS)[number]>('2');
   const [focus, setFocus] = useState<MuscleId[]>([]);
@@ -33,6 +46,12 @@ export function ProgramScreen({ exercises }: { exercises: Exercise[] }) {
     [block?.id],
     undefined,
   );
+  const schedule = useLiveQuery(
+    async () => (block ? ((await readSchedules())[block.id] ?? {}) : {}),
+    [block?.id],
+    undefined,
+  );
+
   const sessionRows = useLiveQuery(async () => {
     const start = weekStart(anchor);
     const rows = await db.session
@@ -92,6 +111,13 @@ export function ProgramScreen({ exercises }: { exercises: Exercise[] }) {
       await db.blockExercise.bulkPut(preview.days.flatMap((day) => day.exercises));
       await db.block.put({ ...block, focusMuscles: focusOrDefault });
     });
+    // The builder decided which weekday each slot lands on, and that is half
+    // the golf rule. BlockExercise has nowhere to put it, so it is stored
+    // beside the block — without it nothing can answer "what am I doing today".
+    await writeSchedule(
+      block.id,
+      Object.fromEntries(preview.days.map((day) => [day.slot, day.weekday])),
+    );
     setPreview(null);
   };
 
@@ -289,8 +315,32 @@ export function ProgramScreen({ exercises }: { exercises: Exercise[] }) {
           .filter((s) => s.daySlot === slot)
           .sort((a, b) => a.order - b.order);
         if (list.length === 0) return null;
+        const weekday = schedule?.[slot];
+        const isToday = weekday !== undefined && weekday === weekdayOf(todayIso());
         return (
-          <Card key={slot} title={`Day ${slot}`} className="mt-3">
+          <Card
+            key={slot}
+            title={`Day ${slot}`}
+            className="mt-3"
+            trailing={
+              <span className="flex items-center gap-2">
+                {weekday !== undefined && (
+                  <Label className={isToday ? 'text-text!' : ''}>
+                    {isToday ? 'today' : WEEKDAY_LABEL[weekday]}
+                  </Label>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onStartDay(slot)}
+                  className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold ${
+                    isToday ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
+                  }`}
+                >
+                  Start
+                </button>
+              </span>
+            }
+          >
             {list.map((entry) => (
               <div
                 key={entry.exerciseId}

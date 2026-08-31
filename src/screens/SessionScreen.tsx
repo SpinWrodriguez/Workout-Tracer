@@ -3,6 +3,14 @@ import { db } from '../db/db';
 import type { BlockExercise, DaySlot, Exercise, SetLog } from '../db/types';
 import { CABLE_STACK_KG, STATION_LABEL } from '../db/seed/exercises';
 import { DEFAULT_BLOCK_ID } from '../db/seed';
+import {
+  draftFromPlan,
+  emptyDraft,
+  entriesForSlot,
+  readBlockPlan,
+  slotForDate,
+  type BlockPlan,
+} from '../lib/program';
 import { readInventory } from '../db/settings';
 import { hasLoadTranslation } from '../lib/load';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
@@ -21,7 +29,6 @@ import {
   emptySet,
   isLoggable,
   loadDraft,
-  newSessionId,
   saveSession,
   type DraftSet,
   type SessionDraft,
@@ -65,10 +72,13 @@ interface ActiveCell {
 
 export function SessionScreen({
   sessionId,
+  daySlot,
   exercises,
   onExit,
 }: {
   sessionId?: string;
+  /** Start this day of the block. Omitted means "work out today's slot". */
+  daySlot?: DaySlot;
   exercises: Exercise[];
   onExit: () => void;
 }) {
@@ -87,6 +97,7 @@ export function SessionScreen({
   const [history, setHistory] = useState<Record<string, SetLog[]>>({});
   const [allHistory, setAllHistory] = useState<Record<string, HistorySet[]>>({});
   const [inventory, setInventory] = useState<Inventory>(DEFAULT_INVENTORY);
+  const [plan, setPlan] = useState<BlockPlan | undefined>(undefined);
   const [golfDates, setGolfDates] = useState<string[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [targets, setTargets] = useState<Record<string, BlockExercise>>({});
@@ -119,22 +130,36 @@ export function SessionScreen({
           return;
         }
       }
+      /*
+       * A new session starts from the block, not from an empty picker. The
+       * requested slot wins; otherwise it is whichever slot the builder put on
+       * today's weekday. Only when there is nothing programmed to run does the
+       * picker open, which is the freeform path Phase 1 shipped with.
+       */
       const date = todayIso();
-      if (!cancelled) {
-        setDraft({
-          id: newSessionId(date),
-          blockId: DEFAULT_BLOCK_ID,
-          daySlot: 'A',
-          date,
-          exercises: [],
-        });
-        setPicking(true);
+      const blockPlan = await readBlockPlan();
+      if (cancelled) return;
+
+      setPlan(blockPlan);
+
+      const slot = daySlot ?? (blockPlan ? slotForDate(blockPlan.schedule, date) : undefined);
+      const programmed =
+        blockPlan && slot ? entriesForSlot(blockPlan.entries, slot).length > 0 : false;
+
+      if (blockPlan && slot && programmed) {
+        const next = draftFromPlan({ plan: blockPlan, slot, exercisesById, date });
+        setDraft(next);
+        setActiveId(next.exercises[0]?.exerciseId);
+        return;
       }
+
+      setDraft(emptyDraft(blockPlan?.block.id ?? DEFAULT_BLOCK_ID, slot ?? 'A', date));
+      setPicking(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, daySlot, exercisesById]);
 
   /* --- previous-session reference for the target column ------------------ */
   /* Keyed on primitives only: this must not re-query on every keystroke. */
@@ -319,6 +344,19 @@ export function SessionScreen({
         : prev,
     );
   };
+
+  /** Replaces the draft's exercises with the programmed ones for a slot. */
+  const loadSlot = (slot: DaySlot) => {
+    if (!plan || !draft) return;
+    const next = draftFromPlan({ plan, slot, exercisesById, date: draft.date });
+    setDraft({ ...draft, daySlot: slot, exercises: next.exercises });
+    setActiveId(next.exercises[0]?.exerciseId);
+    setPicking(false);
+  };
+
+  const programmedForSlot = plan
+    ? entriesForSlot(plan.entries, (draft?.daySlot as DaySlot) ?? 'A')
+    : [];
 
   const toggleDone = (exerciseId: string, setIndex: number, set: DraftSet) => {
     const nextDone = !set.done;
@@ -514,6 +552,15 @@ export function SessionScreen({
         {!activeExercise || !activeDraftExercise ? (
           <Card title="No exercises yet">
             <p className="text-text-dim">--- sets</p>
+            {programmedForSlot.length > 0 && (
+              <button
+                type="button"
+                onClick={() => loadSlot(draft.daySlot as DaySlot)}
+                className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg"
+              >
+                Load day {draft.daySlot} · {programmedForSlot.length} exercises
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setPicking(true)}

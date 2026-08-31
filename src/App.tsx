@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/db';
+import type { DaySlot } from './db/types';
 import { seedDatabase } from './db/seed';
 import { BottomNav, type Tab } from './components/BottomNav';
 import { DashboardScreen } from './screens/DashboardScreen';
@@ -11,7 +12,9 @@ import { SessionScreen } from './screens/SessionScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 
 /** Either a tab, or a session being logged/edited full-screen. */
-type Route = { kind: 'tab'; tab: Tab } | { kind: 'session'; sessionId?: string };
+type Route =
+  | { kind: 'tab'; tab: Tab }
+  | { kind: 'session'; sessionId?: string; daySlot?: DaySlot };
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -34,6 +37,7 @@ export default function App() {
     return (
       <SessionScreen
         sessionId={route.sessionId}
+        daySlot={route.daySlot}
         exercises={exercises}
         onExit={() => setRoute({ kind: 'tab', tab: route.sessionId ? 'history' : 'dashboard' })}
       />
@@ -41,6 +45,8 @@ export default function App() {
   }
 
   const openSession = (sessionId: string) => setRoute({ kind: 'session', sessionId });
+  /** Start a new session. Without a slot the screen resolves today's. */
+  const startSession = (slot?: DaySlot) => setRoute({ kind: 'session', daySlot: slot });
 
   return (
     <>
@@ -48,6 +54,7 @@ export default function App() {
         <DashboardScreen
           exercises={exercises}
           onOpenSession={openSession}
+          onStartDay={startSession}
           onOpenSettings={() => setRoute({ kind: 'tab', tab: 'settings' })}
         />
       )}
@@ -55,13 +62,15 @@ export default function App() {
       {route.tab === 'history' && (
         <HistoryScreen exercises={exercises} onOpen={openSession} />
       )}
-      {route.tab === 'program' && <ProgramScreen exercises={exercises} />}
+      {route.tab === 'program' && (
+        <ProgramScreen exercises={exercises} onStartDay={startSession} />
+      )}
       {route.tab === 'settings' && <SettingsScreen />}
 
       <BottomNav
         tab={route.tab}
         onTab={(tab) => setRoute({ kind: 'tab', tab })}
-        onNewSession={() => setRoute({ kind: 'session' })}
+        onNewSession={() => startSession()}
       />
     </>
   );
