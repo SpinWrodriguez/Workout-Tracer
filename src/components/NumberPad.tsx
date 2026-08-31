@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { kg } from '../lib/format';
+import { atCeiling, isLoadable, nextRung, prevRung, snapToLadder } from '../lib/loadable';
 
 /* -------------------------------------------------------------------------- */
 /*  Custom in-app numeric keypad — spec §4.                                   */
@@ -14,8 +16,14 @@ export interface PadTarget {
   label: string;
   kind: PadKind;
   value: number | undefined;
-  /** Increment for the ± keys. Weight steps come from the exercise's station. */
+  /** Increment for the ± keys when there is no ladder to step along. */
   step: number;
+  /**
+   * Loadable rungs for this exercise (Phase 2). When present the ± keys step
+   * rung to rung, the top rung is a hard stop, and a typed value snaps to the
+   * nearest rung on commit — so 27 kg can be typed but never saved.
+   */
+  ladder?: number[];
 }
 
 const DIGITS_TOP = ['1', '2', '3'];
@@ -96,16 +104,48 @@ export function NumberPad({
     write(base.slice(0, -1));
   };
 
+  const ladder = target.kind === 'weight' ? (target.ladder ?? []) : [];
+  const hasLadder = ladder.length > 0;
+
   const bump = (delta: number) => {
+    if (hasLadder) {
+      const from = parsed ?? snapToLadder(0, ladder) ?? 0;
+      // Stepping from an off-ladder number lands on the ladder first.
+      const anchor = isLoadable(from, ladder) ? from : (snapToLadder(from, ladder) ?? from);
+      const moved =
+        anchor !== from ? anchor : delta > 0 ? nextRung(from, ladder) : prevRung(from, ladder);
+      if (moved === undefined) return; // ceiling and floor are hard stops
+      write(String(moved));
+      return;
+    }
     const next = Math.max(0, Math.round(((parsed ?? 0) + delta) * 100) / 100);
     write(String(next));
   };
 
+  /** Snapped value, or the raw one when the exercise has no ladder. */
+  const resolved =
+    hasLadder && parsed !== undefined ? snapToLadder(parsed, ladder) : parsed;
+
+  const snapNote =
+    hasLadder && parsed !== undefined && resolved !== undefined && resolved !== parsed
+      ? `not loadable — saves as ${kg(resolved)} kg`
+      : undefined;
+
+  const ceilingNote =
+    hasLadder && resolved !== undefined && atCeiling(resolved, ladder)
+      ? `${kg(resolved)} kg is the heaviest you can load`
+      : undefined;
+
   const commit = (then: 'close' | 'next') => {
-    onCommit(parsed);
+    onCommit(resolved);
     if (then === 'next' && onNext) onNext();
     else onClose();
   };
+
+  const atTop =
+    hasLadder && resolved !== undefined && nextRung(resolved, ladder) === undefined;
+  const atFloor =
+    hasLadder && resolved !== undefined && prevRung(resolved, ladder) === undefined;
 
   const keyClass =
     'h-12 rounded-xl bg-surface-2 text-lg font-semibold active:bg-border';
@@ -126,20 +166,30 @@ export function NumberPad({
           <button
             type="button"
             onClick={() => bump(-target.step)}
-            className="h-10 w-12 rounded-xl bg-surface-2 text-lg font-semibold"
+            disabled={atFloor}
+            className="h-10 w-12 rounded-xl bg-surface-2 text-lg font-semibold disabled:text-text-faint"
           >
             −
           </button>
           <button
             type="button"
             onClick={() => bump(target.step)}
-            className="h-10 w-12 rounded-xl bg-surface-2 text-lg font-semibold"
+            disabled={atTop}
+            className="h-10 w-12 rounded-xl bg-surface-2 text-lg font-semibold disabled:text-text-faint"
           >
             +
           </button>
         </div>
       </div>
 
+      {snapNote && (
+        <p className="mb-2 px-1 text-xs font-medium" style={{ color: 'var(--color-rir-3)' }}>
+          {snapNote}
+        </p>
+      )}
+      {!snapNote && ceilingNote && (
+        <p className="mb-2 px-1 text-xs font-medium text-text-dim">{ceilingNote}</p>
+      )}
       {hint && <p className="mb-3 px-1 text-xs text-text-dim">{hint}</p>}
 
       {/* Four columns, four rows, every cell filled: 1-9 and . 0 on the left,

@@ -83,6 +83,7 @@ export function SetRow({
         type="button"
         disabled={disabled}
         onClick={() => onCell(field)}
+        aria-label={`Set ${set.setNo} ${field === 'weight' ? 'weight' : 'reps'}`}
         className={`flex h-11 flex-1 flex-col items-center justify-center rounded-xl px-1 ${
           active ? 'bg-cta text-bg' : 'bg-surface-2'
         } ${disabled ? 'opacity-40' : ''}`}

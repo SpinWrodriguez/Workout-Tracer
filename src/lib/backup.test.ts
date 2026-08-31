@@ -135,6 +135,8 @@ describe('v3 envelope round trip', () => {
       'blockExercise',
       'session',
       'setLog',
+      'settings',
+      'golfDay',
     ]);
   });
 
@@ -167,6 +169,8 @@ async function snapshot() {
     block: await db.block.count(),
     session: await db.session.count(),
     setLog: await db.setLog.count(),
+    settings: await db.settings.count(),
+    golfDay: await db.golfDay.count(),
   };
 }
 

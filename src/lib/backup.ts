@@ -5,11 +5,13 @@ import type {
   BlockExercise,
   BodyWeight,
   Exercise,
+  GolfDay,
   Goals,
   NutritionDay,
   SavedMeal,
   Session,
   SetLog,
+  SettingRow,
 } from '../db/types';
 
 /* -------------------------------------------------------------------------- */
@@ -43,6 +45,12 @@ export interface BackupV3 {
     blockExercise: BlockExercise[];
     session: Session[];
     setLog: SetLog[];
+    /* Added after the §10 envelope was written. The version stays at 3: the
+       sections are additive, older files import fine because every section is
+       optional, and older readers ignore what they do not know. A bump is for
+       a change that breaks a reader. */
+    settings: SettingRow[];
+    golfDay: GolfDay[];
   };
 }
 
@@ -265,6 +273,8 @@ export async function importBackup(raw: unknown): Promise<ImportReport> {
       blockExercise: asArray<BlockExercise>(w.blockExercise),
       session: asArray<Session>(w.session),
       setLog: asArray<SetLog>(w.setLog),
+      settings: asArray<SettingRow>(w.settings),
+      golfDay: asArray<GolfDay>(w.golfDay),
     };
     if (version > BACKUP_VERSION) {
       warnings.push(
@@ -302,6 +312,8 @@ export async function importBackup(raw: unknown): Promise<ImportReport> {
       db.blockExercise,
       db.session,
       db.setLog,
+      db.settings,
+      db.golfDay,
     ],
     async () => {
       if (bodyWeight.length) await db.sharedBodyWeight.bulkPut(bodyWeight);
@@ -315,6 +327,8 @@ export async function importBackup(raw: unknown): Promise<ImportReport> {
       if (workout.blockExercise?.length) await db.blockExercise.bulkPut(workout.blockExercise);
       if (workout.session?.length) await db.session.bulkPut(workout.session);
       if (workout.setLog?.length) await db.setLog.bulkPut(workout.setLog);
+      if (workout.settings?.length) await db.settings.bulkPut(workout.settings);
+      if (workout.golfDay?.length) await db.golfDay.bulkPut(workout.golfDay);
     },
   );
 
@@ -329,6 +343,8 @@ export async function importBackup(raw: unknown): Promise<ImportReport> {
   counts.blockExercise = workout.blockExercise?.length ?? 0;
   counts.session = workout.session?.length ?? 0;
   counts.setLog = workout.setLog?.length ?? 0;
+  counts.settings = workout.settings?.length ?? 0;
+  counts.golfDay = workout.golfDay?.length ?? 0;
 
   return { sourceVersion: version, counts, warnings };
 }
@@ -367,6 +383,8 @@ export async function buildBackup(): Promise<BackupV3> {
     blockExercise,
     session,
     setLog,
+    settings,
+    golfDay,
   ] = await Promise.all([
     db.sharedBodyWeight.toArray(),
     db.sharedActivity.toArray(),
@@ -379,6 +397,8 @@ export async function buildBackup(): Promise<BackupV3> {
     db.blockExercise.toArray(),
     db.session.toArray(),
     db.setLog.toArray(),
+    db.settings.toArray(),
+    db.golfDay.toArray(),
   ]);
 
   return {
@@ -400,6 +420,8 @@ export async function buildBackup(): Promise<BackupV3> {
       blockExercise,
       session: session.sort((a, b) => a.date.localeCompare(b.date)),
       setLog,
+      settings,
+      golfDay: golfDay.sort((a, b) => a.date.localeCompare(b.date)),
     },
   };
 }

@@ -37,6 +37,7 @@ export function EffortPicker({
                 key={value}
                 type="button"
                 onClick={() => onChange({ rir: value, rpe: rpeFromRir(value) })}
+                aria-label={`RIR ${value}`}
                 className="flex flex-1 flex-col items-center gap-1.5 rounded-xl bg-surface-2 py-2.5"
                 style={active ? { outline: `2px solid ${token}` } : undefined}
               >
@@ -58,6 +59,7 @@ export function EffortPicker({
                 key={value}
                 type="button"
                 onClick={() => onChange({ rpe: value, rir: rirFromRpe(value) })}
+                aria-label={`RPE ${value}`}
                 className={`flex-1 rounded-xl py-2.5 text-[13px] font-semibold ${
                   active ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
                 }`}

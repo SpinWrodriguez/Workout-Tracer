@@ -143,6 +143,23 @@ export interface SavedMeal {
   [key: string]: unknown;
 }
 
+/* --- Key-value settings: the editable equipment inventory (Phase 2). ------ */
+
+export interface SettingRow {
+  key: string;
+  value: unknown;
+}
+
+/* --- Golf calendar (Phase 3). `planned` is a round on the calendar,
+       `played` one that happened; both constrain grip work. ---------------- */
+
+export interface GolfDay {
+  date: string;
+  status: 'planned' | 'played';
+  holes?: 9 | 18;
+  notes?: string;
+}
+
 /* --- free-exercise-db cache (§9). Populated in a later phase; the table
        exists now so the schema does not need a version bump later. -------- */
 

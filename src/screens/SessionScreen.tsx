@@ -3,7 +3,16 @@ import { db } from '../db/db';
 import type { BlockExercise, DaySlot, Exercise, SetLog } from '../db/types';
 import { CABLE_STACK_KG, STATION_LABEL } from '../db/seed/exercises';
 import { DEFAULT_BLOCK_ID } from '../db/seed';
+import { readInventory } from '../db/settings';
 import { hasLoadTranslation } from '../lib/load';
+import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
+import {
+  DEFAULT_REP_RANGE,
+  OUTCOME_LABEL,
+  suggestProgression,
+  type HistorySet,
+  type Progression,
+} from '../lib/progression';
 import { friendlyDate, kg, todayIso } from '../lib/format';
 import {
   countLoggedSets,
@@ -27,23 +36,24 @@ import { SetRow, type CellField } from '../components/SetRow';
 
 const DAY_SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
 
-/**
- * Nudge size for the keypad's ± keys, from the finest real increment at each
- * station: a pair of 1.5 kg plates is 3 kg on a bar, the stack moves in 5 kg
- * selector steps. Phase 2 replaces this with a snapped loadable ladder.
- */
-function weightStep(exercise: Exercise): number {
-  switch (exercise.station) {
-    case 'free_bar':
-    case 'smith':
-    case 'landmine':
-      return 3;
-    case 'cable':
-      return 5;
+function outcomeColor(outcome: Progression['outcome']): string {
+  switch (outcome) {
+    case 'increase':
+      return 'var(--color-strength)';
+    case 'hold_review':
+      return 'var(--color-rir-3)';
+    case 'ceiling':
+      return 'var(--color-volume)';
     default:
-      return 2;
+      return 'var(--color-text-dim)';
   }
 }
+
+/**
+ * Fallback nudge for exercises with no ladder. With an inventory loaded the
+ * keypad steps rung to rung instead and never uses this.
+ */
+const FALLBACK_STEP = 1;
 
 interface ActiveCell {
   exerciseId: string;
@@ -72,11 +82,23 @@ export function SessionScreen({
   const [effortCell, setEffortCell] = useState<ActiveCell | null>(null);
   const [startedAt] = useState(() => Date.now());
   const [history, setHistory] = useState<Record<string, SetLog[]>>({});
+  const [allHistory, setAllHistory] = useState<Record<string, HistorySet[]>>({});
+  const [inventory, setInventory] = useState<Inventory>(DEFAULT_INVENTORY);
   const [targets, setTargets] = useState<Record<string, BlockExercise>>({});
   const [saving, setSaving] = useState(false);
   const timer = useRestTimer();
 
   /* --- load or create the draft ----------------------------------------- */
+  useEffect(() => {
+    let cancelled = false;
+    void readInventory().then((next) => {
+      if (!cancelled) setInventory(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -117,6 +139,7 @@ export function SessionScreen({
     (async () => {
       const ids = exerciseIdsInDraft ? exerciseIdsInDraft.split(',') : [];
       const nextHistory: Record<string, SetLog[]> = {};
+      const nextAll: Record<string, HistorySet[]> = {};
       for (const id of ids) {
         const logs = await db.setLog.where('exerciseId').equals(id).toArray();
         const others = logs.filter((l) => l.sessionId !== draftId);
@@ -126,6 +149,15 @@ export function SessionScreen({
         const dateById = new Map(
           sessions.filter((s) => s !== undefined).map((s) => [s.id, s.date]),
         );
+        // Cross-block history, which is exactly what SetLog.exerciseId buys us.
+        nextAll[id] = others.map((l) => ({
+          sessionId: l.sessionId,
+          date: dateById.get(l.sessionId) ?? '',
+          weightKg: l.weightKg,
+          reps: l.reps,
+          rir: l.rir,
+          rpe: l.rpe,
+        }));
         const latest = others
           .slice()
           .sort((a, b) =>
@@ -140,6 +172,7 @@ export function SessionScreen({
       const blockTargets = await db.blockExercise.where('blockId').equals(draftBlockId).toArray();
       if (cancelled) return;
       setHistory(nextHistory);
+      setAllHistory(nextAll);
       setTargets(Object.fromEntries(blockTargets.map((t) => [t.exerciseId, t])));
     })();
     return () => {
@@ -257,6 +290,28 @@ export function SessionScreen({
     setCell(null);
   };
 
+  /** Fills every not-yet-logged set with the suggested load. */
+  const applySuggestion = (exerciseId: string, next: Progression) => {
+    if (next.suggestedKg === undefined) return;
+    setDraft((prev) =>
+      prev
+        ? {
+            ...prev,
+            exercises: prev.exercises.map((e) =>
+              e.exerciseId === exerciseId
+                ? {
+                    ...e,
+                    sets: e.sets.map((set) =>
+                      isLoggable(set) ? set : { ...set, weightKg: next.suggestedKg },
+                    ),
+                  }
+                : e,
+            ),
+          }
+        : prev,
+    );
+  };
+
   const toggleDone = (exerciseId: string, setIndex: number, set: DraftSet) => {
     const nextDone = !set.done;
     patchSet(exerciseId, setIndex, { done: nextDone });
@@ -274,9 +329,10 @@ export function SessionScreen({
       label: `${exercise.name} · set ${set.setNo} · ${cell.field === 'weight' ? 'weight' : 'reps'}`,
       kind: cell.field,
       value: cell.field === 'weight' ? set.weightKg : set.reps,
-      step: cell.field === 'weight' ? weightStep(exercise) : 1,
+      step: cell.field === 'weight' ? FALLBACK_STEP : 1,
+      ladder: cell.field === 'weight' ? ladderFor(exercise, inventory) : undefined,
     };
-  }, [cell, draft, exercisesById]);
+  }, [cell, draft, exercisesById, inventory]);
 
   const padHint = useMemo(() => {
     if (!cell || cell.field !== 'weight' || !draft) return undefined;
@@ -359,6 +415,17 @@ export function SessionScreen({
 
   const previous = activeId ? history[activeId] : undefined;
   const target = activeId ? targets[activeId] : undefined;
+  const repLow = target?.repRangeLow ?? DEFAULT_REP_RANGE.low;
+  const repHigh = target?.repRangeHigh ?? DEFAULT_REP_RANGE.high;
+  const suggestion: Progression | undefined =
+    activeExercise && (allHistory[activeExercise.id]?.length ?? 0) > 0
+      ? suggestProgression({
+          ladder: ladderFor(activeExercise, inventory),
+          history: allHistory[activeExercise.id] ?? [],
+          repRangeLow: repLow,
+          repRangeHigh: repHigh,
+        })
+      : undefined;
 
   return (
     <>
@@ -424,6 +491,47 @@ export function SessionScreen({
               {activeExercise.isHinge && <Label>hinge — do this fresh</Label>}
             </div>
 
+            {suggestion && (
+              <button
+                type="button"
+                onClick={() => applySuggestion(activeExercise.id, suggestion)}
+                className="mb-3 w-full rounded-xl bg-surface-2 px-3 py-2.5 text-left"
+              >
+                <span className="flex items-baseline justify-between gap-3">
+                  <span className="flex items-baseline gap-2">
+                    <span
+                      className="rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase text-bg"
+                      style={{ background: outcomeColor(suggestion.outcome) }}
+                    >
+                      {OUTCOME_LABEL[suggestion.outcome]}
+                    </span>
+                    <span className="text-[17px] font-semibold">
+                      {suggestion.suggestedKg === undefined
+                        ? `${repHigh} reps`
+                        : `${kg(suggestion.suggestedKg)} kg`}
+                    </span>
+                    <span className="label">
+                      × {repLow}-{repHigh}
+                    </span>
+                  </span>
+                  {suggestion.suggestedKg !== undefined && (
+                    <span className="label whitespace-nowrap">tap to fill</span>
+                  )}
+                </span>
+                <span className="mt-1 block text-[11px] leading-snug font-medium text-text-dim">
+                  {suggestion.reason}
+                </span>
+                {suggestion.microplateNote && (
+                  <span
+                    className="mt-1 block text-[11px] leading-snug font-medium"
+                    style={{ color: 'var(--color-rir-3)' }}
+                  >
+                    {suggestion.microplateNote}
+                  </span>
+                )}
+              </button>
+            )}
+
             <div className="flex items-center gap-2 pb-1">
               <span className="w-7 shrink-0" />
               <span className="label w-14 shrink-0">{target ? 'target' : 'last time'}</span>
@@ -437,12 +545,12 @@ export function SessionScreen({
 
             {activeDraftExercise.sets.map((set, index) => {
               const prior = previous?.find((p) => p.setNo === set.setNo);
-              const targetText = target
-                ? `${target.repRangeLow}-${target.repRangeHigh}`
-                : prior
-                  ? prior.weightKg === undefined
-                    ? `${prior.reps}`
-                    : `${kg(prior.weightKg)}×${prior.reps}`
+              const targetText = prior
+                ? prior.weightKg === undefined
+                  ? `${prior.reps}`
+                  : `${kg(prior.weightKg)}×${prior.reps}`
+                : target
+                  ? `${target.repRangeLow}-${target.repRangeHigh}`
                   : undefined;
               return (
                 <SetRow

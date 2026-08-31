@@ -6,11 +6,13 @@ import type {
   BodyWeight,
   Exercise,
   FreeDbCache,
+  GolfDay,
   Goals,
   NutritionDay,
   SavedMeal,
   Session,
   SetLog,
+  SettingRow,
 } from './types';
 
 /* -------------------------------------------------------------------------- */
@@ -46,6 +48,8 @@ export class FitnessDB extends Dexie {
   blockExercise!: Table<BlockExercise, [string, string, string]>;
   session!: Table<Session, string>;
   setLog!: Table<SetLog, [string, string, number]>;
+  settings!: Table<SettingRow, string>;
+  golfDay!: Table<GolfDay, string>;
 
   constructor() {
     super(DB_NAME);
@@ -69,6 +73,12 @@ export class FitnessDB extends Dexie {
       workout_setLog: '[sessionId+exerciseId+setNo], sessionId, exerciseId, [sessionId+exerciseId]',
     });
 
+    // Phase 2 adds the editable equipment inventory; Phase 3 the golf calendar.
+    this.version(2).stores({
+      workout_settings: 'key',
+      workout_golfDay: 'date, status',
+    });
+
     this.sharedBodyWeight = this.table('shared_bodyWeight');
     this.sharedActivity = this.table('shared_activity');
     this.sharedGoals = this.table('shared_goals');
@@ -81,6 +91,8 @@ export class FitnessDB extends Dexie {
     this.blockExercise = this.table('workout_blockExercise');
     this.session = this.table('workout_session');
     this.setLog = this.table('workout_setLog');
+    this.settings = this.table('workout_settings');
+    this.golfDay = this.table('workout_golfDay');
   }
 }
 

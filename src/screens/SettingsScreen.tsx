@@ -3,14 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { downloadBackup, importBackup, type ImportReport } from '../lib/backup';
 import { Card, Label, Screen } from '../components/Layout';
-import {
-  CABLE_BILATERAL,
-  CABLE_DUAL_ADAPTOR,
-  CABLE_SINGLE_PULLEY,
-  CABLE_STACK_KG,
-  FREE_BAR_KG,
-  SMITH_BAR_KG,
-} from '../db/seed/exercises';
+import { InventoryEditor } from '../components/InventoryEditor';
 
 export function SettingsScreen() {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -143,19 +136,9 @@ export function SettingsScreen() {
         )}
       </Card>
 
-      <Card title="Equipment" className="mt-3">
-        <p className="mb-2 text-[13px] text-text-dim">
-          Fixed for now. Editable plate inventory, bar weights and cable ratios are Phase 2; the
-          golf calendar is Phase 3.
-        </p>
-        {row('Free barbell', `${FREE_BAR_KG} kg`)}
-        {row('Smith bar', `${SMITH_BAR_KG} kg`)}
-        {row('Cable stacks', `2 × ${CABLE_STACK_KG} kg`)}
-        {row('Single pulley', `×${CABLE_SINGLE_PULLEY}`)}
-        {row('Both pulleys', `×${CABLE_BILATERAL}`)}
-        {row('Dual pulley adaptor', `×${CABLE_DUAL_ADAPTOR.toFixed(2)}`)}
-        {row('Plates', '20, 10, 5 kg pairs + 2 × 1.5 kg pairs')}
-      </Card>
+      <div className="mt-3">
+        <InventoryEditor />
+      </div>
     </Screen>
   );
 }
