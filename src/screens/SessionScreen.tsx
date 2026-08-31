@@ -1,0 +1,608 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { db } from '../db/db';
+import type { BlockExercise, DaySlot, Exercise, SetLog } from '../db/types';
+import { CABLE_STACK_KG, STATION_LABEL } from '../db/seed/exercises';
+import { DEFAULT_BLOCK_ID } from '../db/seed';
+import { hasLoadTranslation } from '../lib/load';
+import { friendlyDate, kg, todayIso } from '../lib/format';
+import {
+  countLoggedSets,
+  deleteSession,
+  emptySet,
+  isLoggable,
+  loadDraft,
+  newSessionId,
+  saveSession,
+  type DraftSet,
+  type SessionDraft,
+} from '../lib/sessions';
+import { Card, Label, PrimaryCTA, Screen, SegmentedToggle } from '../components/Layout';
+import { ExercisePicker } from '../components/ExercisePicker';
+import { ExerciseStrip } from '../components/ExerciseStrip';
+import { EffortPicker } from '../components/EffortPicker';
+import { NumberPad, type PadTarget } from '../components/NumberPad';
+import { RestTimerBar } from '../components/RestTimer';
+import { useRestTimer } from '../lib/restTimer';
+import { SetRow, type CellField } from '../components/SetRow';
+
+const DAY_SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
+
+/**
+ * Nudge size for the keypad's ± keys, from the finest real increment at each
+ * station: a pair of 1.5 kg plates is 3 kg on a bar, the stack moves in 5 kg
+ * selector steps. Phase 2 replaces this with a snapped loadable ladder.
+ */
+function weightStep(exercise: Exercise): number {
+  switch (exercise.station) {
+    case 'free_bar':
+    case 'smith':
+    case 'landmine':
+      return 3;
+    case 'cable':
+      return 5;
+    default:
+      return 2;
+  }
+}
+
+interface ActiveCell {
+  exerciseId: string;
+  setIndex: number;
+  field: CellField;
+}
+
+export function SessionScreen({
+  sessionId,
+  exercises,
+  onExit,
+}: {
+  sessionId?: string;
+  exercises: Exercise[];
+  onExit: () => void;
+}) {
+  const exercisesById = useMemo(
+    () => new Map(exercises.map((e) => [e.id, e])),
+    [exercises],
+  );
+
+  const [draft, setDraft] = useState<SessionDraft | null>(null);
+  const [activeId, setActiveId] = useState<string | undefined>(undefined);
+  const [picking, setPicking] = useState(false);
+  const [cell, setCell] = useState<ActiveCell | null>(null);
+  const [effortCell, setEffortCell] = useState<ActiveCell | null>(null);
+  const [startedAt] = useState(() => Date.now());
+  const [history, setHistory] = useState<Record<string, SetLog[]>>({});
+  const [targets, setTargets] = useState<Record<string, BlockExercise>>({});
+  const [saving, setSaving] = useState(false);
+  const timer = useRestTimer();
+
+  /* --- load or create the draft ----------------------------------------- */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (sessionId) {
+        const existing = await loadDraft(sessionId);
+        if (cancelled) return;
+        if (existing) {
+          setDraft(existing);
+          setActiveId(existing.exercises[0]?.exerciseId);
+          return;
+        }
+      }
+      const date = todayIso();
+      if (!cancelled) {
+        setDraft({
+          id: newSessionId(date),
+          blockId: DEFAULT_BLOCK_ID,
+          daySlot: 'A',
+          date,
+          exercises: [],
+        });
+        setPicking(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  /* --- previous-session reference for the target column ------------------ */
+  /* Keyed on primitives only: this must not re-query on every keystroke. */
+  const draftId = draft?.id;
+  const draftBlockId = draft?.blockId;
+  const exerciseIdsInDraft = draft?.exercises.map((e) => e.exerciseId).join(',') ?? '';
+  useEffect(() => {
+    if (!draftId || !draftBlockId) return;
+    let cancelled = false;
+    (async () => {
+      const ids = exerciseIdsInDraft ? exerciseIdsInDraft.split(',') : [];
+      const nextHistory: Record<string, SetLog[]> = {};
+      for (const id of ids) {
+        const logs = await db.setLog.where('exerciseId').equals(id).toArray();
+        const others = logs.filter((l) => l.sessionId !== draftId);
+        if (others.length === 0) continue;
+        // Most recent prior session for this exercise, by session date.
+        const sessions = await db.session.bulkGet([...new Set(others.map((l) => l.sessionId))]);
+        const dateById = new Map(
+          sessions.filter((s) => s !== undefined).map((s) => [s.id, s.date]),
+        );
+        const latest = others
+          .slice()
+          .sort((a, b) =>
+            (dateById.get(b.sessionId) ?? '').localeCompare(dateById.get(a.sessionId) ?? ''),
+          )[0];
+        if (!latest) continue;
+        nextHistory[id] = others
+          .filter((l) => l.sessionId === latest.sessionId)
+          .sort((a, b) => a.setNo - b.setNo);
+      }
+
+      const blockTargets = await db.blockExercise.where('blockId').equals(draftBlockId).toArray();
+      if (cancelled) return;
+      setHistory(nextHistory);
+      setTargets(Object.fromEntries(blockTargets.map((t) => [t.exerciseId, t])));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [draftId, draftBlockId, exerciseIdsInDraft]);
+
+  /* Keep the row being edited above the keypad, which covers the lower half. */
+  useEffect(() => {
+    if (!cell) return;
+    document
+      .querySelector(`[data-set-row="${cell.exerciseId}:${cell.setIndex}"]`)
+      ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [cell?.exerciseId, cell?.setIndex, cell]);
+
+  const activeExercise = activeId ? exercisesById.get(activeId) : undefined;
+  const activeDraftExercise = draft?.exercises.find((e) => e.exerciseId === activeId);
+
+  const patchSet = useCallback(
+    (exerciseId: string, setIndex: number, patch: Partial<DraftSet>) => {
+      setDraft((prev) =>
+        prev
+          ? {
+              ...prev,
+              exercises: prev.exercises.map((e) =>
+                e.exerciseId === exerciseId
+                  ? {
+                      ...e,
+                      sets: e.sets.map((s, i) => (i === setIndex ? { ...s, ...patch } : s)),
+                    }
+                  : e,
+              ),
+            }
+          : prev,
+      );
+    },
+    [],
+  );
+
+  const addExercise = (exerciseId: string) => {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      if (prev.exercises.some((e) => e.exerciseId === exerciseId)) return prev;
+      const target = targets[exerciseId];
+      const setCount = target?.targetSets ?? 3;
+      return {
+        ...prev,
+        exercises: [
+          ...prev.exercises,
+          {
+            exerciseId,
+            sets: Array.from({ length: setCount }, (_, i) => emptySet(i + 1)),
+          },
+        ],
+      };
+    });
+    setActiveId(exerciseId);
+    setPicking(false);
+  };
+
+  const removeExercise = (exerciseId: string) => {
+    setDraft((prev) =>
+      prev ? { ...prev, exercises: prev.exercises.filter((e) => e.exerciseId !== exerciseId) } : prev,
+    );
+    setActiveId((prev) => {
+      if (prev !== exerciseId) return prev;
+      return draft?.exercises.find((e) => e.exerciseId !== exerciseId)?.exerciseId;
+    });
+    setCell(null);
+  };
+
+  const addSet = (exerciseId: string) => {
+    setDraft((prev) =>
+      prev
+        ? {
+            ...prev,
+            exercises: prev.exercises.map((e) => {
+              if (e.exerciseId !== exerciseId) return e;
+              const last = e.sets.at(-1);
+              return {
+                ...e,
+                sets: [
+                  ...e.sets,
+                  // Carry the last set's load forward; that is what actually happens.
+                  {
+                    ...emptySet(e.sets.length + 1),
+                    weightKg: last?.weightKg,
+                  },
+                ],
+              };
+            }),
+          }
+        : prev,
+    );
+  };
+
+  const removeSet = (exerciseId: string, setIndex: number) => {
+    setDraft((prev) =>
+      prev
+        ? {
+            ...prev,
+            exercises: prev.exercises.map((e) =>
+              e.exerciseId === exerciseId
+                ? {
+                    ...e,
+                    sets: e.sets
+                      .filter((_, i) => i !== setIndex)
+                      .map((s, i) => ({ ...s, setNo: i + 1 })),
+                  }
+                : e,
+            ),
+          }
+        : prev,
+    );
+    setCell(null);
+  };
+
+  const toggleDone = (exerciseId: string, setIndex: number, set: DraftSet) => {
+    const nextDone = !set.done;
+    patchSet(exerciseId, setIndex, { done: nextDone });
+    if (nextDone && isLoggable(set)) timer.start();
+  };
+
+  /* --- keypad plumbing --------------------------------------------------- */
+
+  const padTarget: PadTarget | undefined = useMemo(() => {
+    if (!cell || !draft) return undefined;
+    const exercise = exercisesById.get(cell.exerciseId);
+    const set = draft.exercises.find((e) => e.exerciseId === cell.exerciseId)?.sets[cell.setIndex];
+    if (!exercise || !set) return undefined;
+    return {
+      label: `${exercise.name} · set ${set.setNo} · ${cell.field === 'weight' ? 'weight' : 'reps'}`,
+      kind: cell.field,
+      value: cell.field === 'weight' ? set.weightKg : set.reps,
+      step: cell.field === 'weight' ? weightStep(exercise) : 1,
+    };
+  }, [cell, draft, exercisesById]);
+
+  const padHint = useMemo(() => {
+    if (!cell || cell.field !== 'weight' || !draft) return undefined;
+    const exercise = exercisesById.get(cell.exerciseId);
+    if (!exercise || !hasLoadTranslation(exercise)) return undefined;
+    const set = draft.exercises.find((e) => e.exerciseId === cell.exerciseId)?.sets[cell.setIndex];
+    const stack = set?.weightKg;
+    const eff = stack === undefined ? undefined : Math.round(stack * exercise.loadMultiplier * 100) / 100;
+    return `Stack selection. ×${exercise.loadMultiplier.toFixed(2)}${
+      eff === undefined ? '' : ` = ${kg(eff)} kg effective`
+    }`;
+  }, [cell, draft, exercisesById]);
+
+  const advanceCell = () => {
+    if (!cell || !draft) return;
+    const de = draft.exercises.find((e) => e.exerciseId === cell.exerciseId);
+    if (!de) return;
+    if (cell.field === 'weight') {
+      setCell({ ...cell, field: 'reps' });
+      return;
+    }
+    const next = cell.setIndex + 1;
+    if (next < de.sets.length) {
+      const exercise = exercisesById.get(cell.exerciseId);
+      setCell({
+        ...cell,
+        setIndex: next,
+        field: exercise && exercise.loadMode === 'weight' ? 'weight' : 'reps',
+      });
+    } else {
+      setCell(null);
+    }
+  };
+
+  /* --- save -------------------------------------------------------------- */
+
+  const loggedSets = draft ? countLoggedSets(draft) : 0;
+
+  const handleSave = async () => {
+    if (!draft || saving) return;
+    setSaving(true);
+    try {
+      const elapsedMin = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
+      await saveSession(
+        {
+          ...draft,
+          // Keep an edited session's recorded duration; time a live one.
+          durationMin: draft.durationMin ?? (sessionId ? undefined : elapsedMin),
+        },
+        exercisesById,
+      );
+      onExit();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!draft) return;
+    if (!window.confirm('Delete this session and all of its sets?')) return;
+    await deleteSession(draft.id);
+    onExit();
+  };
+
+  if (!draft) {
+    return (
+      <Screen title="Workout">
+        <p className="text-text-dim">--</p>
+      </Screen>
+    );
+  }
+
+  const stripExercises = draft.exercises
+    .map((e) => exercisesById.get(e.exerciseId))
+    .filter((e): e is Exercise => Boolean(e));
+
+  const loggedCounts = Object.fromEntries(
+    draft.exercises.map((e) => [e.exerciseId, e.sets.filter(isLoggable).length]),
+  );
+
+  const previous = activeId ? history[activeId] : undefined;
+  const target = activeId ? targets[activeId] : undefined;
+
+  return (
+    <>
+      <Screen
+        title="Workout"
+        pad="cta"
+        trailing={
+          <span className="pb-1 text-[13px] font-medium text-text-dim">
+            {friendlyDate(draft.date)}
+          </span>
+        }
+        header={
+          <>
+            <RestTimerBar timer={timer} onPresetChange={timer.setDuration} />
+            <ExerciseStrip
+              exercises={stripExercises}
+              activeId={activeId}
+              loggedCounts={loggedCounts}
+              onSelect={setActiveId}
+              onAdd={() => setPicking(true)}
+            />
+          </>
+        }
+      >
+        {!activeExercise || !activeDraftExercise ? (
+          <Card title="No exercises yet">
+            <p className="text-text-dim">--- sets</p>
+            <button
+              type="button"
+              onClick={() => setPicking(true)}
+              className="mt-3 rounded-full bg-surface-2 px-4 py-2 text-sm font-medium"
+            >
+              Add an exercise
+            </button>
+          </Card>
+        ) : (
+          <Card
+            title={activeExercise.name}
+            trailing={
+              <button
+                type="button"
+                onClick={() => removeExercise(activeExercise.id)}
+                className="text-[12px] font-medium text-text-dim"
+              >
+                Remove
+              </button>
+            }
+          >
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <Label>{STATION_LABEL[activeExercise.station]}</Label>
+              {hasLoadTranslation(activeExercise) && (
+                <Label className="text-strength!">
+                  ×{activeExercise.loadMultiplier.toFixed(2)} · {CABLE_STACK_KG} kg stack
+                </Label>
+              )}
+              {activeExercise.barWeight !== undefined && (
+                <Label>bar {activeExercise.barWeight} kg</Label>
+              )}
+              {activeExercise.loadMode === 'rpe_only' && <Label>band — log RPE and reps only</Label>}
+              {activeExercise.gripLoad === 'high' && (
+                <Label className="text-volume!">high grip load</Label>
+              )}
+              {activeExercise.isHinge && <Label>hinge — do this fresh</Label>}
+            </div>
+
+            <div className="flex items-center gap-2 pb-1">
+              <span className="w-7 shrink-0" />
+              <span className="label w-14 shrink-0">{target ? 'target' : 'last time'}</span>
+              <span className="label flex-1 text-center">
+                {activeExercise.station === 'cable' ? 'stack' : 'weight'}
+              </span>
+              <span className="label flex-1 text-center">reps</span>
+              <span className="w-14 shrink-0" />
+              <span className="w-8 shrink-0" />
+            </div>
+
+            {activeDraftExercise.sets.map((set, index) => {
+              const prior = previous?.find((p) => p.setNo === set.setNo);
+              const targetText = target
+                ? `${target.repRangeLow}-${target.repRangeHigh}`
+                : prior
+                  ? prior.weightKg === undefined
+                    ? `${prior.reps}`
+                    : `${kg(prior.weightKg)}×${prior.reps}`
+                  : undefined;
+              return (
+                <SetRow
+                  key={set.setNo}
+                  rowKey={`${activeExercise.id}:${index}`}
+                  exercise={activeExercise}
+                  set={set}
+                  target={targetText}
+                  activeField={
+                    cell?.exerciseId === activeExercise.id && cell.setIndex === index
+                      ? cell.field
+                      : undefined
+                  }
+                  onCell={(field) =>
+                    setCell({ exerciseId: activeExercise.id, setIndex: index, field })
+                  }
+                  onToggleDone={() => toggleDone(activeExercise.id, index, set)}
+                  onRir={() =>
+                    setEffortCell({ exerciseId: activeExercise.id, setIndex: index, field: 'reps' })
+                  }
+                  onRemove={
+                    activeDraftExercise.sets.length > 1
+                      ? () => removeSet(activeExercise.id, index)
+                      : undefined
+                  }
+                />
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => addSet(activeExercise.id)}
+              className="mt-2 w-full rounded-xl bg-surface-2 py-2.5 text-[13px] font-medium text-text-dim"
+            >
+              + Add set
+            </button>
+          </Card>
+        )}
+
+        <Card title="Session details" className="mt-3">
+          <Label>Day slot</Label>
+          <div className="mt-1.5">
+            <SegmentedToggle
+              options={DAY_SLOTS}
+              value={(draft.daySlot as DaySlot) ?? 'A'}
+              onChange={(slot) => setDraft({ ...draft, daySlot: slot })}
+            />
+          </div>
+
+          <div className="mt-4 flex gap-3">
+            <label className="flex-1">
+              <Label>Date</Label>
+              <input
+                type="date"
+                value={draft.date}
+                onChange={(event) => setDraft({ ...draft, date: event.target.value })}
+                className="mt-1.5 h-11 w-full rounded-xl bg-surface-2 px-3 text-[15px] font-medium"
+              />
+            </label>
+            <label className="w-28">
+              <Label>Minutes</Label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                placeholder="--"
+                value={draft.durationMin ?? ''}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    durationMin: event.target.value === '' ? undefined : Number(event.target.value),
+                  })
+                }
+                className="mt-1.5 h-11 w-full rounded-xl bg-surface-2 px-3 text-[15px] font-medium placeholder:text-text-faint"
+              />
+            </label>
+          </div>
+
+          <label className="mt-4 block">
+            <Label>Notes</Label>
+            <textarea
+              rows={2}
+              value={draft.notes ?? ''}
+              onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+              placeholder="--"
+              className="mt-1.5 w-full resize-none rounded-xl bg-surface-2 px-3 py-2.5 text-[15px] placeholder:text-text-faint"
+            />
+          </label>
+
+          {sessionId && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="mt-4 text-[13px] font-medium"
+              style={{ color: 'var(--color-rir-1)' }}
+            >
+              Delete session
+            </button>
+          )}
+        </Card>
+      </Screen>
+
+      {!cell && (
+        <PrimaryCTA
+          onClick={handleSave}
+          disabled={saving || loggedSets === 0}
+          secondary={
+            <button
+              type="button"
+              onClick={onExit}
+              className="w-full py-1.5 text-[13px] font-medium text-text-dim"
+            >
+              Discard and go back
+            </button>
+          }
+        >
+          {loggedSets === 0
+            ? 'Log a set to save'
+            : `${sessionId ? 'Save changes' : 'Finish session'} · ${loggedSets} sets`}
+        </PrimaryCTA>
+      )}
+
+      {padTarget && cell && (
+        <NumberPad
+          key={`${cell.exerciseId}:${cell.setIndex}:${cell.field}`}
+          target={padTarget}
+          hint={padHint}
+          onCommit={(value) =>
+            patchSet(cell.exerciseId, cell.setIndex, cell.field === 'weight' ? { weightKg: value } : { reps: value })
+          }
+          onClose={() => setCell(null)}
+          onNext={advanceCell}
+        />
+      )}
+
+      {effortCell && draft && (
+        <EffortPicker
+          rir={
+            draft.exercises.find((e) => e.exerciseId === effortCell.exerciseId)?.sets[
+              effortCell.setIndex
+            ]?.rir
+          }
+          rpe={
+            draft.exercises.find((e) => e.exerciseId === effortCell.exerciseId)?.sets[
+              effortCell.setIndex
+            ]?.rpe
+          }
+          onChange={(next) => patchSet(effortCell.exerciseId, effortCell.setIndex, next)}
+          onClose={() => setEffortCell(null)}
+        />
+      )}
+
+      {picking && (
+        <ExercisePicker
+          exercises={exercises}
+          selectedIds={draft.exercises.map((e) => e.exerciseId)}
+          onPick={addExercise}
+          onClose={() => setPicking(false)}
+        />
+      )}
+    </>
+  );
+}

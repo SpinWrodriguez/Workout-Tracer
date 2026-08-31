@@ -1,0 +1,139 @@
+@import '@fontsource-variable/archivo';
+@import '@fontsource-variable/inter';
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------------------- */
+/*  Design system — spec §4. These tokens are the contract; do not invent    */
+/*  new colours. Dark UI conveys elevation through lightness, not shadow:    */
+/*  there are no box-shadows and no gradients anywhere except the Phase 4    */
+/*  silhouette fill.                                                         */
+/* ------------------------------------------------------------------------- */
+
+@theme {
+  --color-bg: #0a0a0a; /* app background, near-black */
+  --color-surface: #171717; /* cards */
+  --color-surface-2: #242424; /* inputs, chips, elevated rows */
+  --color-border: #2e2e2e; /* hairlines only, use sparingly */
+
+  --color-text: #ffffff;
+  --color-text-dim: #8e8e93; /* labels, secondary */
+  --color-text-faint: #5a5a5e; /* completed/disabled rows */
+
+  --color-volume: #ff8a5b; /* set counts, volume bars */
+  --color-muscle: #2e6fe8; /* silhouette highlight */
+  --color-strength: #4fd1e0; /* 1-RM / strength charts */
+  --color-bodyweight: #a78bfa; /* weight trend */
+  --color-cta: #ffffff; /* primary button fill, black text on it */
+
+  --color-rir-1: #8e2b2b; /* dark red — RIR 1, hardest */
+  --color-rir-2: #7a5b12; /* dark amber — RIR 2 */
+  --color-rir-3: #e8a020; /* bright amber — RIR 3 */
+
+  --font-display: 'Archivo Variable', 'Archivo', system-ui, sans-serif;
+  --font-sans: 'Inter Variable', 'Inter', system-ui, sans-serif;
+
+  --radius-card: 16px;
+
+  /* Safe-area aware chrome heights, used to size scroll padding. */
+  --spacing-nav: 64px;
+  --spacing-cta: 52px;
+}
+
+@layer base {
+  html {
+    background: var(--color-bg);
+    /* Stop iOS rubber-band from revealing white behind the app shell. */
+    overscroll-behavior-y: none;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Non-negotiable: weights and reps sit in columns and must not jitter. */
+  body,
+  input,
+  button {
+    font-variant-numeric: tabular-nums;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* One screen = one job. No nested scroll areas, no accidental h-scroll. */
+  #root {
+    min-height: 100dvh;
+  }
+}
+
+@layer components {
+  /* Screen titles: uppercase, 800, tight tracking, ~28px. */
+  .screen-title {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 28px;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+  }
+
+  /* Card titles: sentence case, 650, 16-17px. */
+  .card-title {
+    font-weight: 650;
+    font-size: 16.5px;
+    letter-spacing: -0.01em;
+  }
+
+  /* Labels: 11-12px, dim, 500, NOT uppercase. */
+  .label {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--color-text-dim);
+    letter-spacing: 0;
+  }
+
+  /* Big stats: 700, 22-34px, tight tracking. */
+  .stat {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 28px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  .stat-sm {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 22px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  .card {
+    background: var(--color-surface);
+    border-radius: var(--radius-card);
+    padding: 16px;
+  }
+
+  /* Horizontal strips scroll; the page never does. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
