@@ -6,6 +6,7 @@ import { DEFAULT_BLOCK_ID } from '../db/seed';
 import { readInventory } from '../db/settings';
 import { hasLoadTranslation } from '../lib/load';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
+import { sessionWarnings, type RuleWarning } from '../lib/golf';
 import {
   DEFAULT_REP_RANGE,
   OUTCOME_LABEL,
@@ -84,6 +85,8 @@ export function SessionScreen({
   const [history, setHistory] = useState<Record<string, SetLog[]>>({});
   const [allHistory, setAllHistory] = useState<Record<string, HistorySet[]>>({});
   const [inventory, setInventory] = useState<Inventory>(DEFAULT_INVENTORY);
+  const [golfDates, setGolfDates] = useState<string[]>([]);
+  const [dismissed, setDismissed] = useState<string[]>([]);
   const [targets, setTargets] = useState<Record<string, BlockExercise>>({});
   const [saving, setSaving] = useState(false);
   const timer = useRestTimer();
@@ -93,6 +96,9 @@ export function SessionScreen({
     let cancelled = false;
     void readInventory().then((next) => {
       if (!cancelled) setInventory(next);
+    });
+    void db.golfDay.toArray().then((rows) => {
+      if (!cancelled) setGolfDates(rows.map((row) => row.date));
     });
     return () => {
       cancelled = true;
@@ -413,6 +419,22 @@ export function SessionScreen({
     draft.exercises.map((e) => [e.exerciseId, e.sets.filter(isLoggable).length]),
   );
 
+  /* The golf rule and the hinge-fatigue note, spec Phase 3. Computed over the
+     whole draft in performance order, not just the active exercise. */
+  const warnings: RuleWarning[] = draft
+    ? sessionWarnings(
+        {
+          date: draft.date,
+          exercises: draft.exercises.map((e) => ({
+            exerciseId: e.exerciseId,
+            loggedSets: e.sets.filter(isLoggable).length,
+          })),
+        },
+        exercisesById,
+        golfDates,
+      ).filter((w) => !dismissed.includes(`${w.exerciseId}:${w.title}`))
+    : [];
+
   const previous = activeId ? history[activeId] : undefined;
   const target = activeId ? targets[activeId] : undefined;
   const repLow = target?.repRangeLow ?? DEFAULT_REP_RANGE.low;
@@ -450,6 +472,38 @@ export function SessionScreen({
           </>
         }
       >
+        {warnings.map((warning) => (
+          <button
+            key={`${warning.exerciseId}:${warning.title}`}
+            type="button"
+            onClick={() =>
+              setDismissed((prev) => [...prev, `${warning.exerciseId}:${warning.title}`])
+            }
+            className="mb-3 w-full rounded-2xl px-4 py-3 text-left"
+            style={{
+              background: warning.level === 'warn' ? 'var(--color-rir-1)' : 'var(--color-surface)',
+            }}
+          >
+            <span className="flex items-baseline justify-between gap-3">
+              <span className="card-title">{warning.title}</span>
+              <span
+                className={`text-[11px] font-medium whitespace-nowrap ${
+                  warning.level === 'warn' ? 'text-text/70' : 'text-text-dim'
+                }`}
+              >
+                dismiss
+              </span>
+            </span>
+            <span
+              className={`mt-1 block text-[12px] leading-snug font-medium ${
+                warning.level === 'warn' ? 'text-text/85' : 'text-text-dim'
+              }`}
+            >
+              {warning.detail}
+            </span>
+          </button>
+        ))}
+
         {!activeExercise || !activeDraftExercise ? (
           <Card title="No exercises yet">
             <p className="text-text-dim">--- sets</p>
