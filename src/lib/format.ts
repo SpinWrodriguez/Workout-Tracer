@@ -10,6 +10,16 @@ export function kg(value: number | undefined | null): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
+/**
+ * A weekly rate needs two decimals: −0.35 and −0.3 kg/week are a 17% different
+ * plan, and `kg()` would round the distinction away.
+ */
+export function rate(value: number | undefined | null): string {
+  if (value === undefined || value === null || Number.isNaN(value)) return EM_DASH;
+  const shown = Math.abs(value) < 0.005 ? 0 : value;
+  return `${shown > 0 ? '+' : ''}${shown.toFixed(2)}`;
+}
+
 export function todayIso(): string {
   return toIsoDate(new Date());
 }

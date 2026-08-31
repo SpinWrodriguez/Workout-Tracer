@@ -5,6 +5,7 @@ import { seedDatabase } from './db/seed';
 import { BottomNav, type Tab } from './components/BottomNav';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
+import { LevelsScreen } from './screens/LevelsScreen';
 import { ProgramScreen } from './screens/ProgramScreen';
 import { SessionScreen } from './screens/SessionScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
@@ -44,8 +45,13 @@ export default function App() {
   return (
     <>
       {route.tab === 'dashboard' && (
-        <DashboardScreen exercises={exercises} onOpenSession={openSession} />
+        <DashboardScreen
+          exercises={exercises}
+          onOpenSession={openSession}
+          onOpenSettings={() => setRoute({ kind: 'tab', tab: 'settings' })}
+        />
       )}
+      {route.tab === 'levels' && <LevelsScreen exercises={exercises} />}
       {route.tab === 'history' && (
         <HistoryScreen exercises={exercises} onOpen={openSession} />
       )}

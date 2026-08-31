@@ -3,24 +3,28 @@
 /*  slot is a white circular FAB (+) that floats above the bar.                */
 /* -------------------------------------------------------------------------- */
 
-export type Tab = 'dashboard' | 'history' | 'program' | 'settings';
+export type Tab = 'dashboard' | 'levels' | 'program' | 'history' | 'settings';
 
 const ICONS: Record<Tab, string> = {
   dashboard: 'M3 11.5 12 4l9 7.5M6 10v10h12V10',
-  history: 'M12 8v5l3.5 2M4 12a8 8 0 1 0 2.4-5.7M4 4v3.5h3.5',
+  levels: 'M12 3c2.5 2 4 4 4 6a4 4 0 0 1-8 0c0-2 1.5-4 4-6ZM8 13v8m8-8v8',
   program: 'M4 6h16M4 12h16M4 18h10',
+  history: 'M12 8v5l3.5 2M4 12a8 8 0 1 0 2.4-5.7M4 4v3.5h3.5',
   settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM4 12h2m12 0h2M12 4v2m0 12v2',
 };
 
 const LABELS: Record<Tab, string> = {
   dashboard: 'Home',
-  history: 'History',
+  levels: 'Levels',
   program: 'Program',
+  history: 'History',
   settings: 'Settings',
 };
 
-const LEFT: Tab[] = ['dashboard', 'history'];
-const RIGHT: Tab[] = ['program', 'settings'];
+/* Five slots, one of them the FAB — so four tabs. Settings is the one that
+   moves to a gear on the Dashboard: it is the screen you open least. */
+const LEFT: Tab[] = ['dashboard', 'levels'];
+const RIGHT: Tab[] = ['program', 'history'];
 
 function NavButton({
   tab,

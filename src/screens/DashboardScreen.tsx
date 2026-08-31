@@ -1,8 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { Exercise } from '../db/types';
-import { EM_WEIGHT, friendlyDate, kg, todayIso, weekStart } from '../lib/format';
+import { EM_WEIGHT, friendlyDate, kg, rate, todayIso, weekStart } from '../lib/format';
+import { linearTrend, rollingAverage, type DatedPoint } from '../lib/stats';
 import { Card, Empty, Label, Screen } from '../components/Layout';
+import { BodyWeightChart } from '../components/LazyCharts';
 import { Ring } from '../components/Ring';
 
 /**
@@ -15,9 +17,11 @@ const WEEKLY_TARGET = { sets: 36, exercises: 12, muscles: 10 };
 export function DashboardScreen({
   exercises,
   onOpenSession,
+  onOpenSettings,
 }: {
   exercises: Exercise[];
   onOpenSession: (sessionId: string) => void;
+  onOpenSettings: () => void;
 }) {
   const week = useLiveQuery(async () => {
     const from = weekStart(todayIso());
@@ -46,7 +50,7 @@ export function DashboardScreen({
   }, [exercises]);
 
   const bodyWeight = useLiveQuery(
-    () => db.sharedBodyWeight.orderBy('date').reverse().limit(14).toArray(),
+    () => db.sharedBodyWeight.orderBy('date').toArray(),
     [],
     undefined,
   );
@@ -57,13 +61,35 @@ export function DashboardScreen({
     undefined,
   );
 
-  const latest = bodyWeight?.[0];
-  const earlier = bodyWeight?.at(-1);
-  const delta =
-    latest && earlier && latest.date !== earlier.date ? latest.kg - earlier.kg : undefined;
+  const points: DatedPoint[] = (bodyWeight ?? []).map((row) => ({
+    date: row.date,
+    value: row.kg,
+  }));
+  const latest = points.at(-1);
+  const average = rollingAverage(points, 7);
+  const trend = linearTrend(points);
 
   return (
-    <Screen title="Dashboard">
+    <Screen
+      title="Dashboard"
+      trailing={
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          aria-label="Settings"
+          className="mb-1 flex size-9 items-center justify-center rounded-full bg-surface-2"
+        >
+          <svg viewBox="0 0 24 24" className="size-4.5" fill="none" aria-hidden="true">
+            <path
+              d="M4 7h10m4 0h2M4 12h4m4 0h8M4 17h12m4 0h0M16 7a2 2 0 1 0 0 0M10 12a2 2 0 1 0 0 0M18 17a2 2 0 1 0 0 0"
+              stroke="var(--color-text-dim)"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      }
+    >
       <Card title="This week">
         <div className="mt-1 flex justify-around">
           <Ring
@@ -96,25 +122,35 @@ export function DashboardScreen({
 
       <Card title="Body weight" className="mt-3">
         {latest ? (
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <span className="stat" style={{ color: 'var(--color-bodyweight)' }}>
-                {kg(latest.kg)}
-              </span>
-              <span className="ml-1.5 text-sm font-medium text-text-dim">kg</span>
-              <p className="label mt-1">{friendlyDate(latest.date)}</p>
+          <>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <span className="stat" style={{ color: 'var(--color-bodyweight)' }}>
+                  {kg(latest.value)}
+                </span>
+                <span className="ml-1.5 text-sm font-medium text-text-dim">kg</span>
+                <p className="label mt-1">{friendlyDate(latest.date)}</p>
+              </div>
+              <div className="text-right">
+                <span className="stat-sm">
+                  {points.length > 1 ? rate(trend.perWeek) : '--'}
+                </span>
+                <p className="label mt-1">
+                  {points.length > 1
+                    ? `kg/week over ${points.length} entries`
+                    : 'no trend yet'}
+                </p>
+              </div>
             </div>
-            <div className="text-right">
-              <span className="stat-sm">
-                {delta === undefined ? '--' : `${delta > 0 ? '+' : ''}${kg(delta)}`}
-              </span>
-              <p className="label mt-1">
-                {bodyWeight && bodyWeight.length > 1
-                  ? `over ${bodyWeight.length} entries`
-                  : 'no trend yet'}
-              </p>
-            </div>
-          </div>
+            {points.length > 1 && (
+              <div className="mt-3">
+                <BodyWeightChart points={points} average={average} trend={trend} />
+                <p className="label mt-1">
+                  daily · 7-day average · trend {trend.r2 > 0 ? `(r² ${trend.r2})` : ''}
+                </p>
+              </div>
+            )}
+          </>
         ) : (
           <>
             <Empty>{EM_WEIGHT}</Empty>
