@@ -1,10 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { DaySlot, Exercise } from '../db/types';
-import { EM_WEIGHT, friendlyDate, kg, rate, todayIso, weekStart } from '../lib/format';
+import { EM_WEIGHT, friendlyDate, kg, rate, shiftIso, todayIso, weekStart } from '../lib/format';
 import { linearTrend, rollingAverage, type DatedPoint } from '../lib/stats';
 import { WEEKDAY_LABEL } from '../lib/golf';
-import { entriesForSlot, nextSlot, readBlockPlan, slotForDate } from '../lib/program';
+import { entriesForSlot, readBlockPlan, slotForDate } from '../lib/program';
 import { Card, Empty, Label, Screen } from '../components/Layout';
 import { BodyWeightChart } from '../components/LazyCharts';
 import { ThemeToggleButton } from '../components/ThemePicker';
@@ -28,23 +28,37 @@ export function DashboardScreen({
   onStartDay: (slot?: DaySlot) => void;
   onOpenSettings: () => void;
 }) {
-  /* What the block says to do today, and whether it is already done. */
-  const today = useLiveQuery(async () => {
+  /*
+   * The whole block's week, not just today. Answering only "what is today"
+   * hid the other days entirely on a rest day, which reads as though the
+   * program has one session in it.
+   */
+  const program = useLiveQuery(async () => {
     const plan = await readBlockPlan();
     if (!plan) return undefined;
+
     const date = todayIso();
-    const slot = slotForDate(plan.schedule, date);
-    const entries = slot ? entriesForSlot(plan.entries, slot) : [];
-    const logged = await db.session.where('date').equals(date).toArray();
-    // Blocks generated before the schedule was stored have day slots but no
-    // weekdays. Offer those days directly rather than showing nothing.
-    const unscheduled = [...new Set(plan.entries.map((entry) => entry.daySlot))].sort();
+    const from = weekStart(date);
+    const sessions = await db.session
+      .where('date')
+      .between(from, shiftIso(from, 7), true, false)
+      .toArray();
+    const loggedSlots = new Set(sessions.map((session) => session.daySlot));
+
+    const days = [...new Set(plan.entries.map((entry) => entry.daySlot))]
+      .map((slot) => ({
+        slot,
+        weekday: plan.schedule[slot],
+        entries: entriesForSlot(plan.entries, slot),
+        doneThisWeek: loggedSlots.has(slot),
+      }))
+      // Scheduled days in weekday order; anything unscheduled trails behind.
+      .sort((a, b) => (a.weekday ?? 99) - (b.weekday ?? 99) || a.slot.localeCompare(b.slot));
+
     return {
-      slot,
-      entries,
-      upcoming: nextSlot(plan.schedule, date),
-      done: logged.length > 0,
-      unscheduled: Object.keys(plan.schedule).length === 0 ? unscheduled : [],
+      days,
+      todaySlot: slotForDate(plan.schedule, date),
+      scheduled: Object.keys(plan.schedule).length > 0,
     };
   }, []);
 
@@ -92,8 +106,7 @@ export function DashboardScreen({
   }));
   /* useLiveQuery hands back the previous result while a new one is in flight,
      so read the shape through locals rather than assuming every field landed. */
-  const unscheduledDays = today?.unscheduled ?? [];
-  const todaysEntries = today?.entries ?? [];
+  const programDays = program?.days ?? [];
 
   const latest = points.at(-1);
   const average = rollingAverage(points, 7);
@@ -123,72 +136,49 @@ export function DashboardScreen({
         </span>
       }
     >
-      {today && (todaysEntries.length > 0 || today.upcoming || unscheduledDays.length > 0) && (
+      {programDays.length > 0 && (
         <Card
-          title={
-            todaysEntries.length > 0
-              ? `Today · day ${today.slot}`
-              : unscheduledDays.length > 0
-                ? 'Ready to train'
-                : 'Nothing programmed today'
-          }
+          title={program?.todaySlot ? `Today · day ${program.todaySlot}` : 'This week'}
           className="mb-3"
         >
-          {unscheduledDays.length > 0 ? (
-            <>
-              <p className="text-[13px] font-medium text-text-dim">
-                This block has no weekdays assigned yet — generate the week on Program to schedule
-                it around your rounds, or just start a day now.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {unscheduledDays.map((slot) => (
+          {programDays.map((day, i) => {
+            const isToday = day.slot === program?.todaySlot;
+            const names = day.entries
+              .map((entry) => exercises.find((e) => e.id === entry.exerciseId)?.name)
+              .filter(Boolean)
+              .join(' · ');
+            return (
+              <div key={day.slot} className={i > 0 ? 'mt-3 border-t border-border pt-3' : ''}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex items-baseline gap-2">
+                    <span className="card-title">Day {day.slot}</span>
+                    <Label className={isToday ? 'text-text!' : ''}>
+                      {isToday ? 'today' : day.weekday ? WEEKDAY_LABEL[day.weekday] : 'unscheduled'}
+                      {day.doneThisWeek ? ' · done' : ''}
+                    </Label>
+                  </span>
                   <button
-                    key={slot}
                     type="button"
-                    onClick={() => onStartDay(slot as DaySlot)}
-                    className="rounded-full bg-surface-2 px-4 py-2 text-sm font-medium"
+                    onClick={() => onStartDay(day.slot)}
+                    className={`shrink-0 rounded-full px-4 py-1.5 text-[13px] font-semibold ${
+                      isToday ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
+                    }`}
                   >
-                    Start day {slot}
+                    Start
                   </button>
-                ))}
-              </div>
-            </>
-          ) : todaysEntries.length > 0 ? (
-            <>
-              <p className="text-[13px] font-medium text-text-dim">
-                {todaysEntries
-                  .map((entry) => exercises.find((e) => e.id === entry.exerciseId)?.name)
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
-              <button
-                type="button"
-                onClick={() => onStartDay(today.slot)}
-                className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg"
-              >
-                {today.done ? 'Start another session' : `Start day ${today.slot}`}
-              </button>
-            </>
-          ) : (
-            <>
-              <Empty>--- sets</Empty>
-              {today.upcoming && (
-                <p className="mt-1 text-[13px] font-medium text-text-dim">
-                  Next up is day {today.upcoming.slot} on {WEEKDAY_LABEL[today.upcoming.weekday]}
-                  {today.upcoming.inDays === 0
-                    ? ''
-                    : `, in ${today.upcoming.inDays} day${today.upcoming.inDays === 1 ? '' : 's'}`}
-                  .
+                </div>
+                <p className="mt-1 text-[12px] leading-snug font-medium text-text-dim">
+                  {names || '---'}
                 </p>
-              )}
-              <button
-                type="button"
-                onClick={() => onStartDay(today.upcoming?.slot)}
-                className="mt-3 rounded-full bg-surface-2 px-4 py-2 text-sm font-medium"
-              >
-                {today.upcoming ? `Do day ${today.upcoming.slot} anyway` : 'Log something anyway'}
-              </button>
-            </>
+              </div>
+            );
+          })}
+
+          {!program?.scheduled && (
+            <p className="mt-3 text-[12px] font-medium text-text-dim">
+              No weekdays assigned yet — generate the week on Program to place these around your
+              rounds.
+            </p>
           )}
         </Card>
       )}
