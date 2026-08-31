@@ -17,6 +17,9 @@ import { Ring } from '../components/Ring';
  */
 const WEEKLY_TARGET = { sets: 36, exercises: 12, muscles: 10 };
 
+/** Height of the ring row, and the diameter of the emphasised centre ring. */
+const RING_ROW = 112;
+
 export function DashboardScreen({
   exercises,
   onOpenSession,
@@ -184,24 +187,31 @@ export function DashboardScreen({
       )}
 
       <Card title="This week">
-        <div className="mt-1 flex justify-around">
+        {/* Sets in the middle and larger: it is the metric that drives the
+            week, and the flanking two are context for it. */}
+        <div className="mt-1 flex items-start">
+          <Ring
+            value={week?.muscleCount ?? 0}
+            target={WEEKLY_TARGET.muscles}
+            label="Muscles"
+            color="var(--color-muscle)"
+            slotHeight={RING_ROW}
+          />
           <Ring
             value={week?.setCount ?? 0}
             target={WEEKLY_TARGET.sets}
-            label="sets"
+            label="Sets"
             color="var(--color-volume)"
+            size={RING_ROW}
+            slotHeight={RING_ROW}
+            emphasis
           />
           <Ring
             value={week?.exerciseCount ?? 0}
             target={WEEKLY_TARGET.exercises}
-            label="exercises"
+            label="Exercises"
             color="var(--color-strength)"
-          />
-          <Ring
-            value={week?.muscleCount ?? 0}
-            target={WEEKLY_TARGET.muscles}
-            label="muscles"
-            color="var(--color-muscle)"
+            slotHeight={RING_ROW}
           />
         </div>
         <p className="mt-4 text-[12px] font-medium text-text-dim">
