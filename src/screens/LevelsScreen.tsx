@@ -19,7 +19,7 @@ type Region = (typeof REGIONS)[number];
 function statusColor(status: MuscleVolumeRow['status']): string | undefined {
   switch (status) {
     case 'low':
-      return 'var(--color-rir-3)';
+      return 'var(--color-warn)';
     case 'high':
       return 'var(--color-rir-1)';
     case 'ok':

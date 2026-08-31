@@ -7,6 +7,12 @@
 /*  new colours. Dark UI conveys elevation through lightness, not shadow:    */
 /*  there are no box-shadows and no gradients anywhere except the Phase 4    */
 /*  silhouette fill.                                                         */
+/*                                                                           */
+/*  Dark is the spec's theme and the default. Light is an alternate palette   */
+/*  overriding the same variables under [data-theme='light'], so every       */
+/*  utility and every var() reference follows without touching a component.  */
+/*  The elevation rule still holds in light, just inverted: elevation goes    */
+/*  UP toward white, so the page is grey and the cards are white.            */
 /* ------------------------------------------------------------------------- */
 
 @theme {
@@ -29,6 +35,21 @@
   --color-rir-2: #7a5b12; /* dark amber — RIR 2 */
   --color-rir-3: #e8a020; /* bright amber — RIR 3 */
 
+  /* Not in §4, added because both themes need them and neither can be
+     derived from the tokens above:
+       scrim  — a sheet backdrop. --bg at 70% dims nothing on a light page.
+       danger — the golf-rule banner. Its fill is a saturated red, so its
+                text cannot be --text: that is black on dark red in light.
+       warn   — warning TEXT. In dark it is the same amber as --rir-3, but the
+                two roles need different values in light: a swatch only has to
+                be distinguishable (3:1), 12px text has to be readable (4.5:1),
+                and darkening rir-3 far enough for the latter collapsed the
+                red/amber/amber RIR scale into three near-identical browns. */
+  --color-scrim: oklch(0% 0 0 / 0.72);
+  --color-danger: #8e2b2b;
+  --color-danger-text: #ffffff;
+  --color-warn: #e8a020;
+
   --font-display: 'Archivo Variable', 'Archivo', system-ui, sans-serif;
   --font-sans: 'Inter Variable', 'Inter', system-ui, sans-serif;
 
@@ -39,12 +60,59 @@
   --spacing-cta: 52px;
 }
 
+/* ------------------------------------------------------------------------- */
+/*  Light palette.                                                           */
+/*                                                                           */
+/*  The neutral ramp inverts: grey page, white cards. The accents go DARKER   */
+/*  rather than lighter — the same hue that reads well on near-black is       */
+/*  unreadable at 12px on white — while staying recognisably the same colour. */
+/*  --cta inverts to near-black, and because every button pairs `bg-cta` with */
+/*  `text-bg`, the black-pill-on-white look falls out with no component       */
+/*  changes at all.                                                          */
+/* ------------------------------------------------------------------------- */
+
+@layer theme {
+  :root[data-theme='light'] {
+    --color-bg: #f2f2f5;
+    --color-surface: #ffffff;
+    --color-surface-2: #eaeaef;
+    --color-border: #dedee4;
+
+    --color-text: #0a0a0a;
+    --color-text-dim: #6b6b73;
+    --color-text-faint: #a0a0a8;
+
+    --color-volume: #c1500f;
+    --color-muscle: #1d4ed8;
+    --color-strength: #0b7c8c;
+    --color-bodyweight: #6841d6;
+    --color-cta: #0a0a0a;
+
+    /* Swatches: each step >=3:1 on a white card and >=1.5x the luminance of
+       the step below, so red / amber / bright amber still reads as a scale. */
+    --color-rir-1: #9e2626;
+    --color-rir-2: #8a6510;
+    --color-rir-3: #b0851a;
+
+    --color-scrim: oklch(0% 0 0 / 0.32);
+    --color-danger: #fdeaea;
+    --color-danger-text: #8e1f1f;
+    --color-warn: #8a5a06;
+  }
+}
+
 @layer base {
   html {
     background: var(--color-bg);
     /* Stop iOS rubber-band from revealing white behind the app shell. */
     overscroll-behavior-y: none;
     -webkit-text-size-adjust: 100%;
+    /* Native date and number inputs read this to pick their own chrome. */
+    color-scheme: dark;
+  }
+
+  html[data-theme='light'] {
+    color-scheme: light;
   }
 
   body {

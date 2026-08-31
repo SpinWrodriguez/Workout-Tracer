@@ -20,7 +20,7 @@ export function EffortPicker({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-bg/70" />
+      <div className="absolute inset-0 bg-scrim" />
       <div
         className="relative rounded-t-3xl bg-surface px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)]"
         onClick={(event) => event.stopPropagation()}

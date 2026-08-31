@@ -85,7 +85,11 @@ export function ExerciseDetail({
             <Chip tone="plain">×{exercise.loadMultiplier.toFixed(2)} effective</Chip>
           )}
           {exercise.attachment && <Chip tone="plain">{exercise.attachment.replace(/_/g, ' ')}</Chip>}
-          {exercise.loadMode !== 'weight' && <Chip tone="plain">{exercise.loadMode.replace('_', ' ')}</Chip>}
+          {/* Skip the load-mode chip when the station already says it — a
+              bodyweight exercise showed "Bodyweight" twice. */}
+          {exercise.loadMode !== 'weight' && exercise.loadMode !== exercise.station && (
+            <Chip tone="plain">{exercise.loadMode.replace('_', ' ')}</Chip>
+          )}
           {exercise.gripLoad !== 'none' && (
             <Chip tone="volume" active>
               {exercise.gripLoad} grip load

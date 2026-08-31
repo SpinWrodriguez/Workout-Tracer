@@ -219,7 +219,7 @@ export function ProgramScreen({ exercises }: { exercises: Exercise[] }) {
             <p
               key={warning}
               className="mt-2 text-[12px] font-medium"
-              style={{ color: 'var(--color-rir-3)' }}
+              style={{ color: 'var(--color-warn)' }}
             >
               {warning}
             </p>

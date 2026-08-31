@@ -4,6 +4,7 @@ import { db } from '../db/db';
 import { downloadBackup, importBackup, type ImportReport } from '../lib/backup';
 import { Card, Label, Screen } from '../components/Layout';
 import { InventoryEditor } from '../components/InventoryEditor';
+import { ThemePicker } from '../components/ThemePicker';
 import { clearFreeDb, fetchAndStoreFreeDb, mappedIds, type EnrichReport } from '../lib/freeDb';
 import { EXERCISES } from '../db/seed/exercises';
 
@@ -68,7 +69,9 @@ export function SettingsScreen() {
 
   return (
     <Screen title="Settings">
-      <Card title="Backup">
+      <ThemePicker />
+
+      <Card title="Backup" className="mt-3">
         <p className="text-[13px] text-text-dim">
           One JSON file covers both apps. Import reads the nutrition app's version 2 export as
           well as this app's version 3 envelope; it upserts on natural keys, so re-importing the
@@ -129,7 +132,7 @@ export function SettingsScreen() {
               )}
             </div>
             {report.warnings.map((warning) => (
-              <p key={warning} className="mt-2 text-[12px]" style={{ color: 'var(--color-rir-3)' }}>
+              <p key={warning} className="mt-2 text-[12px]" style={{ color: 'var(--color-warn)' }}>
                 {warning}
               </p>
             ))}

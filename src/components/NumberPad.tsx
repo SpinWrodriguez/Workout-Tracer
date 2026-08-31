@@ -183,7 +183,7 @@ export function NumberPad({
       </div>
 
       {snapNote && (
-        <p className="mb-2 px-1 text-xs font-medium" style={{ color: 'var(--color-rir-3)' }}>
+        <p className="mb-2 px-1 text-xs font-medium" style={{ color: 'var(--color-warn)' }}>
           {snapNote}
         </p>
       )}

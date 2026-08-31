@@ -43,7 +43,7 @@ function outcomeColor(outcome: Progression['outcome']): string {
     case 'increase':
       return 'var(--color-strength)';
     case 'hold_review':
-      return 'var(--color-rir-3)';
+      return 'var(--color-warn)';
     case 'ceiling':
       return 'var(--color-volume)';
     default:
@@ -482,15 +482,20 @@ export function SessionScreen({
               setDismissed((prev) => [...prev, `${warning.exerciseId}:${warning.title}`])
             }
             className="mb-3 w-full rounded-2xl px-4 py-3 text-left"
-            style={{
-              background: warning.level === 'warn' ? 'var(--color-rir-1)' : 'var(--color-surface)',
-            }}
+            style={
+              // The danger pair is themed: a dark red fill with white text in
+              // dark, a tinted fill with dark red text in light. --text would
+              // be black on dark red in one of them.
+              warning.level === 'warn'
+                ? { background: 'var(--color-danger)', color: 'var(--color-danger-text)' }
+                : { background: 'var(--color-surface)' }
+            }
           >
             <span className="flex items-baseline justify-between gap-3">
               <span className="card-title">{warning.title}</span>
               <span
                 className={`text-[11px] font-medium whitespace-nowrap ${
-                  warning.level === 'warn' ? 'text-text/70' : 'text-text-dim'
+                  warning.level === 'warn' ? 'opacity-70' : 'text-text-dim'
                 }`}
               >
                 dismiss
@@ -498,7 +503,7 @@ export function SessionScreen({
             </span>
             <span
               className={`mt-1 block text-[12px] leading-snug font-medium ${
-                warning.level === 'warn' ? 'text-text/85' : 'text-text-dim'
+                warning.level === 'warn' ? 'opacity-90' : 'text-text-dim'
               }`}
             >
               {warning.detail}
@@ -598,7 +603,7 @@ export function SessionScreen({
                 {suggestion.microplateNote && (
                   <span
                     className="mt-1 block text-[11px] leading-snug font-medium"
-                    style={{ color: 'var(--color-rir-3)' }}
+                    style={{ color: 'var(--color-warn)' }}
                   >
                     {suggestion.microplateNote}
                   </span>

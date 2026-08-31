@@ -16,6 +16,31 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      /*
+       * Applies the stored theme before first paint. Without this the app
+       * always renders dark for a frame and then flips, which is the most
+       * visible bug a theme switcher can have. Kept inline and dependency-free
+       * so it runs before the bundle is even requested.
+       */
+      (function () {
+        try {
+          var stored = localStorage.getItem('workout-theme') || 'system';
+          var light =
+            stored === 'light' ||
+            (stored === 'system' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: light)').matches);
+          if (light) {
+            document.documentElement.setAttribute('data-theme', 'light');
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute('content', '#F2F2F5');
+          }
+        } catch (e) {
+          /* Blocked storage falls through to the dark default. */
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

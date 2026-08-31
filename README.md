@@ -86,12 +86,53 @@ ground, elevation through lightness rather than shadow (no `box-shadow`, no grad
 the silhouette fill), Archivo 800 uppercase screen titles, tabular numerals everywhere, a white
 pill CTA, and a five-slot bottom nav whose centre slot is a floating FAB.
 
+### Light theme
+
+Dark is the spec's theme and the default. Light overrides the same variables under
+`[data-theme='light']`, so every Tailwind utility and every `var()` reference follows without a
+single component change. Switch it in Settings → Appearance (System / Light / Dark) or with the
+sun/moon button in the Dashboard header.
+
+The elevation rule still holds in light, just inverted — elevation goes *up* toward white, so
+the page is grey `#F2F2F5` and cards are white. `--cta` inverts to near-black, and because every
+button already pairs `bg-cta` with `text-bg`, the black-pill-on-white look falls out for free.
+
+The accents get **darker** rather than lighter: the same hue that reads well on near-black is
+unreadable at 12px on white. A test asserts each one clears 4.5:1 on a light card and that the
+light palette overrides every token the dark one declares, since a missed token silently leaks
+dark into light.
+
+Three things needed more than a token swap, and are commented where they live:
+
+- **The RIR swatches and warning text split apart.** Darkening the bright amber far enough for
+  12px text collapsed the red / amber / amber scale into three near-identical browns, so
+  `--color-warn` now carries the text role and `--color-rir-*` stays a swatch scale. Swatches are
+  held to the 3:1 graphics minimum and to being 1.5× apart in luminance.
+- **The golf-rule banner has its own fill/text pair.** Its fill is a saturated red, so its text
+  can never be `--text` — that would be black on dark red in light. In light it becomes a tinted
+  fill with dark red text, which is what a light-mode alert should look like.
+- **The silhouette shades in CSS, not JS.** `color-mix` against the live tokens follows the
+  theme; the old hardcoded RGB lerp could not. Trained muscles also start at a 30% tint rather
+  than fading in from zero, because on a light card the idle grey is already close to a pale blue
+  and 3 of 20 sets was invisible.
+
+`§4`'s own `--rir-1` (`#8E2B2B` on `#171717`) is only 2.2:1 in dark, under the graphics minimum.
+That is the spec's value so it stands, and it is not a problem in practice: every RIR badge
+prints its number beside the dot, so the meaning is never carried by colour alone. A test pins
+both facts down so neither drifts.
+
 Two deliberate departures from §4, both noted in the code:
 
 - **The golf calendar lives on Program, not Settings.** Marking a round is something you do
   while looking at the week it breaks.
 - **Settings is a gear on the Dashboard, not a nav slot.** Five slots minus the FAB leaves four
   tabs for five screens; Settings is the one opened least, so Levels takes the slot.
+
+The theme choice lives in `localStorage`, not the shared Dexie database: it is a per-device
+display preference rather than data, so it has no business in a cross-app backup, and it has to
+be readable synchronously before first paint. A small inline script in `index.html` applies it
+before the bundle is even requested — without that the app renders dark for a frame and then
+flips, which is the most visible bug a theme switcher can have.
 
 ## Architecture notes
 

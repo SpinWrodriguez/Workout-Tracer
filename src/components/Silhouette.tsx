@@ -105,13 +105,22 @@ const BACK: Partial<Record<MuscleId, Shape[]>> = {
   ],
 };
 
-const IDLE: [number, number, number] = [0x24, 0x24, 0x24]; // --surface-2
-const ACTIVE: [number, number, number] = [0x2e, 0x6f, 0xe8]; // --muscle
+/**
+ * Untrained reads as --surface-2 and full volume as --muscle, mixed in oklab so
+ * the ramp stays perceptually even. Done in CSS rather than JS arithmetic so it
+ * follows the theme: the light palette has a white-ish idle and a darker blue,
+ * and neither is knowable from here.
+ */
+const SHADE_FLOOR = 30;
 
-/** The one place the spec permits a gradient is the silhouette fill. */
 function shade(intensity: number): string {
-  const mix = (a: number, b: number) => Math.round(a + (b - a) * intensity);
-  return `rgb(${mix(IDLE[0], ACTIVE[0])} ${mix(IDLE[1], ACTIVE[1])} ${mix(IDLE[2], ACTIVE[2])})`;
+  const clamped = Math.min(1, Math.max(0, intensity));
+  if (clamped === 0) return 'var(--color-surface-2)';
+  // Trained muscles start at a visible tint rather than fading in from nothing.
+  // On a light card the idle grey is already close to a pale blue, so a raw 3
+  // of 20 sets was indistinguishable from untrained.
+  const pct = Math.round(SHADE_FLOOR + clamped * (100 - SHADE_FLOOR));
+  return `color-mix(in oklab, var(--color-muscle) ${pct}%, var(--color-surface-2))`;
 }
 
 function renderShape(shape: Shape, key: string, fill: string, id?: string) {

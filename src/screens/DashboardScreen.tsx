@@ -5,6 +5,7 @@ import { EM_WEIGHT, friendlyDate, kg, rate, todayIso, weekStart } from '../lib/f
 import { linearTrend, rollingAverage, type DatedPoint } from '../lib/stats';
 import { Card, Empty, Label, Screen } from '../components/Layout';
 import { BodyWeightChart } from '../components/LazyCharts';
+import { ThemeToggleButton } from '../components/ThemePicker';
 import { Ring } from '../components/Ring';
 
 /**
@@ -73,6 +74,8 @@ export function DashboardScreen({
     <Screen
       title="Dashboard"
       trailing={
+        <span className="flex gap-2">
+        <ThemeToggleButton />
         <button
           type="button"
           onClick={onOpenSettings}
@@ -88,6 +91,7 @@ export function DashboardScreen({
             />
           </svg>
         </button>
+        </span>
       }
     >
       <Card title="This week">
