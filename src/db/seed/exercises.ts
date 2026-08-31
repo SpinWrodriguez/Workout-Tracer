@@ -10,12 +10,16 @@ import type { Exercise } from '../types';
 /*  movements that load the forearm flexors as a secondary, which still adds  */
 /*  up across a week.                                                        */
 /*                                                                            */
-/*  freeDbId is hand-mapped, never fuzzy-matched (§9). Nulls are expected and */
-/*  fine — nothing in free-exercise-db matches "Smith machine squat with an    */
-/*  18 kg bar", so the whole Smith station is null, as are the landmine and    */
-/*  band movements. Where I could not be certain of the upstream record id I   */
-/*  left it undefined rather than guess: a wrong id fails silently, which is   */
-/*  exactly the failure mode §9 warns about.                                  */
+/*  freeDbId is hand-mapped, never fuzzy-matched (§9), and every value is      */
+/*  checked against a snapshot of the upstream id list by the seed test —      */
+/*  a wrong id fails silently otherwise, which is exactly the failure mode     */
+/*  §9 warns about. That check caught two bad guesses on its first run.        */
+/*                                                                            */
+/*  §9 predicts nothing upstream matches "Smith machine squat with an 18 kg    */
+/*  bar". The data says otherwise: there is a full Smith_Machine_* family, so  */
+/*  the Smith station is mapped after all. The genuinely unmatched ones are    */
+/*  the cable low-to-high lift, the landmine squat-to-press and the band       */
+/*  lateral walk; those fall back to the cue text in cues.ts and no photo.     */
 /* -------------------------------------------------------------------------- */
 
 /** Cable ratios, spec §2. The single most important numbers in the app. */
@@ -140,6 +144,7 @@ export const EXERCISES: Exercise[] = [
   /* --- Smith (18 kg, ×1.0) ----------------------------------------------- */
   {
     id: 'sm_squat',
+    freeDbId: 'Smith_Machine_Squat',
     name: 'Smith squat',
     station: 'smith',
     primaryMuscles: ['quads', 'glutes'],
@@ -152,6 +157,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'sm_bench_press',
+    freeDbId: 'Smith_Machine_Bench_Press',
     name: 'Smith bench press',
     station: 'smith',
     primaryMuscles: ['chest'],
@@ -164,6 +170,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'sm_incline_press',
+    freeDbId: 'Smith_Machine_Incline_Bench_Press',
     name: 'Smith incline press',
     station: 'smith',
     primaryMuscles: ['chest', 'front_delts'],
@@ -176,6 +183,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'sm_overhead_press',
+    freeDbId: 'Smith_Machine_Overhead_Shoulder_Press',
     name: 'Smith overhead press',
     station: 'smith',
     primaryMuscles: ['front_delts'],
@@ -188,6 +196,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'sm_shrug',
+    freeDbId: 'Barbell_Shrug',
     name: 'Smith shrug',
     station: 'smith',
     primaryMuscles: ['traps'],
@@ -200,6 +209,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'sm_calf_raise',
+    freeDbId: 'Smith_Machine_Calf_Raise',
     name: 'Smith calf raise',
     station: 'smith',
     primaryMuscles: ['calves'],
@@ -214,6 +224,7 @@ export const EXERCISES: Exercise[] = [
   /* --- Cable, single pulley (×0.49) -------------------------------------- */
   {
     id: 'cb_chop',
+    freeDbId: 'Standing_Cable_Wood_Chop',
     name: 'Chop (high→low)',
     station: 'cable',
     attachment: 'single_arm',
@@ -238,6 +249,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_pallof_press',
+    freeDbId: 'Pallof_Press',
     name: 'Pallof press',
     station: 'cable',
     attachment: 'single_arm',
@@ -276,6 +288,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_bicep_curl',
+    freeDbId: 'Standing_Biceps_Cable_Curl',
     name: 'Bicep curl (cable)',
     station: 'cable',
     attachment: 'straight_curl_bar',
@@ -288,6 +301,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_lateral_raise',
+    freeDbId: 'Cable_Seated_Lateral_Raise',
     name: 'Lateral raise (cable)',
     station: 'cable',
     attachment: 'single_arm',
@@ -312,6 +326,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_kickback',
+    freeDbId: 'Tricep_Dumbbell_Kickback',
     name: 'Cable kickback',
     station: 'cable',
     attachment: 'single_arm',
@@ -384,6 +399,7 @@ export const EXERCISES: Exercise[] = [
      looking odd next to the free-bar lifts. */
   {
     id: 'lm_press',
+    freeDbId: 'Landmine_Linear_Jammer',
     name: 'Landmine press',
     station: 'landmine',
     attachment: 'landmine_handle',
@@ -397,6 +413,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'lm_row',
+    freeDbId: 'T-Bar_Row_with_Handle',
     name: 'Landmine row',
     station: 'landmine',
     attachment: 'landmine_handle',
@@ -410,6 +427,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'lm_rotation',
+    freeDbId: 'Landmine_180s',
     name: 'Landmine rotation',
     station: 'landmine',
     primaryMuscles: ['obliques'],
@@ -436,7 +454,7 @@ export const EXERCISES: Exercise[] = [
   /* --- Kettlebell -------------------------------------------------------- */
   {
     id: 'kb_swing',
-    freeDbId: 'Two-Arm_Kettlebell_Swing',
+    freeDbId: 'One-Arm_Kettlebell_Swings',
     name: 'Swing',
     station: 'kettlebell',
     primaryMuscles: ['glutes', 'hamstrings'],
@@ -460,6 +478,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'kb_single_leg_rdl',
+    freeDbId: 'Kettlebell_One-Legged_Deadlift',
     name: 'Single-leg RDL',
     station: 'kettlebell',
     primaryMuscles: ['hamstrings', 'glutes'],
@@ -471,7 +490,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'kb_turkish_get_up',
-    freeDbId: 'Kettlebell_Turkish_Get-Up_(Squat_style)',
+    freeDbId: 'Kettlebell_Turkish_Get-Up_Squat_style',
     name: 'Turkish get-up',
     station: 'kettlebell',
     primaryMuscles: ['abs', 'front_delts'],
@@ -581,6 +600,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'bw_split_squat',
+    freeDbId: 'Split_Squats',
     name: 'Split squat',
     station: 'bodyweight',
     primaryMuscles: ['quads', 'glutes'],
@@ -592,6 +612,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'bw_glute_bridge',
+    freeDbId: 'Butt_Lift_Bridge',
     name: 'Glute bridge',
     station: 'bodyweight',
     primaryMuscles: ['glutes'],
@@ -605,6 +626,7 @@ export const EXERCISES: Exercise[] = [
   /* --- Bands (rpe_only — load is not quantifiable) ----------------------- */
   {
     id: 'bd_pull_apart',
+    freeDbId: 'Band_Pull_Apart',
     name: 'Band pull-apart',
     station: 'band',
     primaryMuscles: ['rear_delts'],
@@ -616,6 +638,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'bd_external_rotation',
+    freeDbId: 'External_Rotation_with_Band',
     name: 'Band external rotation',
     station: 'band',
     primaryMuscles: ['rear_delts'],
@@ -627,6 +650,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'bd_pull_through',
+    freeDbId: 'Band_Good_Morning_Pull_Through',
     name: 'Band pull-through',
     station: 'band',
     primaryMuscles: ['glutes', 'hamstrings'],

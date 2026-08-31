@@ -4,12 +4,17 @@ import { db } from '../db/db';
 import { downloadBackup, importBackup, type ImportReport } from '../lib/backup';
 import { Card, Label, Screen } from '../components/Layout';
 import { InventoryEditor } from '../components/InventoryEditor';
+import { clearFreeDb, fetchAndStoreFreeDb, mappedIds, type EnrichReport } from '../lib/freeDb';
+import { EXERCISES } from '../db/seed/exercises';
 
 export function SettingsScreen() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [report, setReport] = useState<ImportReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [enrich, setEnrich] = useState<EnrichReport | null>(null);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+  const [enriching, setEnriching] = useState(false);
 
   const counts = useLiveQuery(
     async () => ({
@@ -21,6 +26,7 @@ export function SettingsScreen() {
       goals: await db.sharedGoals.count(),
       selections: await db.nutritionSelections.count(),
       savedMeals: await db.nutritionSavedMeals.count(),
+      freeDb: await db.freeDbCache.count(),
     }),
     [],
     undefined,
@@ -38,6 +44,18 @@ export function SettingsScreen() {
     } finally {
       setBusy(false);
       if (fileInput.current) fileInput.current.value = '';
+    }
+  };
+
+  const runEnrich = async () => {
+    setEnriching(true);
+    setEnrichError(null);
+    try {
+      setEnrich(await fetchAndStoreFreeDb());
+    } catch (cause) {
+      setEnrichError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setEnriching(false);
     }
   };
 
@@ -119,6 +137,66 @@ export function SettingsScreen() {
         )}
       </Card>
 
+      <Card title="Descriptions and photos" className="mt-3">
+        <p className="text-[13px] text-text-dim">
+          Pulls descriptions and reference photos from free-exercise-db (public domain, no key)
+          for the {mappedIds().length} exercises hand-mapped to it. Fetched once and stored
+          locally — it is never a runtime dependency, and photos are cached the first time you
+          open one, not all at once.
+        </p>
+
+        <div className="mt-3 flex items-baseline justify-between gap-3">
+          <Label>Cached records</Label>
+          <span className="text-[14px] font-medium">
+            {counts === undefined ? '--' : `${counts.freeDb} / ${mappedIds().length}`}
+          </span>
+        </div>
+
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            disabled={enriching}
+            onClick={() => void runEnrich()}
+            className="h-11 flex-1 rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
+          >
+            {enriching ? 'Fetching…' : (counts?.freeDb ?? 0) > 0 ? 'Refresh' : 'Fetch now'}
+          </button>
+          {(counts?.freeDb ?? 0) > 0 && (
+            <button
+              type="button"
+              onClick={() => void clearFreeDb()}
+              className="h-11 flex-1 rounded-full bg-surface-2 font-medium text-text-dim"
+            >
+              Clear cache
+            </button>
+          )}
+        </div>
+
+        {enrichError && (
+          <p className="mt-3 text-[13px] font-medium" style={{ color: 'var(--color-rir-1)' }}>
+            {enrichError} — the app works without this; every exercise still has its own cue.
+          </p>
+        )}
+
+        {enrich && (
+          <div className="mt-3 rounded-xl bg-surface-2 p-3">
+            <p className="text-[13px] font-semibold">
+              Stored {enrich.stored} of {enrich.requested} mapped records
+            </p>
+            <p className="mt-1 text-[12px] font-medium text-text-dim">
+              Scanned {enrich.scanned} upstream records. {enrich.unmappedExercises} of{' '}
+              {EXERCISES.length} exercises have no upstream match by design and fall back to
+              their own cue.
+            </p>
+            {enrich.unknownIds.length > 0 && (
+              <p className="mt-2 text-[12px] font-medium" style={{ color: 'var(--color-rir-1)' }}>
+                Mapping bug — upstream has no record for: {enrich.unknownIds.join(', ')}
+              </p>
+            )}
+          </div>
+        )}
+      </Card>
+
       <Card title="Stored data" className="mt-3">
         {counts === undefined ? (
           <Label>--</Label>
@@ -132,6 +210,7 @@ export function SettingsScreen() {
             {row('Goals (shared)', String(counts.goals))}
             {row('Nutrition days', String(counts.selections))}
             {row('Saved meals', String(counts.savedMeals))}
+            {row('Cached reference records', String(counts.freeDb))}
           </>
         )}
       </Card>

@@ -14,11 +14,14 @@ export function ExercisePicker({
   selectedIds,
   onPick,
   onClose,
+  onInfo,
 }: {
   exercises: Exercise[];
   selectedIds: string[];
   onPick: (exerciseId: string) => void;
   onClose: () => void;
+  /** Opens the cue, photo and description for one exercise. */
+  onInfo?: (exerciseId: string) => void;
 }) {
   const [station, setStation] = useState<Station | 'all'>('all');
   const [muscle, setMuscle] = useState<MuscleId | 'all'>('all');
@@ -98,13 +101,14 @@ export function ExercisePicker({
             {list.map((exercise, i) => {
               const already = selectedIds.includes(exercise.id);
               return (
-                <button
+                <div
                   key={exercise.id}
+                  className={`flex items-center ${i > 0 ? 'border-t border-border' : ''}`}
+                >
+                <button
                   type="button"
                   onClick={() => onPick(exercise.id)}
-                  className={`flex w-full items-center gap-3 px-4 py-3 text-left ${
-                    i > 0 ? 'border-t border-border' : ''
-                  }`}
+                  className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 text-left"
                 >
                   <span className="min-w-0 flex-1">
                     <span
@@ -137,6 +141,25 @@ export function ExercisePicker({
                   )}
                   <span className="shrink-0 text-text-dim">{already ? '✓' : '+'}</span>
                 </button>
+                {onInfo && (
+                  <button
+                    type="button"
+                    onClick={() => onInfo(exercise.id)}
+                    aria-label={`About ${exercise.name}`}
+                    className="flex size-11 shrink-0 items-center justify-center text-text-dim"
+                  >
+                    <svg viewBox="0 0 24 24" className="size-4.5" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+                      <path
+                        d="M12 11v5.5M12 7.6v.8"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
+                )}
+                </div>
               );
             })}
           </div>

@@ -28,6 +28,7 @@ import {
 } from '../lib/sessions';
 import { Card, Label, PrimaryCTA, Screen, SegmentedToggle } from '../components/Layout';
 import { ExercisePicker } from '../components/ExercisePicker';
+import { ExerciseDetail } from '../components/ExerciseDetail';
 import { ExerciseStrip } from '../components/ExerciseStrip';
 import { EffortPicker } from '../components/EffortPicker';
 import { NumberPad, type PadTarget } from '../components/NumberPad';
@@ -79,6 +80,7 @@ export function SessionScreen({
   const [draft, setDraft] = useState<SessionDraft | null>(null);
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   const [picking, setPicking] = useState(false);
+  const [detailId, setDetailId] = useState<string | undefined>(undefined);
   const [cell, setCell] = useState<ActiveCell | null>(null);
   const [effortCell, setEffortCell] = useState<ActiveCell | null>(null);
   const [startedAt] = useState(() => Date.now());
@@ -519,13 +521,31 @@ export function SessionScreen({
           <Card
             title={activeExercise.name}
             trailing={
-              <button
-                type="button"
-                onClick={() => removeExercise(activeExercise.id)}
-                className="text-[12px] font-medium text-text-dim"
-              >
-                Remove
-              </button>
+              <span className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDetailId(activeExercise.id)}
+                  aria-label={`About ${activeExercise.name}`}
+                  className="text-text-dim"
+                >
+                  <svg viewBox="0 0 24 24" className="size-4.5" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+                    <path
+                      d="M12 11v5.5M12 7.6v.8"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeExercise(activeExercise.id)}
+                  className="text-[12px] font-medium text-text-dim"
+                >
+                  Remove
+                </button>
+              </span>
             }
           >
             <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -763,6 +783,14 @@ export function SessionScreen({
           selectedIds={draft.exercises.map((e) => e.exerciseId)}
           onPick={addExercise}
           onClose={() => setPicking(false)}
+          onInfo={setDetailId}
+        />
+      )}
+
+      {detailId && exercisesById.get(detailId) && (
+        <ExerciseDetail
+          exercise={exercisesById.get(detailId) as Exercise}
+          onClose={() => setDetailId(undefined)}
         />
       )}
     </>

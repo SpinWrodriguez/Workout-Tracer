@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "lint": "oxlint",
     "typecheck": "tsc -b",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "freedb:snapshot": "node scripts/freedb-snapshot.mjs"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",

@@ -15,6 +15,7 @@ import { Card, Empty, Label, Screen, SegmentedToggle } from '../components/Layou
 import { ExerciseChart } from '../components/LazyCharts';
 import type { ExerciseMetric, ExercisePoint } from '../components/Charts';
 import { ExercisePicker } from '../components/ExercisePicker';
+import { ExerciseDetail } from '../components/ExerciseDetail';
 
 const METRICS: ExerciseMetric[] = ['topSetKg', 'oneRm', 'volumeKg'];
 const METRIC_LABEL: Record<ExerciseMetric, string> = {
@@ -32,6 +33,7 @@ export function HistoryScreen({
 }) {
   const [exerciseId, setExerciseId] = useState<string | undefined>(undefined);
   const [picking, setPicking] = useState(false);
+  const [detailId, setDetailId] = useState<string | undefined>(undefined);
   const [timeframe, setTimeframe] = useState<Timeframe>('3M');
   const [metric, setMetric] = useState<ExerciseMetric>('topSetKg');
 
@@ -113,13 +115,24 @@ export function HistoryScreen({
         <Card
           title={activeExercise?.name ?? 'Per-exercise history'}
           trailing={
-            <button
-              type="button"
-              onClick={() => setPicking(true)}
-              className="rounded-lg bg-surface-2 px-2.5 py-1 text-[12px] font-medium text-text-dim"
-            >
-              Change
-            </button>
+            <span className="flex gap-1.5">
+              {activeExercise && (
+                <button
+                  type="button"
+                  onClick={() => setDetailId(activeExercise.id)}
+                  className="rounded-lg bg-surface-2 px-2.5 py-1 text-[12px] font-medium text-text-dim"
+                >
+                  About
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setPicking(true)}
+                className="rounded-lg bg-surface-2 px-2.5 py-1 text-[12px] font-medium text-text-dim"
+              >
+                Change
+              </button>
+            </span>
           }
         >
           {!activeExercise || (series?.length ?? 0) === 0 ? (
@@ -237,6 +250,14 @@ export function HistoryScreen({
             setPicking(false);
           }}
           onClose={() => setPicking(false)}
+          onInfo={setDetailId}
+        />
+      )}
+
+      {detailId && byId.get(detailId) && (
+        <ExerciseDetail
+          exercise={byId.get(detailId) as Exercise}
+          onClose={() => setDetailId(undefined)}
         />
       )}
     </>
