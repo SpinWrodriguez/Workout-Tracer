@@ -62,12 +62,19 @@ export interface TrainingPrefs {
   golfWeekdays: number[];
   weeklySetTarget: number;
   sessionMinutes: number;
+  /**
+   * What the heavy days train. Stored rather than derived because, unlike the
+   * number of sessions and which are heavy, nothing in the schedule records
+   * it — two heavy days look identical whichever split produced them.
+   */
+  shape: 'mixed' | 'upper_lower';
 }
 
 export const DEFAULT_TRAINING: TrainingPrefs = {
   golfWeekdays: [6],
   weeklySetTarget: 33,
   sessionMinutes: 40,
+  shape: 'mixed',
 };
 
 export function mergeTraining(value: unknown): TrainingPrefs {
@@ -87,6 +94,7 @@ export function mergeTraining(value: unknown): TrainingPrefs {
       Number.isFinite(minutes) && minutes > 0
         ? Math.round(minutes)
         : DEFAULT_TRAINING.sessionMinutes,
+    shape: value.shape === 'upper_lower' ? 'upper_lower' : DEFAULT_TRAINING.shape,
   };
 }
 

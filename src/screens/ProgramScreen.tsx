@@ -12,6 +12,7 @@ import { severityOf, validateBlock, type ValidationContext } from '../lib/blockV
 import { dayLabel, describeDay } from '../lib/dayLabel';
 import {
   DEFAULT_THIRD_DAY,
+  MAX_SESSIONS,
   maxSessionsFor,
   templateDayFor,
   templateWeek,
@@ -22,11 +23,12 @@ import {
   type SessionShape,
   type TemplateDay,
 } from '../lib/weekTemplate';
-import { readTraining, DEFAULT_TRAINING, type TrainingPrefs } from '../db/settings';
+import { readTraining, writeTraining, DEFAULT_TRAINING, type TrainingPrefs } from '../db/settings';
 import {
   addBlockExercise,
   assignSlot,
   clearDaySlot,
+  configFromSchedule,
   entriesForSlot,
   moveBlockExercise,
   orderedSlots,
@@ -76,6 +78,9 @@ export function ProgramScreen({
   const [shape, setShape] = useState<SessionShape>('mixed');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [training, setTraining] = useState<TrainingPrefs>(DEFAULT_TRAINING);
+  /* What the schedule looked like when the controls last synced to it, so a
+     choice being made right now is not stamped on mid-edit. */
+  const [seenSchedule, setSeenSchedule] = useState<string | undefined>(undefined);
   const [editingSlot, setEditingSlot] = useState<DaySlot | null>(null);
   const [addingTo, setAddingTo] = useState<DaySlot | null>(null);
   const [inventory, setInventory] = useState<Inventory>(DEFAULT_INVENTORY);
@@ -89,6 +94,7 @@ export function ProgramScreen({
       if (!cancelled) {
         setTraining(next);
         setSessionMinutes(String(next.sessionMinutes) as SessionLength);
+        setShape(next.shape);
       }
     });
     return () => {
@@ -138,6 +144,27 @@ export function ProgramScreen({
       ),
     [sessionsPerWeek, training.golfWeekdays, thirdDay],
   );
+
+  /*
+   * The controls are a view of the program, not a fresh form. Opening Program
+   * with three days scheduled and being told "2 sessions, Mon and Tue heavy"
+   * describes somebody else's week — and generating from it would quietly
+   * rebuild yours to match.
+   *
+   * Re-synced only when the stored schedule actually changes, so a selection
+   * being made right now survives until it is applied or abandoned.
+   */
+  const fromSchedule = configFromSchedule(schedule ?? {});
+  const scheduleKey = JSON.stringify(fromSchedule);
+  if (fromSchedule && scheduleKey !== seenSchedule) {
+    setSeenSchedule(scheduleKey);
+    setSessionsPerWeek(
+      String(
+        Math.max(2, Math.min(fromSchedule.sessionsPerWeek, MAX_SESSIONS)),
+      ) as (typeof SESSION_COUNTS)[number],
+    );
+    setHeavyWeekdays(fromSchedule.heavyWeekdays);
+  }
 
   const effectiveHeavy = heavyWeekdays ?? sessionWeekdays.slice(0, 2);
   const heavyCount = effectiveHeavy.length;
@@ -572,7 +599,12 @@ export function ProgramScreen({
                   <SegmentedToggle
                     options={SESSION_SHAPES}
                     value={shape}
-                    onChange={setShape}
+                    onChange={(next) => {
+                      setShape(next);
+                      const prefs = { ...training, shape: next };
+                      setTraining(prefs);
+                      void writeTraining(prefs);
+                    }}
                     labels={SESSION_SHAPE_LABEL}
                   />
                 </div>
@@ -585,7 +617,12 @@ export function ProgramScreen({
               <SegmentedToggle
                 options={SESSION_LENGTHS}
                 value={sessionMinutes}
-                onChange={setSessionMinutes}
+                onChange={(next) => {
+                  setSessionMinutes(next);
+                  const prefs = { ...training, sessionMinutes: Number(next) };
+                  setTraining(prefs);
+                  void writeTraining(prefs);
+                }}
                 labels={{ '30': '30 min', '40': '40 min', '60': '60 min' }}
               />
             </div>

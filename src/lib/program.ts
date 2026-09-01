@@ -161,6 +161,29 @@ export function nextSlot(
   return upcoming[0];
 }
 
+/**
+ * The setup controls read back out of the schedule: how many sessions there
+ * are and which of them are heavy. Both are facts about the program, so
+ * showing anything else on the Program screen describes somebody else's week
+ * — and generating from it would rebuild yours to match.
+ *
+ * `shape` is deliberately absent: two heavy days look identical whichever
+ * split produced them, so that one is stored in the training preferences.
+ */
+export function configFromSchedule(schedule: BlockSchedule): {
+  sessionsPerWeek: number;
+  heavyWeekdays: Weekday[];
+} | undefined {
+  const days = orderedSlots(schedule);
+  if (days.length === 0) return undefined;
+  return {
+    sessionsPerWeek: days.length,
+    heavyWeekdays: days
+      .filter((entry) => (schedule[entry.slot]?.intensity ?? 'heavy') === 'heavy')
+      .map((entry) => entry.weekday),
+  };
+}
+
 /* --- building a session from the block ------------------------------------ */
 
 export interface BlockPlan {
