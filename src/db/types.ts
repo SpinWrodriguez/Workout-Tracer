@@ -77,6 +77,11 @@ export interface Exercise {
   loadMode: LoadMode;
   gripLoad: GripLoad; // <-- drives the golf rule
   isHinge: boolean; // form-risk flag; schedule fresh, never late in a circuit
+  /** Ordered before everything else: power work is worthless when fatigued. */
+  isExplosive: boolean;
+  /** Warm-up movement. Never programmed as working sets, never counted in
+      weekly volume — a hip switch is not a set of training. */
+  isMobility: boolean;
 
   /* --- prescription bounds, validated per exercise ----------------------- */
   /** A Turkish get-up is 1-5 reps; a global range applied to it is nonsense. */

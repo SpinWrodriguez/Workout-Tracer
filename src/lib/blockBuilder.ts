@@ -80,7 +80,10 @@ const PATTERN_MUSCLES: Record<MovementPattern, MuscleId[]> = {
   pull_v: ['lats', 'upper_back', 'biceps'],
   carry: ['forearms', 'traps', 'obliques'],
   core: ['abs', 'obliques', 'lower_back'],
-  rotation: ['obliques', 'abs'],
+  // Rotational power is hips first, torso second — a landmine scoop or
+  // rotational press is a hip movement that ends in the arm, so glutes and
+  // front delts count as on-pattern here, not as noise.
+  rotation: ['obliques', 'abs', 'glutes', 'front_delts'],
 };
 
 /** Lower is more important; the time trimmer drops the highest number first. */
@@ -180,6 +183,8 @@ function fillDay(
     exercises
       .filter((exercise) => {
         if (exercise.pattern !== pattern) return false;
+        // Mobility is warm-up work; it is never a programmed working set.
+        if (exercise.isMobility) return false;
         if (onThisDay.has(exercise.id)) return false;
         if (!allowReuse && usedInBlock.has(exercise.id)) return false;
         // Grip and spinal exclusions are properties of the day, set by the
@@ -247,11 +252,14 @@ function fillDay(
   }
 
   const byId = new Map(exercises.map((e) => [e.id, e]));
-  picked.sort(
-    (a, b) =>
-      PATTERN_ORDER.indexOf(byId.get(a.exerciseId)?.pattern as MovementPattern) -
-      PATTERN_ORDER.indexOf(byId.get(b.exerciseId)?.pattern as MovementPattern),
-  );
+  // Explosive work leads, ahead even of the hinge: power is worthless once
+  // fatigued, which is the same reason hinges come before everything else.
+  const rank = (id: string) => {
+    const exercise = byId.get(id);
+    if (!exercise) return 99;
+    return exercise.isExplosive ? -1 : PATTERN_ORDER.indexOf(exercise.pattern);
+  };
+  picked.sort((a, b) => rank(a.exerciseId) - rank(b.exerciseId));
   picked.forEach((entry, i) => {
     entry.order = i;
   });

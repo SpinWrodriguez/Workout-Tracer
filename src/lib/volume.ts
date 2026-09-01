@@ -44,6 +44,9 @@ export function setsPerMuscle(
   for (const log of logs) {
     const exercise = exercisesById.get(log.exerciseId);
     if (!exercise) continue;
+    // Warm-up mobility is logged but never counted: a 90/90 hip switch is not
+    // a set of training and would flatter every weekly total it touched.
+    if (exercise.isMobility) continue;
     for (const muscle of exercise.primaryMuscles) out[muscle] += PRIMARY_WEIGHT;
     for (const muscle of exercise.secondaryMuscles) out[muscle] += SECONDARY_WEIGHT;
   }

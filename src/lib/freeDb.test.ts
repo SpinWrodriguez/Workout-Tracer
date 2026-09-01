@@ -37,12 +37,22 @@ describe('hand-mapped freeDbId values (spec §9)', () => {
     expect(new Set(used).size).toBe(used.length);
   });
 
-  it('leaves a handful deliberately unmapped, and every one of those has a cue', () => {
+  it('leaves a minority deliberately unmapped, and every one of those has a cue', () => {
     const unmapped = EXERCISES.filter((e) => !e.freeDbId);
     expect(unmapped.length).toBeGreaterThan(0);
-    expect(unmapped.length).toBeLessThan(6);
+    // Most of the table still resolves to a photo; the rest are movements with
+    // no upstream equivalent at the right implement.
+    expect(unmapped.length).toBeLessThan(EXERCISES.length / 2);
     for (const exercise of unmapped) {
       expect(CUES[exercise.id], `${exercise.id} has no cue`).toBeTruthy();
+    }
+  });
+
+  it('never maps an exercise to an upstream record for a different implement', () => {
+    // A cable kickback photographed with a dumbbell, or a landmine press
+    // photographed as a jammer, is worse than no photo at all.
+    for (const id of ['cb_kickback', 'lm_press', 'lm_scoop', 'kb_bulgarian_split']) {
+      expect(EXERCISES.find((e) => e.id === id)?.freeDbId, id).toBeUndefined();
     }
   });
 

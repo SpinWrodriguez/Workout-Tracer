@@ -26,11 +26,21 @@ describe('exercise seed (spec §8)', () => {
     }
   });
 
-  it('carries the bar weights from §2', () => {
+  it('carries the bar weights from §2 on everything that is actually loaded', () => {
     for (const exercise of EXERCISES) {
-      if (exercise.station === 'free_bar') expect(exercise.barWeight).toBe(FREE_BAR_KG);
-      if (exercise.station === 'smith') expect(exercise.barWeight).toBe(SMITH_BAR_KG);
+      // An inverted row uses the Smith bar without loading it, so it carries no
+      // bar weight — the rule is about what you put plates on.
+      if (exercise.loadMode !== 'weight') continue;
+      if (exercise.station === 'free_bar') expect(exercise.barWeight, exercise.id).toBe(FREE_BAR_KG);
+      if (exercise.station === 'smith') expect(exercise.barWeight, exercise.id).toBe(SMITH_BAR_KG);
     }
+  });
+
+  it('gives a bar-station exercise a bar weight only when it is loaded', () => {
+    const inverted = EXERCISES.find((e) => e.id === 'sm_inverted_row');
+    expect(inverted?.station).toBe('smith');
+    expect(inverted?.loadMode).toBe('bodyweight');
+    expect(inverted?.barWeight).toBeUndefined();
   });
 
   it('applies the cable ratios from §2 and nothing else', () => {
@@ -73,5 +83,82 @@ describe('exercise seed (spec §8)', () => {
     const bands = EXERCISES.filter((e) => e.station === 'band');
     expect(bands.length).toBeGreaterThan(0);
     for (const band of bands) expect(band.loadMode).toBe('rpe_only');
+  });
+});
+
+describe('the rotational and explosive additions', () => {
+  const find = (id: string) => EXERCISES.find((e) => e.id === id);
+
+  it('trains the hip-then-torso sequence the swing depends on', () => {
+    const rotational = EXERCISES.filter((e) => e.pattern === 'rotation' && !e.isMobility);
+    expect(rotational.length).toBeGreaterThanOrEqual(9);
+    // The two that most directly train the sequence.
+    expect(find('lm_scoop')?.pattern).toBe('rotation');
+    expect(find('lm_rotational_press')?.pattern).toBe('rotation');
+    for (const exercise of rotational) expect(exercise.spinalLoad, exercise.id).not.toBe('high');
+  });
+
+  it('marks power work explosive so it can be ordered first', () => {
+    const explosive = EXERCISES.filter((e) => e.isExplosive).map((e) => e.id);
+    expect(explosive).toEqual(
+      expect.arrayContaining(['kb_clean', 'kb_high_pull', 'sm_push_press', 'bw_jump_squat', 'lm_scoop']),
+    );
+  });
+
+  it('gives the generator a horizontal pull that is not grip-heavy', () => {
+    const row = find('sm_inverted_row');
+    expect(row?.pattern).toBe('pull_h');
+    expect(row?.gripLoad).not.toBe('high');
+    // It is the only one, which is why it matters near a round.
+    const safePulls = EXERCISES.filter(
+      (e) => e.pattern === 'pull_h' && e.gripLoad !== 'high' && e.primaryMuscles.includes('upper_back'),
+    );
+    expect(safePulls.map((e) => e.id)).toContain('sm_inverted_row');
+  });
+
+  it('offers a leg raise that does not hang from the hands', () => {
+    const hanging = find('bw_hanging_leg_raise');
+    const supported = find('bw_captains_knee_raise');
+    expect(hanging?.gripLoad).toBe('high');
+    expect(supported?.pattern).toBe(hanging?.pattern);
+    expect(supported?.gripLoad).toBe('none');
+  });
+
+  it('keeps mobility out of working sets and out of volume', () => {
+    const mobility = EXERCISES.filter((e) => e.isMobility);
+    expect(mobility.map((e) => e.id)).toEqual(['mb_open_book', 'mb_90_90']);
+    for (const exercise of mobility) {
+      expect(exercise.loadMode, exercise.id).toBe('rpe_only');
+      expect(exercise.pattern, exercise.id).toBe('rotation');
+    }
+  });
+});
+
+describe('the four data fixes', () => {
+  const find = (id: string) => EXERCISES.find((e) => e.id === id);
+
+  it('treats a get-up as grip-heavy, because it is a loaded overhead hold', () => {
+    expect(find('kb_turkish_get_up')?.gripLoad).toBe('high');
+  });
+
+  it('moves the loaded split squat off the bodyweight station', () => {
+    const split = find('bw_split_squat');
+    expect(split?.loadMode).toBe('weight');
+    expect(split?.station).toBe('kettlebell');
+    // The id keeps its old prefix: renaming it would orphan every logged set.
+    expect(split?.id).toBe('bw_split_squat');
+  });
+
+  it('leaves the unloaded glute bridge as bodyweight, with a loaded sibling', () => {
+    expect(find('bw_glute_bridge')?.loadMode).toBe('bodyweight');
+    expect(find('bb_hip_thrust')?.loadMode).toBe('weight');
+  });
+
+  it('has no exercise whose station and load mode disagree', () => {
+    for (const exercise of EXERCISES) {
+      if (exercise.station === 'bodyweight') {
+        expect(exercise.loadMode, exercise.id).not.toBe('weight');
+      }
+    }
   });
 });

@@ -215,7 +215,7 @@ export function validateBlock(
         continue;
       }
 
-      weeklySets += entry.targetSets;
+      if (!exercise.isMobility) weeklySets += entry.targetSets;
       for (const group of COVERAGE_GROUPS) {
         if (coversGroup(exercise, group)) covered.add(group);
       }

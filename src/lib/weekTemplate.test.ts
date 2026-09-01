@@ -181,3 +181,53 @@ describe('a generated block obeys the template', () => {
     }
   });
 });
+
+describe('explosive work leads the session', () => {
+  it('orders an explosive lift first, ahead even of the hinge', () => {
+    // Traps and glutes pull the kettlebell high pull into session A.
+    const block = generateBlock({
+      blockId: 'b1',
+      exercises: EXERCISES,
+      focusMuscles: ['traps', 'glutes', 'hamstrings'],
+      sessionsPerWeek: 3,
+      golfWeekdays: [6],
+      minutesPerSession: 40,
+      hasHistory: true,
+      laddersFor: (exercise) => ladderFor(exercise, DEFAULT_INVENTORY),
+    });
+
+    let sawOne = false;
+    for (const day of block.days) {
+      const index = day.exercises.findIndex((e) => byId.get(e.exerciseId)?.isExplosive);
+      if (index < 0) continue;
+      sawOne = true;
+      expect(index, `${day.slot}: explosive work is not first`).toBe(0);
+    }
+    expect(sawOne, 'no explosive exercise was programmed at all').toBe(true);
+  });
+
+  it('never programmes mobility as a working set', () => {
+    for (const sessions of [2, 3]) {
+      for (const day of build(sessions).days) {
+        for (const entry of day.exercises) {
+          expect(byId.get(entry.exerciseId)?.isMobility, entry.exerciseId).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('draws the light rotational slot from the new landmine and cable work', () => {
+    const light = build(3).days.find((day) => day.intensity === 'light');
+    const rotation = light?.exercises.find(
+      (entry) => byId.get(entry.exerciseId)?.pattern === 'rotation',
+    );
+    expect(rotation).toBeDefined();
+    expect([
+      'lm_rotational_press',
+      'lm_scoop',
+      'cb_rotational_row',
+      'cb_pallof_rotation',
+      'cb_punch',
+    ]).toContain(rotation?.exerciseId);
+  });
+});

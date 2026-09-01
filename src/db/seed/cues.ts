@@ -65,6 +65,32 @@ export const CUES: Record<string, string> = {
   bd_external_rotation: 'Elbow pinned to the side at 90°. Rotate out only as far as it stays pinned.',
   bd_pull_through: 'Face away from the anchor, hinge and let the band pull the hips back.',
   bd_lateral_walk: 'Band above the knees, quarter squat. Small steps, no bobbing.',
+
+  /* --- Rotational, explosive, staples and mobility ---------------------- */
+  lm_rotational_press: 'Drive from the back hip, then the ribs, then the arm. The bar finishes across the body.',
+  lm_scoop: 'Load the back hip and throw through it. Speed is the point here, not the weight.',
+  cb_rotational_row: 'Row and rotate as one movement, finishing with the chest open to the handle side.',
+  cb_pallof_rotation: 'Press out, then rotate away from the stack. Hips stay square the whole time.',
+  cb_punch: 'Back heel drives, hips turn, arm follows last. Short and sharp.',
+  kb_russian_twist: 'Rotate the ribs, not just the arms. Heels down, chest tall.',
+  bw_side_plank_reach: 'Thread the arm under, then open all the way back. The hips never drop.',
+  kb_clean: 'The bell lands, it does not crash. Tame the arc by keeping it close to the body.',
+  kb_high_pull: 'Same hinge as the swing. The elbow leads and the bell stays under the shoulder.',
+  sm_push_press: 'Short vertical dip, drive, then lock out. The legs start it, the shoulders finish it.',
+  bw_jump_squat: 'Land quietly on the same spot. Stop the set as soon as the landings get loud.',
+  bb_hip_thrust: 'Shoulders on the bench, chin tucked, ribs down. Finish with the glutes, not the back.',
+  kb_bulgarian_split: 'Back foot on the bench, front shin near vertical. Slow down before the knee.',
+  sm_rdl: 'The guided bar lets you sit back further than a free RDL. Stop where the hamstrings stop.',
+  sm_inverted_row: 'Set the Smith bar low, heels out, body in one line. The one pull that spares the grip.',
+  cb_pull_through: 'Face away from the low pulley. Let the cable pull the hips back, then stand tall.',
+  kb_reverse_lunge: 'Step back, not forward. Kinder on the knee and easier to control.',
+  kb_step_up: 'Drive through the top foot. Do not push off the floor with the trailing leg.',
+  bw_ab_wheel: 'Ribs down, hips tucked. Roll only as far as the lower back stays flat.',
+  bw_neutral_pull_up: 'Neutral grip on the multi-grip bar, the kindest angle for a cranky shoulder.',
+  bw_captains_knee_raise: 'On the dip station, so nothing hangs from the hands. The grip-free leg raise.',
+  kb_overhead_carry: 'Bell locked overhead, biceps by the ear. Walk tall and do not lean away from it.',
+  mb_open_book: 'Knees stacked, top arm opens to the floor. Warm-up only, never a working set.',
+  mb_90_90: 'Switch the hips side to side without pushing off the hands. Warm-up only.',
 };
 
 export function cueFor(exerciseId: string): string | undefined {
