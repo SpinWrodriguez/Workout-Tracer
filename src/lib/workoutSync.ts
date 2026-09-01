@@ -104,6 +104,36 @@ export function lastPushedAt(): string | undefined {
   return readFlag(PUSHED_AT_KEY);
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Telling somebody when it did not work.                                    */
+/*                                                                            */
+/*  The automatic push is fire-and-forget, which is right — it must never      */
+/*  interrupt logging a set. But "signed out" and "the table does not exist"   */
+/*  are outcomes where nothing is being saved at all, and swallowing those     */
+/*  means the app looks like it is syncing for weeks while it is not. The      */
+/*  last outcome is kept so a screen can say so.                              */
+/* -------------------------------------------------------------------------- */
+
+let latest: WorkoutSyncReport | undefined;
+const listeners = new Set<(report: WorkoutSyncReport) => void>();
+
+export function lastSyncReport(): WorkoutSyncReport | undefined {
+  return latest;
+}
+
+export function onSyncReport(listener: (report: WorkoutSyncReport) => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function publish(report: WorkoutSyncReport): WorkoutSyncReport {
+  latest = report;
+  for (const listener of listeners) listener(report);
+  return report;
+}
+
 /* --- snapshot ------------------------------------------------------------- */
 
 export async function snapshotWorkout(): Promise<WorkoutSnapshot> {
@@ -213,6 +243,10 @@ export interface WorkoutSyncReport {
  * it is newer than what this device last pushed.
  */
 export async function syncWorkout(store: WorkoutStore): Promise<WorkoutSyncReport> {
+  return publish(await reconcile(store));
+}
+
+async function reconcile(store: WorkoutStore): Promise<WorkoutSyncReport> {
   const at = new Date().toISOString();
 
   let userId: string | undefined;
@@ -245,9 +279,19 @@ export async function syncWorkout(store: WorkoutStore): Promise<WorkoutSyncRepor
     /*
      * A fresh install seeds a starter block, which marks the device dirty
      * before it has ever synced. Pushing that would replace a real history
-     * with an empty one, so nothing-logged-here never wins over something.
+     * with an empty one, so nothing-here never wins over something.
+     *
+     * "Nothing here" has to mean nothing the USER made, not merely nothing
+     * logged: a program built over a week has no sessions against it yet and
+     * is still real work. Counting only sessions meant those edits never
+     * pushed and were quietly replaced by whatever the cloud held.
      */
-    const localIsEmpty = (await db.session.count()) === 0 && (await db.setLog.count()) === 0;
+    const [sessions, setLogs, blockExercises] = await Promise.all([
+      db.session.count(),
+      db.setLog.count(),
+      db.blockExercise.count(),
+    ]);
+    const localIsEmpty = sessions === 0 && setLogs === 0 && blockExercises === 0;
 
     // Unpushed local work is never overwritten, whatever the cloud says.
     if (isDirty() && !localIsEmpty) return await push();

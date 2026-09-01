@@ -287,3 +287,79 @@ describe('the store contract', () => {
     expect(write.mock.calls[0]?.[0]).toBe('user-9');
   });
 });
+
+/*
+ * The empty-local guard exists to stop a fresh install pushing its seeded
+ * starter block over a real history. It used to ask only "have any sessions
+ * been logged", which is not the same question: a week spent building a
+ * program is real work that has logged nothing yet, and treating it as empty
+ * meant those edits never pushed AND could be overwritten by a pull.
+ */
+describe('a program built but not yet trained', () => {
+  async function buildProgram() {
+    await db.blockExercise.bulkPut([
+      {
+        blockId: 'block_1',
+        exerciseId: 'bb_back_squat',
+        daySlot: 'A',
+        targetSets: 3,
+        repRangeLow: 8,
+        repRangeHigh: 10,
+        order: 0,
+      },
+    ]);
+    await db.settings.put({
+      key: 'blockSchedule',
+      value: { block_1: { A: { weekday: 1, intensity: 'heavy', name: 'Lower Push' } } },
+    });
+  }
+
+  it('pushes the program even though nothing has been logged against it', async () => {
+    await buildProgram();
+    markDirty();
+    const { store, state } = fakeStore({ data: {}, updatedAt: '2099-01-01T00:00:00.000Z' });
+
+    const report = await syncWorkout(store);
+    expect(report.outcome).toBe('pushed');
+    expect(state.writes).toBe(1);
+  });
+
+  it('is not overwritten by an older cloud copy that happens to be stamped later', async () => {
+    // The cloud holds a previous block; this device has just been rebuilt.
+    const { store, state } = fakeStore();
+    await logSession('old');
+    await syncWorkout(store);
+    await db.session.clear();
+    await db.setLog.clear();
+    await db.blockExercise.clear();
+
+    await buildProgram();
+    markDirty();
+    state.row = { data: state.row?.data, updatedAt: '2099-01-01T00:00:00.000Z' };
+
+    const report = await syncWorkout(store);
+    expect(report.outcome).toBe('pushed');
+    expect((await db.settings.get('blockSchedule'))?.value).toMatchObject({
+      block_1: { A: { name: 'Lower Push' } },
+    });
+    expect(await db.blockExercise.count()).toBe(1);
+  });
+
+  it('still lets a genuinely fresh install take the cloud copy', async () => {
+    // Nothing but the seeded starter block: no program, no history.
+    await db.blockExercise.clear();
+    await logSession('from-the-other-device');
+    const { store } = fakeStore({
+      data: await snapshotWorkout(),
+      updatedAt: '2099-01-01T00:00:00.000Z',
+    });
+    await db.session.clear();
+    await db.setLog.clear();
+    await db.blockExercise.clear();
+    markDirty();
+
+    const report = await syncWorkout(store);
+    expect(report.outcome).toBe('pulled');
+    expect(await db.session.get('from-the-other-device')).toBeDefined();
+  });
+});

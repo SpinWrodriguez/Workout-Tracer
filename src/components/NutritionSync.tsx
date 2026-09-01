@@ -2,7 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { readLastSync } from '../db/settings';
 import { friendlyDate, toIsoDate } from '../lib/format';
 import { syncNow, syncWorkoutNow } from '../lib/nutritionSync';
-import { lastPushedAt, type WorkoutSyncReport } from '../lib/workoutSync';
+import {
+  isDirty,
+  lastPushedAt,
+  lastSyncReport,
+  onSyncReport,
+  type WorkoutSyncReport,
+} from '../lib/workoutSync';
 import type { SyncReport } from '../lib/remoteSync';
 import {
   currentSession,
@@ -64,12 +70,26 @@ export function NutritionSync() {
   const [lastSync, setLastSync] = useState<string | undefined>(undefined);
   const [workout, setWorkout] = useState<WorkoutSyncReport | null>(null);
   const [pushedAt, setPushedAt] = useState<string | undefined>(undefined);
+  /* What the automatic push last did. It runs fire-and-forget, so without this
+     a broken sync looks exactly like a working one. */
+  const [auto, setAuto] = useState<WorkoutSyncReport | undefined>(() => lastSyncReport());
+  const [dirty, setDirty] = useState(() => isDirty());
 
   const refresh = useCallback(async () => {
     setSession(await currentSession());
     setLastSync(await readLastSync());
     setPushedAt(lastPushedAt());
   }, []);
+
+  useEffect(
+    () =>
+      onSyncReport((report) => {
+        setAuto(report);
+        setDirty(isDirty());
+        setPushedAt(lastPushedAt());
+      }),
+    [],
+  );
 
   useEffect(() => {
     // Reading the session and the last-sync stamp is exactly the external
@@ -113,6 +133,20 @@ export function NutritionSync() {
     }
   };
 
+  /*
+   * Only the outcomes that mean nothing is being saved. 'up-to-date' and
+   * 'pushed' need no announcement, and a failed network call on a phone in a
+   * garage is normal — it retries and stays dirty until it works.
+   */
+  const autoWarning =
+    auto?.outcome === 'needs-sign-in'
+      ? 'Nothing is being saved: this device is signed out. Sign in below.'
+      : auto?.outcome === 'no-table'
+        ? 'Nothing is being saved: the workout_data table does not exist yet. Run supabase/workout_data.sql in the Supabase SQL editor once.'
+        : auto?.outcome === 'failed' && dirty
+          ? `Last save failed — ${auto.error ?? 'unknown error'}. It will try again.`
+          : undefined;
+
   return (
     <Card title="Cloud sync">
       <p className="text-[13px] text-text-dim">
@@ -140,6 +174,23 @@ export function NutritionSync() {
               {pushedAt ? friendlyDate(toIsoDate(new Date(pushedAt))) : 'never'}
             </span>
           </div>
+
+          {/* The honest state of the last automatic push. Silence here used to
+              mean "no news", which covered "nothing has saved since March". */}
+          {autoWarning && (
+            <p
+              className="mt-2 rounded-xl bg-surface-2 p-2.5 text-[12px] leading-snug font-medium"
+              style={{ color: 'var(--color-warn)' }}
+            >
+              {autoWarning}
+            </p>
+          )}
+          {!autoWarning && dirty && (
+            <p className="mt-2 text-[12px] font-medium text-text-dim">
+              Changes on this device have not reached the cloud yet — they save a couple of
+              seconds after you stop editing.
+            </p>
+          )}
 
           <div className="mt-3 flex gap-2">
             <button

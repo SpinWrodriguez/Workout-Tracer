@@ -10,6 +10,7 @@ import { Card, Empty, Label, Screen } from '../components/Layout';
 import { BodyWeightChart } from '../components/LazyCharts';
 import { ThemeToggleButton } from '../components/ThemePicker';
 import { Ring } from '../components/Ring';
+import { SyncWarning } from '../components/SyncWarning';
 import { dayLabel, slotFallback } from '../lib/dayLabel';
 
 /**
@@ -119,6 +120,8 @@ export function DashboardScreen({
         </span>
       }
     >
+      <SyncWarning onOpenSettings={onOpenSettings} />
+
       {programDays.length > 0 && (
         <Card title="Your week" className="mb-3">
           {programDays.map((day, i) => {
