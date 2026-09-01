@@ -8,7 +8,7 @@ import {
   isSupabaseConfigured,
   sendCode,
   signOut,
-  verifyCode,
+  verifySignIn,
   type SessionInfo,
 } from '../lib/supabaseSource';
 import { Card, Label } from './Layout';
@@ -164,8 +164,8 @@ export function NutritionSync() {
       ) : (
         <>
           <p className="mt-3 text-[13px] font-medium text-text-dim">
-            Sign in with the same email the nutrition app uses. It sends a 6-digit code, not a
-            link — links break the home-screen app.
+            Sign in with the same email the nutrition app uses. Depending on how the project
+            template is set up the email holds a 6-digit code or a link — paste either one.
           </p>
           <Field
             label="Email"
@@ -177,11 +177,10 @@ export function NutritionSync() {
           />
           {codeSent && (
             <Field
-              label="6-digit code"
-              inputMode="numeric"
+              label="Code, or the link from the email"
               value={code}
               onChange={setCode}
-              placeholder="123456"
+              placeholder="123456 or https://..."
             />
           )}
           <div className="mt-3 flex gap-2">
@@ -206,7 +205,7 @@ export function NutritionSync() {
                 disabled={busy || code.trim() === ''}
                 onClick={() =>
                   void run(async () => {
-                    const message = await verifyCode(email.trim(), code.trim());
+                    const message = await verifySignIn(email.trim(), code.trim());
                     if (!message) {
                       setCode('');
                       setCodeSent(false);

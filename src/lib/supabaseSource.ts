@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NUTRITION_TABLE, type WeightSource } from './remoteSync';
+import { parseAuthInput, redirectTarget } from './authLink';
 
 /* -------------------------------------------------------------------------- */
 /*  Supabase wiring.                                                          */
@@ -61,18 +62,56 @@ export async function currentSession(): Promise<SessionInfo> {
   return { signedIn: Boolean(data.session), email: data.session?.user.email ?? undefined };
 }
 
-/** Email OTP, matching the nutrition app — magic links break the PWA flow. */
+/**
+ * Asks Supabase to send a sign-in email. Whether that arrives as a six-digit
+ * code or a magic link is decided by the project's email template, not here,
+ * so the redirect is set for the link case and verifySignIn accepts both.
+ */
 export async function sendCode(email: string): Promise<string | undefined> {
   const client = await getSupabase();
   if (!client) return 'Supabase is not configured in this build.';
-  const { error } = await client.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+  const { error } = await client.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: false,
+      // Only honoured if this URL is in the project's allowed redirects; when
+      // it is not, the link still works by pasting it back in.
+      emailRedirectTo: redirectTarget(window.location.href),
+    },
+  });
   return error?.message;
 }
 
-export async function verifyCode(email: string, token: string): Promise<string | undefined> {
+/**
+ * Completes a sign-in from whatever the email produced: a code, the link
+ * pasted whole, or the URL you were redirected to after following one.
+ */
+export async function verifySignIn(email: string, raw: string): Promise<string | undefined> {
   const client = await getSupabase();
   if (!client) return 'Supabase is not configured in this build.';
-  const { error } = await client.auth.verifyOtp({ email, token, type: 'email' });
+
+  const parsed = parseAuthInput(raw);
+  if (!parsed) {
+    return 'That is neither a code nor a sign-in link. Paste the code, or the whole link from the email.';
+  }
+
+  if (parsed.kind === 'code') {
+    const { error } = await client.auth.verifyOtp({ email, token: parsed.token, type: 'email' });
+    return error?.message;
+  }
+
+  if (parsed.kind === 'link') {
+    const { error } = await client.auth.verifyOtp({
+      token_hash: parsed.tokenHash,
+      type: parsed.type,
+    });
+    return error?.message;
+  }
+
+  const { error } = await client.auth.setSession({
+    access_token: parsed.accessToken,
+    refresh_token: parsed.refreshToken,
+  });
   return error?.message;
 }
 
