@@ -105,7 +105,10 @@ export function NewWorkoutSheet({
             rows={2}
             value={goal}
             onChange={(event) => setGoal(event.target.value)}
-            placeholder="Today I feel tired — something easy"
+            /* A goal, a target and a limit — the three things the app cannot
+               work out for itself. "Something easy" was a placeholder about
+               mood, which told you nothing about what to type. */
+            placeholder="Back and biceps, nothing overhead — left shoulder is sore"
             className="mt-1.5 w-full resize-none rounded-xl bg-surface-2 px-3 py-2.5 text-[15px] placeholder:text-text-faint"
           />
           <button

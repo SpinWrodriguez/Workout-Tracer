@@ -27,9 +27,6 @@ export function SettingsScreen() {
       setLog: await db.setLog.count(),
       bodyWeight: await db.sharedBodyWeight.count(),
       activity: await db.sharedActivity.count(),
-      goals: await db.sharedGoals.count(),
-      selections: await db.nutritionSelections.count(),
-      savedMeals: await db.nutritionSavedMeals.count(),
       freeDb: await db.freeDbCache.count(),
     }),
     [],
@@ -84,8 +81,8 @@ export function SettingsScreen() {
           <span className="text-[13px] font-medium tabular-nums">{__BUILD_ID__}</span>
         </div>
         <p className="mt-2 text-[12px] leading-snug font-medium text-text-dim">
-          The app is cached to work offline, so an update lands on the next open rather than
-          immediately. If this is not the build you expect, close the app fully and reopen it.
+          Cached for offline use, so updates land on the next open. Not the build you expect?
+          Close the app fully and reopen.
         </p>
       </Card>
 
@@ -99,11 +96,8 @@ export function SettingsScreen() {
 
       <Card title="Backup" className="mt-3">
         <p className="text-[13px] text-text-dim">
-          A backup of the training data. Import still reads the nutrition app's version 2 export
-          and older combined files, so nothing already saved is stranded — but the export now
-          carries only what this app owns, because the nutrition data lives in Supabase and
-          syncs above. Imports upsert on natural keys, so re-importing never duplicates and
-          never deletes.
+          Exports the training data. Import also reads the nutrition app's older combined
+          files, and never duplicates or deletes — so re-importing is safe.
         </p>
 
         <input
@@ -170,10 +164,8 @@ export function SettingsScreen() {
 
       <Card title="Descriptions and photos" className="mt-3">
         <p className="text-[13px] text-text-dim">
-          Pulls descriptions and reference photos from free-exercise-db (public domain, no key)
-          for the {mappedIds().length} exercises hand-mapped to it. Fetched once and stored
-          locally — it is never a runtime dependency, and photos are cached the first time you
-          open one, not all at once.
+          Descriptions and photos for the {mappedIds().length} exercises mapped to
+          free-exercise-db. Fetched once, stored locally, never needed at runtime.
         </p>
 
         <div className="mt-3 flex items-baseline justify-between gap-3">
@@ -205,7 +197,7 @@ export function SettingsScreen() {
 
         {enrichError && (
           <p className="mt-3 text-[13px] font-medium" style={{ color: 'var(--color-rir-1)' }}>
-            {enrichError} — the app works without this; every exercise still has its own cue.
+            {enrichError} — every exercise still has its own cue.
           </p>
         )}
 
@@ -215,9 +207,8 @@ export function SettingsScreen() {
               Stored {enrich.stored} of {enrich.requested} mapped records
             </p>
             <p className="mt-1 text-[12px] font-medium text-text-dim">
-              Scanned {enrich.scanned} upstream records. {enrich.unmappedExercises} of{' '}
-              {EXERCISES.length} exercises have no upstream match by design and fall back to
-              their own cue.
+              {enrich.unmappedExercises} of {EXERCISES.length} exercises have no upstream
+              match and fall back to their own cue.
             </p>
             {enrich.unknownIds.length > 0 && (
               <p className="mt-2 text-[12px] font-medium" style={{ color: 'var(--color-rir-1)' }}>
@@ -238,10 +229,7 @@ export function SettingsScreen() {
             {row('Set logs', String(counts.setLog))}
             {row('Body weight entries', String(counts.bodyWeight))}
             {row('Activity entries', String(counts.activity))}
-            {row('Goals (shared)', String(counts.goals))}
-            {row('Nutrition days', String(counts.selections))}
-            {row('Saved meals', String(counts.savedMeals))}
-            {row('Cached reference records', String(counts.freeDb))}
+            {row('Reference records', String(counts.freeDb))}
           </>
         )}
       </Card>

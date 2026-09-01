@@ -112,10 +112,10 @@ export function NutritionSync() {
     return (
       <Card title="Cloud sync">
         <p className="text-[13px] text-text-dim">
-          No Supabase project is configured in this build. Copy{' '}
+          No Supabase project in this build. Copy{' '}
           <code className="text-text">.env.example</code> to{' '}
-          <code className="text-text">.env.local</code> with the same values the nutrition app
-          uses, then rebuild.
+          <code className="text-text">.env.local</code> with the nutrition app's values, then
+          rebuild.
         </p>
       </Card>
     );
@@ -150,10 +150,8 @@ export function NutritionSync() {
   return (
     <Card title="Cloud sync">
       <p className="text-[13px] text-text-dim">
-        Both directions, same account and same Supabase project as the nutrition app. Weigh-ins
-        come down from it; the training data is saved up to a row of its own, a couple of
-        seconds after every change. It runs on open, and everything keeps working offline from
-        the local copy.
+        Same account as the nutrition app. Weigh-ins come down, training data goes up a few
+        seconds after every change. Works offline from the local copy.
       </p>
 
       {session.signedIn ? (

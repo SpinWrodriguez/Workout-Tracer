@@ -50,9 +50,9 @@ export function AiInstructionsEditor() {
   return (
     <Card title="Your goals">
       <p className="text-[13px] text-text-dim">
-        Anything the model should know that does not change week to week — what you are
-        training for, what you are working around, what you would rather not do. Read every
-        time a workout is generated, so editing this changes the next one.
+        What does not change week to week: what you are training for, what you are working
+        around, what you would rather not do. Read on every generation, so editing this
+        changes the next workout.
       </p>
       <textarea
         rows={5}
@@ -72,7 +72,7 @@ export function AiInstructionsEditor() {
         <Label>
           {text.length}/{AI_INSTRUCTIONS_MAX}
         </Label>
-        <Label>Included in a backup, unlike the key below.</Label>
+        <Label>Included in a backup.</Label>
       </div>
       <button
         type="button"
@@ -103,10 +103,9 @@ export function ModelKeyEditor() {
   return (
     <Card title="AI workout generation">
       <p className="text-[13px] text-text-dim">
-        Describe a session in words on the Program tab and a model picks the exercises from
-        your list. It only ever proposes — every choice is recomputed against your plates,
-        your rules and your calendar before it lands, and with no key or no signal the app
-        falls back to the built-in generator.
+        Unlocks "Build the week with AI" and the AI options on the Program tab. The model only
+        proposes — every pick is rechecked against your plates, your rules and your calendar
+        before it lands.
       </p>
 
       <div className="mt-3 flex items-baseline justify-between gap-3">
@@ -122,15 +121,25 @@ export function ModelKeyEditor() {
 
       {edge ? (
         <p className="mt-3 text-[12px] font-medium text-text-dim">
-          Your Supabase project is configured, so the app calls the <code>ask-model</code> Edge
-          Function and the key never reaches this device. Deploy it with the source in{' '}
-          <code>supabase/functions/ask-model</code>. A key below is only used if that function
+          Supabase is configured, so the app calls the <code>ask-model</code> Edge Function and
+          the key never reaches this device. Deploy it from{' '}
+          <code>supabase/functions/ask-model</code>. A key below is a fallback for when that
           does not answer.
         </p>
       ) : (
-        <p className="mt-3 text-[12px] font-medium" style={{ color: 'var(--color-warn)' }}>
-          No Supabase project configured, so the only option is a key on this device.
+        <p className="mt-3 text-[12px] font-medium text-text-dim">
+          No Supabase project in this build, so a key on this device is the only option.
         </p>
+      )}
+
+      {transport === 'none' && (
+        <div className="mt-3 rounded-xl bg-surface-2 p-3">
+          <p className="text-[12px] leading-relaxed font-medium">
+            To turn it on: make a key at <code>console.anthropic.com</code> → API keys, put
+            about $5 of credit on it under Billing, then paste it below. A workout costs
+            roughly 3 cents, so that lasts months.
+          </p>
+        </div>
       )}
 
       <label className="mt-4 block">
@@ -171,9 +180,9 @@ export function ModelKeyEditor() {
       </div>
 
       <p className="mt-3 text-[12px] font-medium text-text-dim">
-        Stored under <code>{API_KEY_STORAGE_KEY}</code> in this browser, never in a backup and
-        never synced — enter it again on each device. Uses {MODEL}, one call per workout you ask
-        for, never on open.
+        Kept in this browser as <code>{API_KEY_STORAGE_KEY}</code>, never backed up or synced,
+        so enter it again on each device. Uses {MODEL}: one call per workout you ask for, never
+        on open.
       </p>
     </Card>
   );

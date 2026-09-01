@@ -221,7 +221,7 @@ export function WeekPlanSheet({
         rows={2}
         value={note}
         onChange={(event) => setNote(event.target.value)}
-        placeholder="Optional — applies to the whole week"
+        placeholder="Optional — e.g. deload week, keep the volume down"
         className="mt-1.5 w-full resize-none rounded-xl bg-surface-2 px-3 py-2.5 text-[15px] placeholder:text-text-faint"
       />
 

@@ -109,7 +109,7 @@ export function DayEditor({
                   rows={2}
                   value={goal}
                   onChange={(event) => setGoal(event.target.value)}
-                  placeholder="Optional — say what you want, or leave it blank"
+                  placeholder="Optional — e.g. legs, but nothing heavy on the spine"
                   className="mt-1.5 w-full resize-none rounded-xl bg-surface-2 px-3 py-2.5 text-[14px] placeholder:text-text-faint"
                 />
                 <button

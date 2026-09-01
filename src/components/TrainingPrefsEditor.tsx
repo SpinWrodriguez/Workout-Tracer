@@ -58,8 +58,7 @@ export function TrainingPrefsEditor() {
     <Card title="Training">
       <Label>Golf days</Label>
       <p className="mt-1 text-[13px] text-text-dim">
-        Which weekend days you typically play. Grip work is kept clear of these, and a session is
-        never scheduled on one.
+        Grip work stays clear of these, and no session is placed on one.
       </p>
       <div className="mt-2 flex gap-1.5">
         {WEEKEND.map((weekday) => (
@@ -75,8 +74,7 @@ export function TrainingPrefsEditor() {
 
       <Label className="mt-4 block">Session length</Label>
       <p className="mt-1 text-[13px] text-text-dim">
-        The time budget every generated workout is built to fit. It was on the Program screen,
-        re-answered every time even though the answer never changes.
+        The time budget every generated workout is built to fit.
       </p>
       <div className="mt-1.5">
         <SegmentedToggle
