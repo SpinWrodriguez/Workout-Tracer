@@ -280,10 +280,23 @@ something the lifter is allowed to overrule anyway.
 
 ## 6. Request settings
 
-Model `claude-opus-5`, adaptive thinking, and the caching breakpoint after the
+Model `claude-sonnet-5`, adaptive thinking, and the caching breakpoint after the
 library. Effort `medium` is likely right — this is constrained selection from a
 73-row list, not open-ended reasoning — but that is worth measuring against
 `high` on real goals before fixing it.
+
+Sonnet rather than Opus for the same reason effort is `medium`: the task is
+picking rows out of a fixed list under stated constraints, and the validator
+catches a bad pick either way. The measured payload is ~6.9k input tokens per
+call, so a generation costs roughly $0.03 on Sonnet against $0.07 on Opus —
+at twenty workouts a month, the difference between a $5 top-up lasting a few
+months and lasting most of a year. If output quality turns out to be the
+binding constraint, raise effort before reaching for a bigger model.
+
+The model id lives in two places — `MODEL` in `src/lib/askModel.ts` and
+`ALLOWED_MODELS` in the Edge Function, which rejects anything else so a stolen
+session cannot run up a bill on a bigger model. `askModel.test.ts` asserts the
+two agree, because a mismatch is a 400 that only appears on the deployed app.
 
 One call per generated workout. This must never run on app open, on the Program
 tab rendering, or per session — the deterministic path stays the default and

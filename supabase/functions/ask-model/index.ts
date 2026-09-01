@@ -23,7 +23,7 @@ const ANTHROPIC_VERSION = '2023-06-01';
 
 /* One user, one app. Pinned here so a stolen session cannot run up a bill on a
    bigger model or a huge completion than the app ever asks for. */
-const ALLOWED_MODELS = new Set(['claude-opus-5']);
+const ALLOWED_MODELS = new Set(['claude-sonnet-5']);
 const MAX_TOKENS_CEILING = 16000;
 
 const CORS = {

@@ -22,8 +22,17 @@
 
 import { getSupabase, isSupabaseConfigured } from './supabaseSource';
 
-/** Opus 5. Structured outputs and adaptive thinking both need a current model. */
-export const MODEL = 'claude-opus-5';
+/*
+ * Sonnet 5. Structured outputs and adaptive thinking both need a current
+ * model; within those, this is the cheapest one that reliably holds a 73-row
+ * constrained selection together. Roughly a third of Opus 5 per generation,
+ * which for twenty workouts a month is the difference between a $5 top-up
+ * lasting a few months and lasting most of a year.
+ *
+ * Changing this means changing ALLOWED_MODELS in the Edge Function too, or the
+ * relay rejects the request. askModel.test.ts asserts the two agree.
+ */
+export const MODEL = 'claude-sonnet-5';
 export const ANTHROPIC_VERSION = '2023-06-01';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const EDGE_FUNCTION = 'ask-model';
