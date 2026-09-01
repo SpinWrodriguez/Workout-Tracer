@@ -71,6 +71,9 @@ network.
 
 ## 3. AI-assisted workout generation (spec §Phase 5)
 
+**Prompt and output contract drafted in `docs/AI-WORKOUT-GENERATION.md`** —
+read that first; it settles the parts that do not depend on item 1.
+
 The generator is already built to accept this. `fillDay` in
 `src/lib/blockBuilder.ts` is the seam: it is handed the pattern targets,
 intensity, exclusions and time budget for **one** day, and never sees or picks
