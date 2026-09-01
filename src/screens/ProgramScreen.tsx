@@ -17,6 +17,8 @@ import {
   templateDayFor,
   templateWeek,
   templateWeekdays,
+  workoutTemplate,
+  type WorkoutFocus,
   SESSION_SHAPES,
   SESSION_SHAPE_HINT,
   SESSION_SHAPE_LABEL,
@@ -44,6 +46,7 @@ import {
   type BlockSchedule,
 } from '../lib/program';
 import { DayEditor } from '../components/DayEditor';
+import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
 import { DaySlotCard } from '../components/DaySlotCard';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { Card, Chip, Empty, Label, Screen, SegmentedToggle } from '../components/Layout';
@@ -87,6 +90,7 @@ export function ProgramScreen({
   const [seenSchedule, setSeenSchedule] = useState<string | undefined>(undefined);
   const [editingSlot, setEditingSlot] = useState<DaySlot | null>(null);
   const [addingTo, setAddingTo] = useState<DaySlot | null>(null);
+  const [creating, setCreating] = useState(false);
   const [inventory, setInventory] = useState<Inventory>(DEFAULT_INVENTORY);
 
   useEffect(() => {
@@ -423,6 +427,70 @@ export function ProgramScreen({
 
     await writeDay(day);
     setVariantBySlot((prev) => ({ ...prev, [slot]: variant }));
+  };
+
+  /** The next unused workout id, or nothing when the pool is full. */
+  const freeSlot = (): DaySlot | undefined =>
+    DAY_SLOTS.find(
+      (slot) => entriesForSlot(slots ?? [], slot).length === 0 && schedule?.[slot] === undefined,
+    );
+
+  /**
+   * Makes a workout and stops. It is not placed in the week, does not consume
+   * a "session per week", and knows nothing about the calendar — which is the
+   * whole point: building one and deciding when to do it are separate acts.
+   */
+  const createWorkout = async (focus: WorkoutFocus, intensity: 'heavy' | 'light') => {
+    if (!block) return;
+    const slot = freeSlot();
+    if (!slot) return;
+    const template = workoutTemplate({
+      slot,
+      focus,
+      intensity,
+      minutesPerSession: Number(sessionMinutes),
+    });
+    const current = await db.blockExercise.where('blockId').equals(block.id).toArray();
+    const day = generateDay({
+      blockId: block.id,
+      exercises,
+      focusMuscles: focusOrDefault,
+      template,
+      // Complements what the other workouts hold, without touching them.
+      exclude: current.map((entry) => entry.exerciseId),
+      variant: 0,
+      hasHistory: hasHistory ?? false,
+    });
+
+    await db.blockExercise.bulkPut(day.exercises);
+    const stored = (await readSchedules())[block.id] ?? {};
+    await writeSchedule(block.id, {
+      ...stored,
+      [slot]: {
+        intensity,
+        effortCue: template.effortCue,
+        generated: true,
+        name: describeDay(
+          day.exercises
+            .map((entry) => byId.get(entry.exerciseId))
+            .filter((exercise): exercise is Exercise => exercise !== undefined),
+          intensity,
+        ),
+      },
+    });
+    setVariantBySlot((prev) => ({ ...prev, [slot]: 0 }));
+    setEditingSlot(slot);
+  };
+
+  /** An empty workout to fill by hand. */
+  const createBlankWorkout = async () => {
+    if (!block) return;
+    const slot = freeSlot();
+    if (!slot) return;
+    const stored = (await readSchedules())[block.id] ?? {};
+    await writeSchedule(block.id, { ...stored, [slot]: { intensity: 'heavy' } });
+    setEditingSlot(slot);
+    setAddingTo(slot);
   };
 
   /**
@@ -826,23 +894,31 @@ export function ProgramScreen({
         );
       })}
 
-      {/* Building a block by hand starts here: claim the next free slot. */}
+      {/* Making a workout, as its own act. Where it goes in the week is a
+          separate decision taken on the calendar above. */}
       {block && (
         <button
           type="button"
-          onClick={() => {
-            const next = DAY_SLOTS.find(
-              (slot) => entriesForSlot(slots ?? [], slot).length === 0,
-            );
-            if (next) {
-              setEditingSlot(next);
-              setAddingTo(next);
-            }
-          }}
-          className="mt-3 h-11 w-full rounded-full bg-surface-2 text-sm font-medium text-text-dim"
+          onClick={() => setCreating(true)}
+          disabled={freeSlot() === undefined}
+          className="mt-3 h-11 w-full rounded-full bg-surface-2 text-sm font-medium text-text-dim disabled:text-text-faint"
         >
-          Add a day
+          {freeSlot() === undefined ? `All ${DAY_SLOTS.length} workouts used` : 'New workout'}
         </button>
+      )}
+
+      {creating && (
+        <NewWorkoutSheet
+          onCreate={(focus, intensity) => {
+            setCreating(false);
+            void createWorkout(focus, intensity);
+          }}
+          onBlank={() => {
+            setCreating(false);
+            void createBlankWorkout();
+          }}
+          onClose={() => setCreating(false)}
+        />
       )}
 
       {(slots?.length ?? 0) === 0 && Object.keys(schedule ?? {}).length === 0 && (

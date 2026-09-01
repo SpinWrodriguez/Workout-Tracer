@@ -30,7 +30,12 @@ export const BLOCK_PLAN_KEY = 'blockPlan';
  * thing entirely; see DatePlan.
  */
 export interface ScheduledDay {
-  weekday: Weekday;
+  /**
+   * Absent means the workout exists but has no standing day. That is a normal
+   * state: a workout is something you make, and putting it in the week is a
+   * separate act you may not have got to yet.
+   */
+  weekday?: Weekday;
   intensity: Intensity;
   /** Shown while logging, e.g. "Leave 3-4 reps in the tank". */
   effortCue?: string;
@@ -87,13 +92,22 @@ export function normaliseSchedule(value: unknown): ScheduleByBlock {
     const map: BlockSchedule = {};
     for (const slot of SLOTS) {
       const raw = slots[slot];
+      // A slot the stored object never mentioned is not a workout with no day,
+      // it is not a workout at all.
+      if (raw === undefined || raw === null) continue;
       // Schedules written before intensity existed are a bare weekday number.
       const value = isRecord(raw) ? raw : { weekday: raw, intensity: 'heavy' };
       const weekday = Number(value.weekday);
-      if (!Number.isInteger(weekday) || weekday < 1 || weekday > 7) continue;
+      const scheduled = Number.isInteger(weekday) && weekday >= 1 && weekday <= 7;
+      /*
+       * A record without a usable weekday is a workout waiting to be placed. A
+       * bare value that is not a weekday is just junk from a hand-edited row —
+       * there is no workout there to keep.
+       */
+      if (!scheduled && !isRecord(raw)) continue;
       const intensity: Intensity = value.intensity === 'light' ? 'light' : 'heavy';
       map[slot] = {
-        weekday: weekday as Weekday,
+        ...(scheduled ? { weekday: weekday as Weekday } : {}),
         intensity,
         effortCue: intensity === 'light' ? LIGHT_DAY_CUE : undefined,
         // Absent rather than false: a hand-built day keeps the shape it has
@@ -212,10 +226,15 @@ export async function writePlan(blockId: string, plan: DatePlan): Promise<void> 
 export function slotsByWeekday(schedule: BlockSchedule): Partial<Record<Weekday, DaySlot>> {
   const out: Partial<Record<Weekday, DaySlot>> = {};
   for (const slot of SLOTS) {
-    const day = schedule[slot];
-    if (day !== undefined) out[day.weekday] = slot;
+    const weekday = schedule[slot]?.weekday;
+    if (weekday !== undefined) out[weekday] = slot;
   }
   return out;
+}
+
+/** Workouts that exist but have no standing day. */
+export function unscheduledSlots(schedule: BlockSchedule): DaySlot[] {
+  return SLOTS.filter((slot) => schedule[slot] !== undefined && schedule[slot]?.weekday === undefined);
 }
 
 /** Moves a slot to a weekday, evicting whatever already sat there. */
@@ -226,7 +245,10 @@ export function assignSlot(
 ): BlockSchedule {
   const next: BlockSchedule = { ...schedule };
   if (weekday === undefined) {
-    delete next[slot];
+    // The workout survives losing its day. Deleting it here is what used to
+    // throw away the name and effort along with the placement.
+    const previous = next[slot];
+    if (previous) next[slot] = { ...previous, weekday: undefined };
     return next;
   }
   // Two sessions cannot share a weekday, so the occupant swaps into the slot's
@@ -245,8 +267,8 @@ export function assignSlot(
 
 /** Slots in the order they are trained, for "what's next" style prompts. */
 export function orderedSlots(schedule: BlockSchedule): { slot: DaySlot; weekday: Weekday }[] {
-  return SLOTS.filter((slot) => schedule[slot] !== undefined)
-    .map((slot) => ({ slot, weekday: (schedule[slot] as ScheduledDay).weekday }))
+  return SLOTS.filter((slot) => schedule[slot]?.weekday !== undefined)
+    .map((slot) => ({ slot, weekday: schedule[slot]?.weekday as Weekday }))
     .sort((a, b) => a.weekday - b.weekday);
 }
 
@@ -464,9 +486,20 @@ export async function clearDaySlot(blockId: string, slot: DaySlot): Promise<void
   await db.blockExercise.bulkDelete(
     rows.filter((row) => row.daySlot === slot).map((row) => [row.blockId, row.exerciseId, row.daySlot] as [string, string, string]),
   );
+  // Deleting a day is a real delete: the workout goes, not just its placement.
   const schedules = await readSchedules();
   const schedule = schedules[blockId];
   if (schedule?.[slot] !== undefined) {
-    await writeSchedule(blockId, assignSlot(schedule, slot, undefined));
+    const next = { ...schedule };
+    delete next[slot];
+    await writeSchedule(blockId, next);
+  }
+  const plans = await readPlans();
+  const plan = plans[blockId];
+  if (plan) {
+    await writePlan(
+      blockId,
+      Object.fromEntries(Object.entries(plan).filter(([, value]) => value !== slot)),
+    );
   }
 }

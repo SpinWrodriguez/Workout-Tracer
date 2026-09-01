@@ -26,6 +26,7 @@ import {
   slotsByWeekday,
   updateBlockExercise,
   writeSchedule,
+  type BlockSchedule,
 } from './program';
 
 const byId = new Map(EXERCISES.map((e) => [e.id, e]));
@@ -196,8 +197,19 @@ describe('editing the week by hand', () => {
     expect(assignSlot({ B: { weekday: 4, intensity: 'heavy' } }, 'A', 4)).toEqual({ A: { weekday: 4, intensity: 'heavy' } });
   });
 
-  it('clears a slot without touching the others', () => {
-    expect(assignSlot({ A: { weekday: 1, intensity: 'heavy' }, B: { weekday: 4, intensity: 'heavy' } }, 'A', undefined)).toEqual({ B: { weekday: 4, intensity: 'heavy' } });
+  it('takes a slot off the calendar without destroying the workout', () => {
+    // Losing its day must not lose its name, its effort or its exercises —
+    // an unplaced workout is a normal thing to have.
+    expect(
+      assignSlot(
+        { A: { weekday: 1, intensity: 'heavy', name: 'Lower Pull' }, B: { weekday: 4, intensity: 'heavy' } },
+        'A',
+        undefined,
+      ),
+    ).toEqual({
+      A: { weekday: undefined, intensity: 'heavy', name: 'Lower Pull' },
+      B: { weekday: 4, intensity: 'heavy' },
+    });
   });
 
   it('is a no-op when a slot is dropped back on its own day', () => {

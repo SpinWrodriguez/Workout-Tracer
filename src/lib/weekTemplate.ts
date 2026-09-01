@@ -66,6 +66,75 @@ export const LIGHT_DAY_CUE = 'Leave 3-4 reps in the tank';
 
 export type SessionShape = 'mixed' | 'upper_lower';
 
+/* -------------------------------------------------------------------------- */
+/*  What one workout trains.                                                  */
+/*                                                                            */
+/*  A workout is a thing you make, not a by-product of laying out a week. It   */
+/*  is described by what it trains and how hard, and by nothing about the      */
+/*  calendar — a workout does not know what day it is, and cannot, because it  */
+/*  has not been assigned to one yet.                                         */
+/*                                                                            */
+/*  The golf rule therefore cannot be applied here. That is correct rather     */
+/*  than a gap: grip clearance is a fact about a DATE, so it belongs to        */
+/*  assignment and is checked there.                                          */
+/* -------------------------------------------------------------------------- */
+
+export type WorkoutFocus = 'full' | 'upper' | 'lower' | 'push' | 'pull' | 'core';
+
+export const WORKOUT_FOCUSES: WorkoutFocus[] = ['full', 'upper', 'lower', 'push', 'pull', 'core'];
+
+export const WORKOUT_FOCUS_LABEL: Record<WorkoutFocus, string> = {
+  full: 'Full body',
+  upper: 'Upper',
+  lower: 'Lower',
+  push: 'Push',
+  pull: 'Pull',
+  core: 'Core & carries',
+};
+
+const FOCUS_PATTERNS: Record<WorkoutFocus, MovementPattern[]> = {
+  full: ['hinge', 'squat', 'push_h', 'pull_h', 'core'],
+  upper: ['pull_h', 'pull_v', 'push_h', 'push_v', 'core'],
+  lower: ['squat', 'hinge', 'squat', 'core'],
+  push: ['push_h', 'push_v', 'squat', 'core'],
+  pull: ['pull_h', 'pull_v', 'hinge', 'core'],
+  core: ['core', 'rotation', 'carry', 'core'],
+};
+
+/**
+ * Constraints for a workout that has no day yet. The weekday is a placeholder
+ * the filler never reads — it only ever reaches for the pattern targets, the
+ * set count and the budget.
+ */
+export function workoutTemplate({
+  slot,
+  focus,
+  intensity,
+  minutesPerSession = 40,
+}: {
+  slot: DaySlot;
+  focus: WorkoutFocus;
+  intensity: Intensity;
+  minutesPerSession?: number;
+}): TemplateDay {
+  const patterns = FOCUS_PATTERNS[focus];
+  const base =
+    intensity === 'light'
+      ? lightDay(slot, MONDAY)
+      : heavyDay(slot, MONDAY, patterns, minutesPerSession, []);
+  return {
+    ...base,
+    patterns,
+    /*
+     * Nothing is excluded on grip grounds while a workout is unplaced: there
+     * is no date to be clear of. Assigning it to a day inside the buffer is
+     * what surfaces the conflict, and the rule check says so there.
+     */
+    excludeGripHigh: false,
+    maxExercises: intensity === 'light' ? 5 : 7,
+  };
+}
+
 export const SESSION_SHAPES: SessionShape[] = ['mixed', 'upper_lower'];
 
 export const SESSION_SHAPE_LABEL: Record<SessionShape, string> = {
