@@ -18,6 +18,8 @@ export interface PadTarget {
   value: number | undefined;
   /** Increment for the ± keys when there is no ladder to step along. */
   step: number;
+  /** Unit shown beside the running value: 'kg', 'reps' or 's'. */
+  unit?: string;
   /**
    * Loadable rungs for this exercise (Phase 2). When present the ± keys step
    * rung to rung, the top rung is a hard stop, and a typed value snaps to the
@@ -158,7 +160,7 @@ export function NumberPad({
           <div className="stat-sm mt-0.5">
             {shown === '' ? <span className="text-text-faint">--</span> : shown}
             <span className="ml-1.5 text-sm font-medium text-text-dim">
-              {target.kind === 'weight' ? 'kg' : 'reps'}
+              {target.unit ?? (target.kind === 'weight' ? 'kg' : 'reps')}
             </span>
           </div>
         </div>

@@ -9,6 +9,7 @@ import {
   daysClearOfGolf,
   formatViolationsForModel,
   scheduleSentence,
+  severityOf,
   sessionMinutes,
   stripScheduleClaims,
   validateBlock,
@@ -78,7 +79,7 @@ describe('rule b — reps inside the exercise bounds (defect 2)', () => {
     p.days[0]!.exercises[0]!.repRangeLow = 10;
     p.days[0]!.exercises[0]!.repRangeHigh = 15;
     const found = validateBlock(p, CONTEXT).find((v) => v.code === 'rep_range');
-    expect(found?.message).toMatch(/Turkish get-up prescribed 10-15 reps, but it only takes 1-5/);
+    expect(found?.message).toMatch(/Turkish get-up is set to 10-15, outside its usual 1-5 reps/);
   });
 
   it('knows a get-up is a 1-5 rep movement', () => {
@@ -374,5 +375,32 @@ describe('the generated block passes its own validator', () => {
         expect(ladderFor(byId.get(e.exerciseId)!, DEFAULT_INVENTORY)).toContain(e.startWeightKg);
       }
     }
+  });
+});
+
+describe('what counts as a rule', () => {
+  it('separates things that cost you something from advice', () => {
+    // The golf rule is the reason the app exists; a session running seven
+    // minutes long is not the same kind of statement.
+    expect(severityOf('grip_conflict')).toBe('problem');
+    expect(severityOf('spinal_stacking')).toBe('problem');
+    expect(severityOf('unloadable_weight')).toBe('problem');
+    expect(severityOf('forbidden_day')).toBe('problem');
+
+    expect(severityOf('over_time_budget')).toBe('suggestion');
+    expect(severityOf('weekly_set_total')).toBe('suggestion');
+    expect(severityOf('rep_range')).toBe('suggestion');
+    expect(severityOf('pattern_coverage')).toBe('suggestion');
+  });
+
+  it('lets a hand-built day run long before saying anything', () => {
+    const day = (n: number) =>
+      proposal([{ slot: 'A', weekday: 1, ids: Array.from({ length: n }, () => 'bb_curl') }]);
+    const complains = (n: number) =>
+      validateBlock(day(n), CONTEXT).some((v) => v.message.includes('one session'));
+
+    // Eight is a long session, not a broken one.
+    expect(complains(8)).toBe(false);
+    expect(complains(12)).toBe(true);
   });
 });

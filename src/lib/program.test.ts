@@ -217,7 +217,31 @@ describe('hand-editing a block', () => {
     await addBlockExercise('block_1', 'A', 'bb_bench_press');
     const rows = entriesForSlot(await db.blockExercise.toArray(), 'A');
     expect(rows.map((r) => r.exerciseId)).toEqual(['bb_back_squat', 'bb_bench_press']);
-    expect(rows[1]).toMatchObject({ order: 1, targetSets: 3, repRangeLow: 8, repRangeHigh: 10 });
+    // The hypertrophy range for a horizontal press, not a hardcoded 8-10.
+    expect(rows[1]).toMatchObject({ order: 1, targetSets: 3, repRangeLow: 6, repRangeHigh: 12 });
+  });
+
+  /*
+   * Adding by hand used to stamp 8-10 on everything, so a plank was prescribed
+   * eight reps and a Turkish get-up ten — and the rule check then complained
+   * about ranges the app had chosen itself.
+   */
+  it('gives a hand-added exercise a range it can actually take', async () => {
+    for (const [id, low, high] of [
+      ['bw_plank', 20, 60],
+      ['kb_turkish_get_up', 1, 5],
+      ['cb_lateral_raise', 10, 12],
+    ] as const) {
+      await addBlockExercise('block_1', 'B', id);
+      const row = (await db.blockExercise.toArray()).find(
+        (entry) => entry.exerciseId === id && entry.daySlot === 'B',
+      );
+      const exercise = await db.exercise.get(id);
+      expect(row, id).toBeDefined();
+      expect(row?.repRangeLow, id).toBeGreaterThanOrEqual(exercise?.repMin ?? 0);
+      expect(row?.repRangeHigh, id).toBeLessThanOrEqual(exercise?.repMax ?? 99);
+      expect([row?.repRangeLow, row?.repRangeHigh], id).toEqual([low, high]);
+    }
   });
 
   it('will not add the same exercise to a day twice', async () => {

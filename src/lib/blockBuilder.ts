@@ -55,7 +55,7 @@ const PATTERN_ORDER: MovementPattern[] = [
 ];
 
 /** Hypertrophy targets, narrowed to whatever the exercise can actually take. */
-const DESIRED_REPS: Record<MovementPattern, { low: number; high: number }> = {
+export const DESIRED_REPS: Record<MovementPattern, { low: number; high: number }> = {
   squat: { low: 6, high: 10 },
   hinge: { low: 6, high: 10 },
   push_h: { low: 6, high: 12 },

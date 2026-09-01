@@ -8,7 +8,7 @@ import { WEEKDAY_LABEL, buildWeek, gripSafeWeekdays, weekdayOf, type Weekday } f
 import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import { balanceSets, generateDay, type DayPlan } from '../lib/blockBuilder';
-import { validateBlock, type ValidationContext } from '../lib/blockValidation';
+import { severityOf, validateBlock, type ValidationContext } from '../lib/blockValidation';
 import { dayLabel, describeDay } from '../lib/dayLabel';
 import {
   DEFAULT_THIRD_DAY,
@@ -439,6 +439,11 @@ export function ProgramScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schedule, slots, byId, training, sessionMinutes, hasHistory, inventory, shape]);
 
+  const problems = blockViolations.filter((violation) => severityOf(violation.code) === 'problem');
+  const suggestions = blockViolations.filter(
+    (violation) => severityOf(violation.code) === 'suggestion',
+  );
+
   return (
     <Screen title="Program">
       <Card
@@ -664,19 +669,36 @@ export function ProgramScreen({
         )}
       </Card>
 
-      {blockViolations.length > 0 && (
-        <Card title="Rule check" className="mt-3">
-          <p className="text-[13px] font-semibold" style={{ color: 'var(--color-rir-1)' }}>
-            {blockViolations.length} thing{blockViolations.length === 1 ? '' : 's'} to fix
-          </p>
-          {blockViolations.map((violation) => (
+      {/* Two headings, deliberately. Presenting "this session runs 7 minutes
+          long" as urgently as "this deadlift is two days before your round"
+          teaches you to skim past both. */}
+      {problems.length > 0 && (
+        <Card title="Worth fixing" className="mt-3">
+          {problems.map((violation) => (
             <p
               key={violation.code + (violation.exerciseId ?? '') + (violation.slot ?? '')}
-              className="mt-1.5 text-[12px] leading-snug font-medium text-text-dim"
+              className="mt-1.5 text-[12px] leading-snug font-medium first:mt-0"
+              style={{ color: 'var(--color-warn)' }}
             >
               {violation.message}
             </p>
           ))}
+        </Card>
+      )}
+
+      {suggestions.length > 0 && (
+        <Card title="Suggestions" className="mt-3">
+          {suggestions.map((violation) => (
+            <p
+              key={violation.code + (violation.exerciseId ?? '') + (violation.slot ?? '')}
+              className="mt-1.5 text-[12px] leading-snug font-medium text-text-dim first:mt-0"
+            >
+              {violation.message}
+            </p>
+          ))}
+          <p className="mt-2.5 text-[11px] font-medium text-text-faint">
+            Notes, not rules — ignore any of these you disagree with.
+          </p>
         </Card>
       )}
 

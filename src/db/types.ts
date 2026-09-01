@@ -87,6 +87,13 @@ export interface Exercise {
   /** A Turkish get-up is 1-5 reps; a global range applied to it is nonsense. */
   repMin: number;
   repMax: number;
+  /**
+   * What repMin/repMax count. A plank is not "20-60 reps" — holds and carries
+   * are timed, and printing reps against them is wrong everywhere it appears:
+   * the prescription, the keypad, the log and the rule messages. Absent means
+   * reps, so every existing row keeps its meaning.
+   */
+  repUnit?: 'reps' | 'seconds';
   /** Drives the real time estimate, not a flat per-exercise guess. */
   restSeconds: number;
   skillLevel: SkillLevel;

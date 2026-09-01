@@ -1,6 +1,8 @@
 import { db } from '../db/db';
 import type { Block, BlockExercise, DaySlot, Exercise } from '../db/types';
 import { weekdayOf, type Weekday } from './golf';
+import { DESIRED_REPS } from './blockBuilder';
+import { workingRepRange } from './blockValidation';
 import { LIGHT_DAY_CUE, type Intensity } from './weekTemplate';
 import { todayIso } from './format';
 import { emptySet, newSessionId, type SessionDraft } from './sessions';
@@ -225,7 +227,13 @@ export function emptyDraft(blockId: string, slot: DaySlot, date = todayIso()): S
 /* -------------------------------------------------------------------------- */
 
 const DEFAULT_TARGET_SETS = 3;
-const DEFAULT_REPS = { low: 8, high: 10 };
+/*
+ * Only ever a starting point for an exercise the table does not describe.
+ * Adding by hand used to stamp 8-10 on everything, which prescribed a plank
+ * eight reps and a Turkish get-up ten — and then the rule check dutifully
+ * complained about a range the app itself had chosen.
+ */
+const FALLBACK_REPS = { low: 8, high: 10 };
 
 async function renumber(blockId: string, slot: DaySlot): Promise<void> {
   const rows = await db.blockExercise
@@ -246,13 +254,21 @@ export async function addBlockExercise(
   if (existing) return; // already on this day
   const rows = await db.blockExercise.where('blockId').equals(blockId).toArray();
   const order = rows.filter((row) => row.daySlot === slot).length;
+
+  // The same range the generator would have given it: the hypertrophy target
+  // for its pattern, clamped to what the movement actually takes.
+  const exercise = await db.exercise.get(exerciseId);
+  const range = exercise
+    ? workingRepRange(exercise, DESIRED_REPS[exercise.pattern] ?? FALLBACK_REPS)
+    : FALLBACK_REPS;
+
   await db.blockExercise.put({
     blockId,
     exerciseId,
     daySlot: slot,
     targetSets: DEFAULT_TARGET_SETS,
-    repRangeLow: DEFAULT_REPS.low,
-    repRangeHigh: DEFAULT_REPS.high,
+    repRangeLow: range.low,
+    repRangeHigh: range.high,
     order,
   });
 }

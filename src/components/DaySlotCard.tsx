@@ -3,6 +3,7 @@ import type { BlockExercise, Exercise } from '../db/types';
 import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
 
 import { Card, Empty, Label } from './Layout';
+import { prescription, repUnitWord } from '../lib/repUnit';
 
 /* -------------------------------------------------------------------------- */
 /*  One day of the block, readable or editable.                               */
@@ -165,7 +166,7 @@ export function DaySlotCard({
               </span>
               {!editing && (
                 <Label>
-                  {entry.targetSets} × {entry.repRangeLow}-{entry.repRangeHigh}
+                  {prescription(exercise, entry.targetSets, entry.repRangeLow, entry.repRangeHigh)}
                 </Label>
               )}
               {editing && (
@@ -212,16 +213,16 @@ export function DaySlotCard({
                   />
                 </span>
                 <span className="flex items-center gap-2">
-                  <Label>reps</Label>
+                  <Label>{repUnitWord(exercise)}</Label>
                   <Stepper
                     value={entry.repRangeLow}
-                    label="minimum rep"
+                    label={`minimum ${repUnitWord(exercise)}`}
                     onChange={(repRangeLow) => onUpdate(entry, { repRangeLow })}
                   />
                   <span className="text-[13px] font-medium text-text-dim">to</span>
                   <Stepper
                     value={entry.repRangeHigh}
-                    label="maximum rep"
+                    label={`maximum ${repUnitWord(exercise)}`}
                     onChange={(repRangeHigh) => onUpdate(entry, { repRangeHigh })}
                   />
                 </span>

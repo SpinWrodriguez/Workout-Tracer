@@ -2,6 +2,7 @@ import type { BlockExercise, DaySlot, Exercise, MovementPattern, MuscleId } from
 import { GRIP_BUFFER_DAYS, WEEKDAY_LABEL, type Weekday } from './golf';
 
 import { weekdayAllowed, type TemplateDay } from './weekTemplate';
+import { repUnitWord } from './repUnit';
 
 /* -------------------------------------------------------------------------- */
 /*  Block validation.                                                         */
@@ -73,6 +74,46 @@ export interface Violation {
   slot?: DaySlot;
   exerciseId?: string;
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Not everything is a rule.                                                 */
+/*                                                                            */
+/*  Presenting "this session runs 7 minutes long" with the same weight as      */
+/*  "this deadlift is two days before your round" trains you to ignore both.   */
+/*  Only the things that will actually cost you something are problems: the    */
+/*  golf rule the app exists to enforce, a back stacked with two heavy spinal  */
+/*  lifts, a weight the plates cannot make, a day on a date that is not a      */
+/*  training day. The rest is advice about volume and time — real, worth       */
+/*  reading, and yours to overrule.                                            */
+/* -------------------------------------------------------------------------- */
+
+export type Severity = 'problem' | 'suggestion';
+
+const SEVERITY: Record<ViolationCode, Severity> = {
+  unknown_exercise: 'problem',
+  grip_conflict: 'problem',
+  spinal_stacking: 'problem',
+  unloadable_weight: 'problem',
+  forbidden_day: 'problem',
+  rep_range: 'suggestion',
+  skill_too_advanced: 'suggestion',
+  pattern_coverage: 'suggestion',
+  weekly_set_total: 'suggestion',
+  over_time_budget: 'suggestion',
+  light_day_violation: 'suggestion',
+};
+
+export function severityOf(code: ViolationCode): Severity {
+  return SEVERITY[code];
+}
+
+/*
+ * A ceiling on hand-built days rather than the template's own target. The
+ * generator fills to a time budget and stops around five; a day you built
+ * yourself is your business until it stops being a session and starts being a
+ * list.
+ */
+export const HARD_MAX_EXERCISES = 10;
 
 /* --- schedule facts, computed not claimed --------------------------------- */
 
@@ -210,11 +251,11 @@ export function validateBlock(
       });
     }
 
-    if (template && day.exercises.length > template.maxExercises) {
+    if (day.exercises.length > HARD_MAX_EXERCISES) {
       violations.push({
         code: 'light_day_violation',
         slot: day.slot,
-        message: `${nameOf(day)} has ${day.exercises.length} exercises; the template allows ${template.maxExercises}.`,
+        message: `${nameOf(day)} has ${day.exercises.length} exercises. Much past ${HARD_MAX_EXERCISES} and it stops being one session.`,
       });
     }
 
@@ -243,7 +284,10 @@ export function validateBlock(
           code: 'rep_range',
           slot: day.slot,
           exerciseId: exercise.id,
-          message: `${nameOf(day)}: ${exercise.name} prescribed ${entry.repRangeLow}-${entry.repRangeHigh} reps, but it only takes ${exercise.repMin}-${exercise.repMax}.`,
+          // "only takes" read as nonsense when the exercise's range is the
+          // wider one — the point is that the prescription sits outside it,
+          // in whichever direction.
+          message: `${nameOf(day)}: ${exercise.name} is set to ${entry.repRangeLow}-${entry.repRangeHigh}, outside its usual ${exercise.repMin}-${exercise.repMax} ${repUnitWord(exercise)}.`,
         });
       }
 

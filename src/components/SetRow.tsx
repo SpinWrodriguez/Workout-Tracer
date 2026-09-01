@@ -2,6 +2,7 @@ import type { Exercise } from '../db/types';
 import { effectiveKg, hasLoadTranslation, rirToken } from '../lib/load';
 import type { DraftSet } from '../lib/sessions';
 import { kg } from '../lib/format';
+import { repUnitShort } from '../lib/repUnit';
 
 /* -------------------------------------------------------------------------- */
 /*  Set row — spec §4.                                                        */
@@ -130,7 +131,7 @@ export function SetRow({
             sub:
               showEffective && eff !== undefined ? `= ${kg(eff)} kg` : undefined,
           })}
-      {cell('reps', set.reps === undefined ? '--' : String(set.reps), 'reps')}
+      {cell('reps', set.reps === undefined ? '--' : String(set.reps), repUnitShort(exercise))}
 
       <RirBadge rir={set.rir} rpe={set.rpe} onClick={onRir} />
 
