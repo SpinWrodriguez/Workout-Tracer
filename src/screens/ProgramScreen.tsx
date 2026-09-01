@@ -11,7 +11,16 @@ import {
   golfWeekdaysFrom,
   weekdayOf,
 } from '../lib/golf';
-import { generateBlock, type GeneratedBlock } from '../lib/blockBuilder';
+import {
+  DAY_TYPES,
+  DAY_TYPE_LABEL,
+  SPLIT_LABEL,
+  generateBlock,
+  splitFits,
+  type DayType,
+  type GeneratedBlock,
+  type SplitId,
+} from '../lib/blockBuilder';
 import {
   assignSlot,
   readSchedules,
@@ -26,6 +35,7 @@ import { shiftIso, weekStart } from '../lib/format';
 
 const DAY_SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
 const SESSION_COUNTS = ['1', '2', '3'] as const;
+const SPLITS: SplitId[] = ['full_body', 'upper_lower', 'push_pull_legs', 'custom'];
 const FOCUS_MODES = ['upper', 'lower', 'custom'] as const;
 type FocusMode = (typeof FOCUS_MODES)[number];
 
@@ -68,6 +78,8 @@ export function ProgramScreen({
   const [editingMuscles, setEditingMuscles] = useState(false);
   const [preview, setPreview] = useState<GeneratedBlock | null>(null);
   const [editingDate, setEditingDate] = useState<string | null>(null);
+  const [split, setSplit] = useState<SplitId>('full_body');
+  const [customDayTypes, setCustomDayTypes] = useState<DayType[]>(['upper', 'lower', 'full']);
 
   const block = useLiveQuery(() => db.block.orderBy('startDate').reverse().first(), [], undefined);
   const golfDays = useLiveQuery(() => db.golfDay.toArray(), [], undefined);
@@ -151,6 +163,8 @@ export function ProgramScreen({
         focusMuscles: focusOrDefault,
         sessionsPerWeek: Number(sessionsPerWeek),
         golfWeekdays,
+        split,
+        customDayTypes,
       }),
     );
   };
@@ -262,14 +276,14 @@ export function ProgramScreen({
               <button
                 type="button"
                 onClick={() => setEditingMuscles(true)}
-                className="mt-2 flex w-full items-center justify-between gap-3"
+                className="mt-2 flex w-full items-center justify-between gap-3 text-left"
               >
-                <span className="text-[13px] font-medium text-text-dim">
+                <span className="min-w-0 text-[13px] font-medium text-text-dim">
                   {focusOrDefault.length === 0
                     ? 'No muscles picked — the builder will favour compounds'
                     : `${focusOrDefault.length} muscles picked`}
                 </span>
-                <span className="text-[12px] font-medium text-text-dim">Choose</span>
+                <span className="shrink-0 text-[12px] font-medium text-text-dim">Choose</span>
               </button>
             )}
 
@@ -302,6 +316,53 @@ export function ProgramScreen({
                 {focusOrDefault.length} muscles — switch to Custom to pick them individually.
               </p>
             ) : null}
+
+            <Label className="mt-4 block">Split</Label>
+            <div className="no-scrollbar -mx-1 mt-1.5 flex gap-1.5 overflow-x-auto px-1">
+              {SPLITS.map((option) => (
+                <Chip
+                  key={option}
+                  active={split === option}
+                  onClick={() => setSplit(option)}
+                  tone="plain"
+                >
+                  {SPLIT_LABEL[option]}
+                </Chip>
+              ))}
+            </div>
+            {!splitFits(split, Number(sessionsPerWeek)) && (
+              <p className="mt-2 text-[12px] font-medium" style={{ color: 'var(--color-warn)' }}>
+                {SPLIT_LABEL[split]} wants more sessions than you have — part of it will not be
+                trained.
+              </p>
+            )}
+
+            {split === 'custom' && (
+              <div className="mt-3">
+                {Array.from({ length: Number(sessionsPerWeek) }, (_, i) => (
+                  <div key={i} className="mt-2 first:mt-0">
+                    <Label className="mb-1 block">Day {DAY_SLOTS[i]}</Label>
+                    <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
+                      {DAY_TYPES.map((type) => (
+                        <Chip
+                          key={type}
+                          active={(customDayTypes[i] ?? 'full') === type}
+                          onClick={() =>
+                            setCustomDayTypes((prev) => {
+                              const next = [...prev];
+                              next[i] = type;
+                              return next;
+                            })
+                          }
+                        >
+                          {DAY_TYPE_LABEL[type]}
+                        </Chip>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <Label className="mt-4 block">Sessions per week</Label>
             <div className="mt-1.5">
@@ -352,7 +413,7 @@ export function ProgramScreen({
                 <span className="card-title">
                   Day {day.slot}
                   <span className="ml-2 text-[12px] font-medium text-text-dim">
-                    {day.weekdayLabel}
+                    {day.weekdayLabel} · {DAY_TYPE_LABEL[day.type].toLowerCase()}
                   </span>
                 </span>
                 <Label>~{day.estimatedMinutes} min</Label>

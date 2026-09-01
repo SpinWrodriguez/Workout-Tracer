@@ -11,7 +11,13 @@ import {
   sessionWarnings,
   weekdayOf,
 } from './golf';
-import { chooseTrainingWeekdays, generateBlock, patternOf } from './blockBuilder';
+import {
+  chooseTrainingWeekdays,
+  generateBlock,
+  patternOf,
+  splitFits,
+  type DayType,
+} from './blockBuilder';
 
 const byId = new Map(EXERCISES.map((e) => [e.id, e]));
 
@@ -312,5 +318,95 @@ describe('exercise selection quality', () => {
     expect(ids).not.toContain('bb_curl');
     expect(ids.some((id) => ['bb_bent_over_row', 'cb_seated_row', 'cb_lat_pulldown'].includes(id)))
       .toBe(true);
+  });
+});
+
+describe('splits (a three-day week must not be all upper body)', () => {
+  const LOWER: string[] = ['quads', 'hamstrings', 'glutes', 'adductors', 'calves'];
+
+  const build = (split: 'full_body' | 'upper_lower' | 'push_pull_legs' | 'custom', days: 3 | 2, custom?: DayType[]) =>
+    generateBlock({
+      blockId: 'b1',
+      exercises: EXERCISES,
+      focusMuscles: [],
+      sessionsPerWeek: days,
+      golfWeekdays: [6],
+      split,
+      customDayTypes: custom,
+    });
+
+  const trainsLower = (block: ReturnType<typeof build>) =>
+    block.days.filter((day) =>
+      day.exercises.some((entry) =>
+        byId.get(entry.exerciseId)?.primaryMuscles.some((m) => LOWER.includes(m)),
+      ),
+    ).length;
+
+  it('gives every full-body day both halves', () => {
+    const block = build('full_body', 3);
+    expect(block.days).toHaveLength(3);
+    expect(trainsLower(block)).toBe(3);
+  });
+
+  it('alternates upper and lower', () => {
+    const block = build('upper_lower', 3);
+    expect(block.days.map((d) => d.type)).toEqual(['upper', 'lower', 'upper']);
+    // The lower day is the one carrying legs; the upper days are not.
+    expect(trainsLower(block)).toBe(1);
+  });
+
+  it('gives push/pull/legs an actual legs day', () => {
+    const block = build('push_pull_legs', 3);
+    expect(block.days.map((d) => d.type)).toEqual(['push', 'pull', 'legs']);
+    const legDay = block.days.find((d) => d.type === 'legs');
+    expect(
+      legDay?.exercises.every((entry) =>
+        byId.get(entry.exerciseId)?.primaryMuscles.some((m) => [...LOWER, 'lower_back', 'abs', 'obliques'].includes(m)),
+      ),
+    ).toBe(true);
+  });
+
+  it('honours a hand-assigned type per day', () => {
+    const block = build('custom', 3, ['upper', 'lower', 'cable']);
+    expect(block.days.map((d) => d.type)).toEqual(['upper', 'lower', 'cable']);
+    // A cable day only prescribes cable work.
+    const cableDay = block.days.find((d) => d.type === 'cable');
+    expect(cableDay?.exercises.length).toBeGreaterThan(0);
+    for (const entry of cableDay?.exercises ?? []) {
+      expect(byId.get(entry.exerciseId)?.station, entry.exerciseId).toBe('cable');
+    }
+  });
+
+  it('never ships a two-exercise session', () => {
+    for (const split of ['full_body', 'upper_lower', 'push_pull_legs'] as const) {
+      for (const day of build(split, 3).days) {
+        expect(day.exercises.length, `${split} day ${day.slot}`).toBeGreaterThanOrEqual(4);
+      }
+    }
+  });
+
+  it('warns when the split needs more sessions than the week has', () => {
+    expect(splitFits('push_pull_legs', 2)).toBe(false);
+    expect(splitFits('upper_lower', 2)).toBe(true);
+    expect(build('push_pull_legs', 2).warnings.join(' ')).toMatch(/wants 3 sessions/);
+  });
+
+  it('still keeps grip work clear of the round under every split', () => {
+    for (const split of ['full_body', 'upper_lower', 'push_pull_legs'] as const) {
+      for (const day of build(split, 3).days) {
+        for (const entry of day.exercises) {
+          if (byId.get(entry.exerciseId)?.gripLoad === 'high') {
+            expect(day.gripSafe, `${entry.exerciseId} on ${day.weekdayLabel}`).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
+  it('picks the squat itself over a squat-to-press for a squat slot', () => {
+    const ids = build('push_pull_legs', 3)
+      .days.flatMap((d) => d.exercises.map((e) => e.exerciseId));
+    expect(ids).toContain('bb_back_squat');
+    expect(ids).not.toContain('lm_squat_to_press');
   });
 });
