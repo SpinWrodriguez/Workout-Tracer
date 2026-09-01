@@ -15,8 +15,19 @@ import { VitePWA } from 'vite-plugin-pwa';
  */
 const BASE = process.env.VITE_BASE ?? '/Workout-Tracer/';
 
+/*
+ * Which build you are looking at. Without this there is no way to tell a
+ * deployed fix from the cached version the service worker is still serving,
+ * which turns every "is it fixed?" into guesswork.
+ */
+const BUILD_ID = [
+  `${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC`,
+  (process.env.GITHUB_SHA ?? 'local').slice(0, 7),
+].join(' · ');
+
 export default defineConfig(() => ({
   base: BASE,
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   plugins: [
     react(),
     tailwindcss(),

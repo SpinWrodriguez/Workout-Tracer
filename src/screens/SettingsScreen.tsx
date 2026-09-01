@@ -77,6 +77,17 @@ export function SettingsScreen() {
         <NutritionSync />
       </div>
 
+      <Card title="Build" className="mt-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <Label>This version</Label>
+          <span className="text-[13px] font-medium tabular-nums">{__BUILD_ID__}</span>
+        </div>
+        <p className="mt-2 text-[12px] leading-snug font-medium text-text-dim">
+          The app is cached to work offline, so an update lands on the next open rather than
+          immediately. If this is not the build you expect, close the app fully and reopen it.
+        </p>
+      </Card>
+
       <Card title="Backup" className="mt-3">
         <p className="text-[13px] text-text-dim">
           A backup of the training data. Import still reads the nutrition app's version 2 export
