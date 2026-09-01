@@ -319,6 +319,9 @@ export function ProgramScreen({
       slot,
       weekday,
       intensity,
+      // Ask for what the workout was made to be. Absent on older workouts, and
+      // templateDayFor falls back to inferring from the week for those.
+      focus: scheduled?.focus,
       index: Math.max(0, index),
       shape,
       minutesPerSession: Number(sessionMinutes),
@@ -496,6 +499,7 @@ export function ProgramScreen({
       ...stored,
       [slot]: {
         intensity,
+        focus,
         effortCue: template.effortCue,
         generated: true,
         name: describeDay(

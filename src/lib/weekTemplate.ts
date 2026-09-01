@@ -338,6 +338,7 @@ export function templateDayFor({
   shape = 'mixed',
   minutesPerSession = 40,
   golfWeekdays = [],
+  focus,
 }: {
   slot: DaySlot;
   weekday: Weekday;
@@ -346,8 +347,27 @@ export function templateDayFor({
   shape?: SessionShape;
   minutesPerSession?: number;
   golfWeekdays?: Weekday[];
+  /**
+   * What the workout is FOR, as chosen when it was made. Given one, it decides
+   * the pattern targets; without one they are inferred from the day's position
+   * in the week, which is all a workout made before the focus was stored has.
+   *
+   * Splitting it this way is the point: the focus says what the day trains and
+   * belongs to the workout, while the weekday and the golf calendar say what
+   * is excluded and belong to where it was placed. Inferring the patterns from
+   * the weekday conflated the two, so regenerating an upper-body day on a
+   * Wednesday handed back a squat day.
+   */
+  focus?: WorkoutFocus;
 }): TemplateDay {
-  if (intensity === 'light') return lightDay(slot, weekday, index);
-  const set = index % 2 === 0 ? SHAPE_PATTERNS[shape].a : SHAPE_PATTERNS[shape].b;
+  if (intensity === 'light') {
+    const base = lightDay(slot, weekday, index);
+    return focus ? { ...base, patterns: FOCUS_PATTERNS[focus] } : base;
+  }
+  const set = focus
+    ? FOCUS_PATTERNS[focus]
+    : index % 2 === 0
+      ? SHAPE_PATTERNS[shape].a
+      : SHAPE_PATTERNS[shape].b;
   return heavyDay(slot, weekday, set, minutesPerSession, golfWeekdays);
 }

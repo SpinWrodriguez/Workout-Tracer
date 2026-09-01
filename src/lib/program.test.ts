@@ -5,6 +5,7 @@ import { seedDatabase } from '../db/seed';
 import { EXERCISES } from '../db/seed/exercises';
 import type { BlockExercise } from '../db/types';
 import { generateBlock } from './blockBuilder';
+import { LIGHT_DAY_CUE } from './weekTemplate';
 import {
   addBlockExercise,
   assignSlot,
@@ -76,6 +77,23 @@ describe('block schedule', () => {
     });
     expect(normaliseSchedule('nope')).toEqual({});
     expect(normaliseSchedule({ b: {} })).toEqual({});
+  });
+
+  it("keeps a workout's focus, so regenerating asks for the same thing again", () => {
+    expect(
+      normaliseSchedule({ b: { A: { weekday: 3, intensity: 'light', focus: 'upper' } } }),
+    ).toEqual({
+      b: { A: { weekday: 3, intensity: 'light', effortCue: LIGHT_DAY_CUE, focus: 'upper' } },
+    });
+  });
+
+  it('drops a focus it does not recognise rather than indexing into nothing', () => {
+    // A hand-edited row, or one written by a version that spelled these
+    // differently. Absent means "infer from the week", which is safe.
+    for (const focus of ['legs', '', null, 7, undefined]) {
+      const parsed = normaliseSchedule({ b: { A: { weekday: 1, intensity: 'heavy', focus } } });
+      expect(parsed.b?.A, String(focus)).not.toHaveProperty('focus');
+    }
   });
 
   it('resolves the slot programmed for a date', () => {

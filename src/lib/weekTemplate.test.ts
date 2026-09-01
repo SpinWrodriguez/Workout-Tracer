@@ -7,11 +7,14 @@ import {
   FORBIDDEN_WEEKDAYS,
   LIGHT_DAY_CUE,
   LIGHT_DAY_MINUTES,
+  WORKOUT_FOCUSES,
   availableExtraDays,
   maxSessionsFor,
+  templateDayFor,
   templateWeek,
   templateWeekdays,
   weekdayAllowed,
+  workoutTemplate,
 } from './weekTemplate';
 import { sessionMinutes } from './blockValidation';
 
@@ -453,5 +456,73 @@ describe('warnings match the week that was actually built', () => {
         }
       }
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  A workout's focus has to survive being regenerated.                       */
+/*                                                                            */
+/*  It did not: creation asked workoutTemplate() for the focus's patterns,     */
+/*  then the focus was dropped, and regenerating re-inferred the patterns from */
+/*  the weekday. An "Upper Body + Core" workout placed on a Wednesday came     */
+/*  back with a Bulgarian split squat at the top of it, every single press.    */
+/* -------------------------------------------------------------------------- */
+
+describe('templateDayFor honours a stored focus', () => {
+  const placed = (over: Record<string, unknown> = {}) =>
+    templateDayFor({ slot: 'A', weekday: 3, intensity: 'light', ...over });
+
+  it('asks for the same patterns creating a workout asked for', () => {
+    for (const focus of WORKOUT_FOCUSES) {
+      for (const intensity of ['heavy', 'light'] as const) {
+        const created = workoutTemplate({ slot: 'A', focus, intensity });
+        const regenerated = templateDayFor({ slot: 'A', weekday: 3, intensity, focus });
+        expect(regenerated.patterns, `${focus}/${intensity}`).toEqual(created.patterns);
+      }
+    }
+  });
+
+  it('gives an upper-body focus upper-body patterns, not the weekday default', () => {
+    expect(placed({ focus: 'upper' }).patterns).toEqual([
+      'pull_h',
+      'pull_v',
+      'push_h',
+      'push_v',
+      'core',
+    ]);
+    // The Wednesday light default, which is what it used to hand back.
+    expect(placed().patterns).toEqual(['squat', 'push_h', 'pull_h', 'rotation']);
+  });
+
+  it('distinguishes every focus, on a heavy day too', () => {
+    const sets = WORKOUT_FOCUSES.map((focus) =>
+      templateDayFor({ slot: 'A', weekday: 1, intensity: 'heavy', focus }).patterns.join(','),
+    );
+    expect(new Set(sets).size).toBe(WORKOUT_FOCUSES.length);
+  });
+
+  it('leaves placement to placement — the focus decides what, not what is excluded', () => {
+    // Grip exclusion is derived from the weekday and the golf calendar, so it
+    // must not change just because a focus was supplied.
+    const golf = { golfWeekdays: [6 as const], intensity: 'heavy' as const };
+    const withFocus = templateDayFor({ slot: 'A', weekday: 5, focus: 'pull', ...golf });
+    const without = templateDayFor({ slot: 'A', weekday: 5, ...golf });
+    expect(withFocus.excludeGripHigh).toBe(without.excludeGripHigh);
+    expect(withFocus.excludeGripHigh).toBe(true); // Friday, inside the buffer
+    expect(withFocus.setsPerExercise).toBe(without.setsPerExercise);
+    expect(withFocus.minutesBudget).toBe(without.minutesBudget);
+  });
+
+  it('falls back to inference for a workout made before focus was stored', () => {
+    const legacy = templateDayFor({ slot: 'A', weekday: 1, intensity: 'heavy', index: 0 });
+    expect(legacy.patterns.length).toBeGreaterThan(0);
+    expect(legacy.intensity).toBe('heavy');
+  });
+
+  it('keeps the light-day rep shift and effort cue whatever the focus', () => {
+    const day = placed({ focus: 'pull' });
+    expect(day.repShift).toEqual({ low: 4, high: 5 });
+    expect(day.effortCue).toBe(LIGHT_DAY_CUE);
+    expect(day.minutesBudget).toBe(LIGHT_DAY_MINUTES);
   });
 });

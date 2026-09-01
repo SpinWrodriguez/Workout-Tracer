@@ -4,7 +4,12 @@ import { weekdayOf, type Weekday } from './golf';
 import { desiredRange } from './blockBuilder';
 import { maxPrescription } from './repUnit';
 import { workingRepRange } from './blockValidation';
-import { LIGHT_DAY_CUE, type Intensity } from './weekTemplate';
+import {
+  LIGHT_DAY_CUE,
+  WORKOUT_FOCUSES,
+  type Intensity,
+  type WorkoutFocus,
+} from './weekTemplate';
 import { todayIso } from './format';
 import { emptySet, newSessionId, type SessionDraft } from './sessions';
 
@@ -53,6 +58,17 @@ export interface ScheduledDay {
    * carrying the previous session's name.
    */
   name?: string;
+  /**
+   * What the workout is for, as chosen when it was made. Persisted because
+   * regenerating has to ask for the same thing creating asked for — without it
+   * the pattern targets were re-inferred from the weekday, and an upper-body
+   * workout sitting on a Wednesday came back as a squat day.
+   *
+   * Absent on every workout made before this was stored. Those keep the old
+   * behaviour rather than being guessed at: a wrong focus would silently
+   * reshape a day the user is happy with.
+   */
+  focus?: WorkoutFocus;
 }
 
 export type BlockSchedule = Partial<Record<DaySlot, ScheduledDay>>;
@@ -115,6 +131,11 @@ export function normaliseSchedule(value: unknown): ScheduleByBlock {
         ...(value.generated === true ? { generated: true } : {}),
         ...(typeof value.name === 'string' && value.name.trim()
           ? { name: value.name.trim() }
+          : {}),
+        // Validated against the known set, so a hand-edited or stale value
+        // falls back to inference rather than indexing into nothing.
+        ...(WORKOUT_FOCUSES.includes(value.focus as WorkoutFocus)
+          ? { focus: value.focus as WorkoutFocus }
           : {}),
       };
     }
