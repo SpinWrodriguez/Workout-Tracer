@@ -154,7 +154,7 @@ export function DaySlotCard({
               onClick={onGenerate}
               className="mt-3 h-11 w-full rounded-full bg-cta font-semibold text-bg"
             >
-              Generate this day
+              Build this workout
             </button>
           )}
         </>
@@ -243,15 +243,15 @@ export function DaySlotCard({
         );
       })}
 
-      {/* Shuffle is offered only on a generated day: it re-rolls the draw, and
-          on a hand-built day that would silently throw the day away. */}
+      {/* Offered only on a generated workout: it re-rolls the draw, and on one
+          built by hand that would silently throw the work away. */}
       {!editing && entries.length > 0 && generated && canGenerate && (
         <button
           type="button"
           onClick={onShuffle}
           className="mt-3 h-9 w-full rounded-full bg-surface-2 text-[12px] font-medium text-text-dim"
         >
-          Shuffle this day
+          Shuffle the exercises
         </button>
       )}
 
@@ -298,7 +298,7 @@ export function DaySlotCard({
             className="h-11 rounded-full bg-surface-2 px-4 text-[13px] font-medium"
             style={{ color: 'var(--color-rir-1)' }}
           >
-            Delete day
+            Delete workout
           </button>
         </div>
       )}

@@ -882,23 +882,28 @@ export function ProgramScreen({
             canGenerate={templateFor(slot) !== undefined}
             generated={scheduled?.generated === true}
             onGenerate={() => {
-              // Only ever destructive with a yes: a day built by hand is not
-              // something to overwrite because a button was nearby.
+              // Only ever destructive with a yes: a workout built by hand is
+              // not something to overwrite because a button was nearby.
               if (
                 list.length > 0 &&
                 !window.confirm(
-                  `Replace the ${list.length} exercises in ${labelFor(slot)} with a generated day?`,
+                  `Replace the ${list.length} exercises in ${labelFor(slot)} with a new draw?`,
                 )
               ) {
                 return;
               }
-              // An empty day has nothing to differ from, so it takes the
+              // An empty workout has nothing to differ from, so it takes the
               // strongest draw; a day with contents is being asked to change.
               void generateSlot(slot, list.length === 0 ? 0 : nextVariant(slot));
             }}
             onShuffle={() => void generateSlot(slot, nextVariant(slot))}
             onClearDay={() => {
-              if (block && window.confirm(`Delete ${labelFor(slot)} and everything in it?`)) {
+              if (
+                block &&
+                window.confirm(
+                  `Delete the workout "${labelFor(slot)}"? Its exercises go with it, and it comes off the calendar.`,
+                )
+              ) {
                 void clearDaySlot(block.id, slot);
                 setEditingSlot(null);
               }
