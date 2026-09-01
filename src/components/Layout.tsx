@@ -15,14 +15,19 @@ export function Screen({
   trailing?: ReactNode;
   header?: ReactNode;
   children: ReactNode;
-  pad?: 'nav' | 'cta' | 'none';
+  pad?: 'nav' | 'cta' | 'keypad' | 'none';
 }) {
+  /* 'keypad' clears the in-app number pad, which is far taller than the CTA:
+     without it the rows in the bottom third of the list cannot be scrolled out
+     from under the pad, and taps meant for them land on the keys instead. */
   const padding =
-    pad === 'cta'
-      ? 'pb-[calc(env(safe-area-inset-bottom)+180px)]'
-      : pad === 'nav'
-        ? 'pb-[calc(env(safe-area-inset-bottom)+96px)]'
-        : 'pb-6';
+    pad === 'keypad'
+      ? 'pb-[calc(env(safe-area-inset-bottom)+400px)]'
+      : pad === 'cta'
+        ? 'pb-[calc(env(safe-area-inset-bottom)+180px)]'
+        : pad === 'nav'
+          ? 'pb-[calc(env(safe-area-inset-bottom)+96px)]'
+          : 'pb-6';
 
   return (
     <div className="min-h-dvh bg-bg">

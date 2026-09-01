@@ -1,6 +1,7 @@
-import type { BlockExercise, DaySlot, Exercise } from '../db/types';
+import { useState } from 'react';
+import type { BlockExercise, Exercise } from '../db/types';
 import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
-import { slotName } from '../lib/slotName';
+
 import { Card, Empty, Label } from './Layout';
 
 /* -------------------------------------------------------------------------- */
@@ -46,7 +47,6 @@ function Stepper({
 }
 
 export function DaySlotCard({
-  slot,
   weekday,
   intensity = 'heavy',
   entries,
@@ -64,8 +64,10 @@ export function DaySlotCard({
   onShuffle,
   canGenerate,
   generated,
+  label,
+  customName,
+  onRename,
 }: {
-  slot: DaySlot;
   weekday?: Weekday;
   intensity?: 'heavy' | 'light';
   entries: BlockExercise[];
@@ -85,10 +87,26 @@ export function DaySlotCard({
   canGenerate: boolean;
   /** This day came out of the generator, so re-rolling it costs nothing. */
   generated: boolean;
+  /** What to show: a name the user typed, or one derived from the exercises. */
+  label: string;
+  /** Only what the user typed, so the field is empty when nothing is set. */
+  customName?: string;
+  onRename: (next: string | undefined) => void;
 }) {
+  /* Local while editing; the stored name is the source of truth everywhere
+     else, so it re-seeds whenever the day is renamed or regenerated. Adjusted
+     during render rather than in an effect, which is React's own answer to
+     "reset some state when a prop changes" and avoids a second render pass. */
+  const [typed, setTyped] = useState(customName ?? '');
+  const [lastSeen, setLastSeen] = useState(customName);
+  if (lastSeen !== customName) {
+    setLastSeen(customName);
+    setTyped(customName ?? '');
+  }
+
   return (
     <Card
-      title={slotName(slot)}
+      title={label}
       className="mt-3"
       trailing={
         <span className="flex items-center gap-2">
@@ -223,6 +241,27 @@ export function DaySlotCard({
         >
           Shuffle this day
         </button>
+      )}
+
+      {editing && (
+        <label className="mt-1 mb-3 block">
+          <span className="label">Name</span>
+          <input
+            type="text"
+            value={typed}
+            placeholder={label}
+            onChange={(event) => setTyped(event.target.value)}
+            /* Committed on blur, not per keystroke: writing every character
+               back through the database made the field fight what was being
+               typed into it. Blank clears the name rather than storing "", so
+               the day goes back to describing itself. */
+            onBlur={() => onRename(typed.trim() || undefined)}
+            className="mt-1 h-11 w-full rounded-xl bg-surface-2 px-3 text-[15px] font-medium outline-none placeholder:text-text-faint"
+          />
+          <span className="label mt-1 block">
+            Leave it blank and the day names itself from what is in it.
+          </span>
+        </label>
       )}
 
       {editing && (

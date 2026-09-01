@@ -126,6 +126,12 @@ export interface Session {
   id: string;
   blockId: string;
   daySlot: string;
+  /**
+   * What the day was called when it was logged. Stored rather than looked up:
+   * the slot is reused every block, so reading today's name for a session from
+   * six weeks ago would caption it with a workout that never happened.
+   */
+  daySlotName?: string;
   date: string;
   durationMin?: number;
   hrAvg?: number;

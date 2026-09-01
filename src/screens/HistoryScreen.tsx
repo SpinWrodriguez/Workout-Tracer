@@ -16,7 +16,7 @@ import { ExerciseChart } from '../components/LazyCharts';
 import type { ExerciseMetric, ExercisePoint } from '../components/Charts';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ExerciseDetail } from '../components/ExerciseDetail';
-import { slotName } from '../lib/slotName';
+import { slotFallback } from '../lib/dayLabel';
 
 const METRICS: ExerciseMetric[] = ['topSetKg', 'oneRm', 'volumeKg'];
 const METRIC_LABEL: Record<ExerciseMetric, string> = {
@@ -215,7 +215,7 @@ export function HistoryScreen({
                     <span className="card-title">
                       {friendlyDate(summary.session.date)}
                       <span className="ml-2 text-[12px] font-medium text-text-dim">
-                        {slotName(summary.session.daySlot)}
+                        {summary.session.daySlotName ?? slotFallback(summary.session.daySlot)}
                       </span>
                     </span>
                     <span

@@ -42,7 +42,7 @@ import { NumberPad, type PadTarget } from '../components/NumberPad';
 import { RestTimerBar } from '../components/RestTimer';
 import { useRestTimer } from '../lib/restTimer';
 import { SetRow, type CellField } from '../components/SetRow';
-import { SLOT_NAME, slotName } from '../lib/slotName';
+import { dayLabel } from '../lib/dayLabel';
 
 const DAY_SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
 
@@ -74,12 +74,15 @@ interface ActiveCell {
 export function SessionScreen({
   sessionId,
   daySlot,
+  freestyle = false,
   exercises,
   onExit,
 }: {
   sessionId?: string;
   /** Start this day of the block. Omitted means "work out today's slot". */
   daySlot?: DaySlot;
+  /** Skip the programmed day entirely and open the picker. */
+  freestyle?: boolean;
   exercises: Exercise[];
   onExit: () => void;
 }) {
@@ -143,7 +146,11 @@ export function SessionScreen({
 
       setPlan(blockPlan);
 
-      const slot = daySlot ?? (blockPlan ? slotForDate(blockPlan.schedule, date) : undefined);
+      // Freestyle is a decision, not an absence: it must not quietly load
+      // today's programmed session just because one exists.
+      const slot = freestyle
+        ? undefined
+        : (daySlot ?? (blockPlan ? slotForDate(blockPlan.schedule, date) : undefined));
       const programmed =
         blockPlan && slot ? entriesForSlot(blockPlan.entries, slot).length > 0 : false;
 
@@ -160,7 +167,7 @@ export function SessionScreen({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, daySlot, exercisesById]);
+  }, [sessionId, daySlot, freestyle, exercisesById]);
 
   /* --- previous-session reference for the target column ------------------ */
   /* Keyed on primitives only: this must not re-query on every keystroke. */
@@ -416,6 +423,27 @@ export function SessionScreen({
 
   /* --- save -------------------------------------------------------------- */
 
+  /** What a slot is called, from the block the session belongs to. */
+  const labelFor = useCallback(
+    (slot: DaySlot): string =>
+      dayLabel({
+        slot,
+        name: plan?.schedule[slot]?.name,
+        exercises: plan
+          ? entriesForSlot(plan.entries, slot)
+              .map((entry) => exercisesById.get(entry.exerciseId))
+              .filter((exercise): exercise is Exercise => exercise !== undefined)
+          : undefined,
+        intensity: plan?.schedule[slot]?.intensity,
+      }),
+    [plan, exercisesById],
+  );
+
+  const slotLabels = useMemo(
+    () => Object.fromEntries(DAY_SLOTS.map((slot) => [slot, labelFor(slot)])) as Record<DaySlot, string>,
+    [labelFor],
+  );
+
   const loggedSets = draft ? countLoggedSets(draft) : 0;
 
   const handleSave = async () => {
@@ -428,6 +456,9 @@ export function SessionScreen({
           ...draft,
           // Keep an edited session's recorded duration; time a live one.
           durationMin: draft.durationMin ?? (sessionId ? undefined : elapsedMin),
+          // Stamped at save time: the slot gets reused every block, so looking
+          // this up later would caption an old session with today's workout.
+          daySlotName: labelFor(draft.daySlot as DaySlot),
         },
         exercisesById,
       );
@@ -497,7 +528,7 @@ export function SessionScreen({
     <>
       <Screen
         title="Workout"
-        pad="cta"
+        pad={cell ? 'keypad' : 'cta'}
         trailing={
           <span className="pb-1 text-[13px] font-medium text-text-dim">
             {friendlyDate(draft.date)}
@@ -568,7 +599,7 @@ export function SessionScreen({
                 onClick={() => loadSlot(draft.daySlot as DaySlot)}
                 className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg"
               >
-                Load {slotName(draft.daySlot)} · {programmedForSlot.length} exercises
+                Load {labelFor(draft.daySlot as DaySlot)} · {programmedForSlot.length} exercises
               </button>
             )}
             <button
@@ -700,10 +731,17 @@ export function SessionScreen({
                   onCell={(field) =>
                     setCell({ exerciseId: activeExercise.id, setIndex: index, field })
                   }
-                  onToggleDone={() => toggleDone(activeExercise.id, index, set)}
-                  onRir={() =>
-                    setEffortCell({ exerciseId: activeExercise.id, setIndex: index, field: 'reps' })
-                  }
+                  onToggleDone={() => {
+                    setCell(null);
+                    toggleDone(activeExercise.id, index, set);
+                  }}
+                  onRir={() => {
+                    // Close the pad first: it is the thing that was covering
+                    // the badge, and leaving it up over the effort sheet only
+                    // makes the next tap ambiguous too.
+                    setCell(null);
+                    setEffortCell({ exerciseId: activeExercise.id, setIndex: index, field: 'reps' });
+                  }}
                   onRemove={
                     activeDraftExercise.sets.length > 1
                       ? () => removeSet(activeExercise.id, index)
@@ -728,7 +766,7 @@ export function SessionScreen({
           <div className="mt-1.5">
             <SegmentedToggle
               options={DAY_SLOTS}
-              labels={SLOT_NAME}
+              labels={slotLabels}
               value={(draft.daySlot as DaySlot) ?? 'A'}
               onChange={(slot) => setDraft({ ...draft, daySlot: slot })}
             />

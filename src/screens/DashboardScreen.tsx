@@ -1,16 +1,16 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { DaySlot, Exercise } from '../db/types';
-import { EM_WEIGHT, friendlyDate, kg, rate, shiftIso, todayIso, weekStart } from '../lib/format';
+import { EM_WEIGHT, friendlyDate, fromIsoDate, kg, rate, todayIso, weekStart } from '../lib/format';
 import { linearTrend, rollingAverage, type DatedPoint } from '../lib/stats';
 import { WEEKDAY_LABEL } from '../lib/golf';
-import { entriesForSlot, readBlockPlan, slotForDate } from '../lib/program';
+import { readWeekPlan } from '../lib/weekPlan';
 import { WEEKLY_SET_TARGET } from '../lib/blockValidation';
 import { Card, Empty, Label, Screen } from '../components/Layout';
 import { BodyWeightChart } from '../components/LazyCharts';
 import { ThemeToggleButton } from '../components/ThemePicker';
 import { Ring } from '../components/Ring';
-import { slotName } from '../lib/slotName';
+import { dayLabel, slotFallback } from '../lib/dayLabel';
 
 /**
  * Weekly targets for a realistic two-session week (spec §1): ~6 exercises a
@@ -38,35 +38,12 @@ export function DashboardScreen({
    * hid the other days entirely on a rest day, which reads as though the
    * program has one session in it.
    */
-  const program = useLiveQuery(async () => {
-    const plan = await readBlockPlan();
-    if (!plan) return undefined;
-
-    const date = todayIso();
-    const from = weekStart(date);
-    const sessions = await db.session
-      .where('date')
-      .between(from, shiftIso(from, 7), true, false)
-      .toArray();
-    const loggedSlots = new Set(sessions.map((session) => session.daySlot));
-
-    const days = [...new Set(plan.entries.map((entry) => entry.daySlot))]
-      .map((slot) => ({
-        slot,
-        weekday: plan.schedule[slot]?.weekday,
-        intensity: plan.schedule[slot]?.intensity ?? 'heavy',
-        entries: entriesForSlot(plan.entries, slot),
-        doneThisWeek: loggedSlots.has(slot),
-      }))
-      // Scheduled days in weekday order; anything unscheduled trails behind.
-      .sort((a, b) => (a.weekday ?? 99) - (b.weekday ?? 99) || a.slot.localeCompare(b.slot));
-
-    return {
-      days,
-      todaySlot: slotForDate(plan.schedule, date),
-      scheduled: Object.keys(plan.schedule).length > 0,
-    };
-  }, []);
+  /*
+   * The whole block's week, not just today. Answering only "what is today"
+   * hid the other days entirely on a rest day, which reads as though the
+   * program has one session in it.
+   */
+  const program = useLiveQuery(() => readWeekPlan(), []);
 
   const week = useLiveQuery(async () => {
     const from = weekStart(todayIso());
@@ -143,47 +120,86 @@ export function DashboardScreen({
       }
     >
       {programDays.length > 0 && (
-        <Card
-          title={program?.todaySlot ? `Today · ${slotName(program.todaySlot)}` : 'This week'}
-          className="mb-3"
-        >
+        <Card title="Your week" className="mb-3">
           {programDays.map((day, i) => {
-            const isToday = day.slot === program?.todaySlot;
+            const isToday = day.date !== undefined && day.date === program?.today;
+            const isNext = day.slot === program?.next;
+            const label = dayLabel({
+              slot: day.slot,
+              name: day.name,
+              exercises: day.entries
+                .map((entry) => exercises.find((e) => e.id === entry.exerciseId))
+                .filter((exercise): exercise is Exercise => exercise !== undefined),
+              intensity: day.intensity,
+            });
             const names = day.entries
               .map((entry) => exercises.find((e) => e.id === entry.exerciseId)?.name)
               .filter(Boolean)
               .join(' · ');
             return (
-              <div key={day.slot} className={i > 0 ? 'mt-3 border-t border-border pt-3' : ''}>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="flex items-baseline gap-2">
-                    <span className="card-title">{slotName(day.slot)}</span>
-                    <Label className={isToday ? 'text-text!' : ''}>
-                      {isToday ? 'today' : day.weekday ? WEEKDAY_LABEL[day.weekday] : 'unscheduled'}
-                      {day.intensity === 'light' ? ' · light' : ''}
-                      {day.doneThisWeek ? ' · done' : ''}
-                    </Label>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onStartDay(day.slot)}
-                    className={`shrink-0 rounded-full px-4 py-1.5 text-[13px] font-semibold ${
-                      isToday ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
+              <div key={day.slot} className={i > 0 ? 'mt-2.5 border-t border-border pt-2.5' : ''}>
+                <div className="flex items-center gap-3">
+                  {/* The calendar column: which day of the week this is. */}
+                  <span
+                    className={`flex size-11 shrink-0 flex-col items-center justify-center rounded-xl ${
+                      isToday ? 'bg-cta text-bg' : 'bg-surface-2'
                     }`}
                   >
-                    Start
-                  </button>
+                    <span
+                      className={`text-[9px] font-semibold tracking-wide uppercase ${
+                        isToday ? 'text-bg/70' : 'text-text-dim'
+                      }`}
+                    >
+                      {day.weekday ? WEEKDAY_LABEL[day.weekday] : '--'}
+                    </span>
+                    <span className="text-[15px] leading-none font-semibold tabular-nums">
+                      {day.date ? fromIsoDate(day.date).getDate() : '·'}
+                    </span>
+                  </span>
+
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline gap-2">
+                      <span className="card-title truncate">{label}</span>
+                      <Label>
+                        {day.intensity === 'light' ? 'light' : 'heavy'}
+                        {isToday ? ' · today' : ''}
+                      </Label>
+                    </span>
+                    <p className="mt-0.5 truncate text-[12px] font-medium text-text-dim">
+                      {names || '---'}
+                    </p>
+                  </span>
+
+                  {/* A finished session is not something to start again. The
+                      button says so rather than going quietly missing, so the
+                      row still reads as a week you can see the shape of. */}
+                  {day.done ? (
+                    <span
+                      className="shrink-0 rounded-full bg-surface-2 px-4 py-1.5 text-[13px] font-semibold text-text-faint"
+                      aria-label={`${label} is done`}
+                    >
+                      Done
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onStartDay(day.slot)}
+                      disabled={day.entries.length === 0}
+                      className={`shrink-0 rounded-full px-4 py-1.5 text-[13px] font-semibold disabled:text-text-faint ${
+                        isNext ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
+                      }`}
+                    >
+                      Start
+                    </button>
+                  )}
                 </div>
-                <p className="mt-1 text-[12px] leading-snug font-medium text-text-dim">
-                  {names || '---'}
-                </p>
               </div>
             );
           })}
 
           {!program?.scheduled && (
             <p className="mt-3 text-[12px] font-medium text-text-dim">
-              No weekdays assigned yet — generate the week on Program to place these around your
+              No weekdays assigned yet — set up the days on Program to place these around your
               rounds.
             </p>
           )}
@@ -282,7 +298,7 @@ export function DashboardScreen({
               >
                 <span className="text-[15px] font-medium">{friendlyDate(session.date)}</span>
                 <Label>
-                  {slotName(session.daySlot)}
+                  {session.daySlotName ?? slotFallback(session.daySlot)}
                   {session.durationMin ? ` · ${session.durationMin} min` : ''}
                 </Label>
               </button>

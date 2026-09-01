@@ -27,6 +27,8 @@ export interface SessionDraft {
   id: string;
   blockId: string;
   daySlot: string;
+  /** What the day was called, stamped by the screen at save time. */
+  daySlotName?: string;
   date: string;
   durationMin?: number;
   notes?: string;
@@ -174,6 +176,7 @@ export async function saveSession(
     id: draft.id,
     blockId: draft.blockId,
     daySlot: draft.daySlot,
+    daySlotName: draft.daySlotName?.trim() || undefined,
     date: draft.date,
     durationMin: draft.durationMin,
     notes: draft.notes?.trim() ? draft.notes.trim() : undefined,

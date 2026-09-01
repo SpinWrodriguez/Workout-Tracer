@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { DaySlot } from '../db/types';
-import { slotName } from '../lib/slotName';
+
 import { WEEKDAY_LABEL, type WeekDay, type Weekday } from '../lib/golf';
 import { fromIsoDate } from '../lib/format';
 
@@ -33,11 +33,13 @@ export function WeekStrip({
   week,
   onPickDay,
   onMoveSlot,
+  labelFor,
 }: {
   week: WeekStripDay[];
   onPickDay: (date: string) => void;
   /** Drag-and-drop reassignment of a session to another weekday. */
   onMoveSlot: (slot: DaySlot, weekday: Weekday) => void;
+  labelFor: (slot: DaySlot) => string;
 }) {
   const columns = useRef<(HTMLDivElement | null)[]>([]);
   const [drag, setDrag] = useState<{ slot: DaySlot; x: number; y: number; over: number } | null>(
@@ -94,7 +96,7 @@ export function WeekStrip({
                 onClick={() => onPickDay(day.date)}
                 className="block w-full"
                 aria-label={`${WEEKDAY_LABEL[day.weekday]} ${day.date}${
-                  day.plannedSlot ? `, ${slotName(day.plannedSlot)}` : ''
+                  day.plannedSlot ? `, ${labelFor(day.plannedSlot)}` : ''
                 }${day.golf ? `, golf ${day.golf.status}` : ''}${
                   day.violation ? ', rule violation' : ''
                 }`}
@@ -117,7 +119,7 @@ export function WeekStrip({
                   role="button"
                   tabIndex={0}
                   onPointerDown={startDrag(day.plannedSlot, index)}
-                  aria-label={`${slotName(day.plannedSlot)} — drag to move`}
+                  aria-label={`${labelFor(day.plannedSlot)} — drag to move`}
                   className={`mt-1.5 cursor-grab touch-none rounded-lg py-1 text-center text-[11px] font-bold select-none ${
                     drag?.slot === day.plannedSlot ? 'opacity-30' : ''
                   } ${done ? 'bg-cta text-bg' : 'bg-volume text-bg'}`}

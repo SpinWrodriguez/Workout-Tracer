@@ -1,7 +1,7 @@
 import type { DaySlot, GolfDay } from '../db/types';
 import { longDate } from '../lib/format';
 import { WEEKDAY_LABEL, weekdayOf } from '../lib/golf';
-import { slotName } from '../lib/slotName';
+
 import { Label } from './Layout';
 
 /* -------------------------------------------------------------------------- */
@@ -13,6 +13,7 @@ import { Label } from './Layout';
 export function DayEditor({
   date,
   slots,
+  labelFor,
   currentSlot,
   golf,
   onSetSlot,
@@ -22,6 +23,8 @@ export function DayEditor({
   date: string;
   /** Slots the block actually defines, so we never offer an empty day. */
   slots: DaySlot[];
+  /** What each slot is called, resolved by the screen that owns the block. */
+  labelFor: (slot: DaySlot) => string;
   currentSlot?: DaySlot;
   golf?: GolfDay;
   onSetSlot: (slot: DaySlot | undefined) => void;
@@ -64,7 +67,7 @@ export function DayEditor({
             </p>
           )}
           {slots.map((slot) =>
-            option(currentSlot === slot, () => onSetSlot(slot), slotName(slot)),
+            option(currentSlot === slot, () => onSetSlot(slot), labelFor(slot)),
           )}
           {currentSlot && option(false, () => onSetSlot(undefined), 'No gym this day', 'clear')}
         </div>

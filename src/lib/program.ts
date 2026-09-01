@@ -31,6 +31,13 @@ export interface ScheduledDay {
    * "shuffle" from being offered where it would throw away real work.
    */
   generated?: boolean;
+  /**
+   * What to call this day. Written by the generator from what the day actually
+   * contains, and overridden by anything the user types. Absent means "work it
+   * out from the exercises", which is what keeps a regenerated day from
+   * carrying the previous session's name.
+   */
+  name?: string;
 }
 
 export type BlockSchedule = Partial<Record<DaySlot, ScheduledDay>>;
@@ -62,6 +69,9 @@ export function normaliseSchedule(value: unknown): ScheduleByBlock {
         // Absent rather than false: a hand-built day keeps the shape it has
         // always had, and only generated days carry the extra key.
         ...(value.generated === true ? { generated: true } : {}),
+        ...(typeof value.name === 'string' && value.name.trim()
+          ? { name: value.name.trim() }
+          : {}),
       };
     }
     if (Object.keys(map).length > 0) out[blockId] = map;

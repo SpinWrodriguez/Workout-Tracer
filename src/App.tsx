@@ -6,6 +6,9 @@ import { seedDatabase } from './db/seed';
 import { syncNow, syncWorkoutNow } from './lib/nutritionSync';
 import { startWorkoutAutoSync } from './lib/workoutAutoSync';
 import { BottomNav, type Tab } from './components/BottomNav';
+import { StartSheet, type StartOption } from './components/StartSheet';
+import { dayLabel } from './lib/dayLabel';
+import { readWeekPlan } from './lib/weekPlan';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { LevelsScreen } from './screens/LevelsScreen';
@@ -16,11 +19,12 @@ import { SettingsScreen } from './screens/SettingsScreen';
 /** Either a tab, or a session being logged/edited full-screen. */
 type Route =
   | { kind: 'tab'; tab: Tab }
-  | { kind: 'session'; sessionId?: string; daySlot?: DaySlot };
+  | { kind: 'session'; sessionId?: string; daySlot?: DaySlot; freestyle?: boolean };
 
 export default function App() {
   const [ready, setReady] = useState(false);
   const [route, setRoute] = useState<Route>({ kind: 'tab', tab: 'dashboard' });
+  const [starting, setStarting] = useState(false);
   const exercises = useLiveQuery(() => db.exercise.orderBy('name').toArray(), [], undefined);
 
   useEffect(() => {
@@ -43,6 +47,36 @@ export default function App() {
     });
   }, []);
 
+  /* Only read while the sheet is open: the + is not a reason to keep a query
+     alive behind every screen. */
+  const startOptions = useLiveQuery(async (): Promise<StartOption[]> => {
+    if (!starting) return [];
+    const plan = await readWeekPlan();
+    if (!plan) return [];
+    const byId = new Map((exercises ?? []).map((e) => [e.id, e]));
+    return plan.days.map((day) => {
+      const picked = day.entries
+        .map((entry) => byId.get(entry.exerciseId))
+        .filter((exercise) => exercise !== undefined);
+      return {
+        slot: day.slot,
+        label: dayLabel({
+          slot: day.slot,
+          name: day.name,
+          exercises: picked,
+          intensity: day.intensity,
+        }),
+        weekday: day.weekday,
+        date: day.date,
+        exerciseCount: day.entries.length,
+        done: day.done,
+        isToday: day.date !== undefined && day.date === plan.today,
+        isNext: day.slot === plan.next,
+        preview: picked.slice(0, 3).map((exercise) => exercise.name).join(' · '),
+      };
+    });
+  }, [starting, exercises]);
+
   if (!ready || exercises === undefined) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-bg">
@@ -56,6 +90,7 @@ export default function App() {
       <SessionScreen
         sessionId={route.sessionId}
         daySlot={route.daySlot}
+        freestyle={route.freestyle}
         exercises={exercises}
         onExit={() => setRoute({ kind: 'tab', tab: route.sessionId ? 'history' : 'dashboard' })}
       />
@@ -88,8 +123,23 @@ export default function App() {
       <BottomNav
         tab={route.tab}
         onTab={(tab) => setRoute({ kind: 'tab', tab })}
-        onNewSession={() => startSession()}
+        onNewSession={() => setStarting(true)}
       />
+
+      {starting && (
+        <StartSheet
+          options={startOptions ?? []}
+          onPick={(slot) => {
+            setStarting(false);
+            startSession(slot);
+          }}
+          onFreestyle={() => {
+            setStarting(false);
+            setRoute({ kind: 'session', freestyle: true });
+          }}
+          onClose={() => setStarting(false)}
+        />
+      )}
     </>
   );
 }

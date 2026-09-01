@@ -9,7 +9,7 @@ import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import { balanceSets, generateDay, type DayPlan } from '../lib/blockBuilder';
 import { validateBlock, type ValidationContext } from '../lib/blockValidation';
-import { slotName } from '../lib/slotName';
+import { dayLabel, describeDay } from '../lib/dayLabel';
 import {
   DEFAULT_THIRD_DAY,
   maxSessionsFor,
@@ -166,6 +166,32 @@ export function ProgramScreen({
     [slots],
   );
 
+  /**
+   * What a day is called. A name the user typed wins; otherwise the day is
+   * named after what is actually in it, which means a regenerated day renames
+   * itself instead of keeping a caption for a workout it no longer holds.
+   */
+  const labelFor = (slot: DaySlot): string =>
+    dayLabel({
+      slot,
+      name: schedule?.[slot]?.name,
+      exercises: entriesForSlot(slots ?? [], slot)
+        .map((entry) => byId.get(entry.exerciseId))
+        .filter((exercise): exercise is Exercise => exercise !== undefined),
+      intensity: schedule?.[slot]?.intensity,
+    });
+
+  const renameSlot = async (slot: DaySlot, name: string | undefined) => {
+    if (!block) return;
+    const stored = (await readSchedules())[block.id] ?? {};
+    const day = stored[slot];
+    if (!day) return;
+    const next = { ...day };
+    if (name?.trim()) next.name = name.trim();
+    else delete next.name;
+    await writeSchedule(block.id, { ...stored, [slot]: next });
+  };
+
   const saveSchedule = async (next: BlockSchedule) => {
     if (block) await writeSchedule(block.id, next);
   };
@@ -289,6 +315,16 @@ export function ProgramScreen({
         intensity: day.intensity,
         effortCue: day.effortCue,
         generated: true,
+        // Named from what was just built. A name the user typed is left alone:
+        // renaming a day should survive re-rolling it.
+        name:
+          stored[day.slot]?.name ??
+          describeDay(
+            day.exercises
+              .map((entry) => byId.get(entry.exerciseId))
+              .filter((exercise): exercise is Exercise => exercise !== undefined),
+            day.intensity,
+          ),
       },
     });
   };
@@ -388,6 +424,7 @@ export function ProgramScreen({
       hasHistory: hasHistory ?? false,
       laddersFor: (exercise) => ladderFor(exercise, inventory),
       template,
+      nameFor: labelFor,
     };
     return validateBlock(
       {
@@ -436,6 +473,7 @@ export function ProgramScreen({
       >
         <WeekStrip
           week={week}
+          labelFor={labelFor}
           onPickDay={setEditingDate}
           onMoveSlot={(slot, weekday) => void saveSchedule(assignSlot(schedule ?? {}, slot, weekday))}
         />
@@ -651,7 +689,9 @@ export function ProgramScreen({
         return (
           <DaySlotCard
             key={slot}
-            slot={slot}
+            label={labelFor(slot)}
+            customName={scheduled?.name}
+            onRename={(name) => void renameSlot(slot, name)}
             weekday={weekday}
             entries={list}
             exercisesById={byId}
@@ -676,7 +716,7 @@ export function ProgramScreen({
               if (
                 list.length > 0 &&
                 !window.confirm(
-                  `Replace the ${list.length} exercises in ${slotName(slot)} with a generated day?`,
+                  `Replace the ${list.length} exercises in ${labelFor(slot)} with a generated day?`,
                 )
               ) {
                 return;
@@ -685,7 +725,7 @@ export function ProgramScreen({
             }}
             onShuffle={() => void generateSlot(slot, (variantBySlot[slot] ?? 0) + 1)}
             onClearDay={() => {
-              if (block && window.confirm(`Delete ${slotName(slot)} and everything in it?`)) {
+              if (block && window.confirm(`Delete ${labelFor(slot)} and everything in it?`)) {
                 void clearDaySlot(block.id, slot);
                 setEditingSlot(null);
               }
@@ -736,6 +776,7 @@ export function ProgramScreen({
         <DayEditor
           date={editingDate}
           slots={definedSlots}
+          labelFor={labelFor}
           currentSlot={week.find((day) => day.date === editingDate)?.plannedSlot}
           golf={golfDays?.find((day) => day.date === editingDate)}
           onSetSlot={(slot) => {
