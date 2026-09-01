@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { DaySlot } from '../db/types';
 
-import { WEEKDAY_LABEL, type WeekDay, type Weekday } from '../lib/golf';
+import { WEEKDAY_LABEL, type WeekDay } from '../lib/golf';
 import { fromIsoDate } from '../lib/format';
 
 /* -------------------------------------------------------------------------- */
@@ -37,8 +37,8 @@ export function WeekStrip({
 }: {
   week: WeekStripDay[];
   onPickDay: (date: string) => void;
-  /** Drag-and-drop reassignment of a session to another weekday. */
-  onMoveSlot: (slot: DaySlot, weekday: Weekday) => void;
+  /** Moves a workout to another DATE — this week only, not every week. */
+  onMoveSlot: (slot: DaySlot, date: string) => void;
   labelFor: (slot: DaySlot) => string;
 }) {
   const columns = useRef<(HTMLDivElement | null)[]>([]);
@@ -70,7 +70,7 @@ export function WeekStrip({
   const endDrag = () => {
     if (!drag) return;
     const target = week[drag.over];
-    if (target && target.plannedSlot !== drag.slot) onMoveSlot(drag.slot, target.weekday);
+    if (target && target.plannedSlot !== drag.slot) onMoveSlot(drag.slot, target.date);
     setDrag(null);
   };
 

@@ -14,6 +14,8 @@ export function DayEditor({
   date,
   slots,
   labelFor,
+  onSetUsual,
+  usualLabel,
   currentSlot,
   golf,
   onSetSlot,
@@ -25,6 +27,9 @@ export function DayEditor({
   slots: DaySlot[];
   /** What each slot is called, resolved by the screen that owns the block. */
   labelFor: (slot: DaySlot) => string;
+  /** Makes the day's workout fall here every week, not just this one. */
+  onSetUsual?: () => void;
+  usualLabel?: string;
   currentSlot?: DaySlot;
   golf?: GolfDay;
   onSetSlot: (slot: DaySlot | undefined) => void;
@@ -71,6 +76,20 @@ export function DayEditor({
           )}
           {currentSlot && option(false, () => onSetSlot(undefined), 'No gym this day', 'clear')}
         </div>
+
+        {/* Moving a session used to move it in every week that would ever
+            exist. It now moves this date; making it the standing arrangement
+            is a separate, deliberate thing. */}
+        <Label className="mt-2 block">Changes this date only.</Label>
+        {currentSlot && onSetUsual && (
+          <button
+            type="button"
+            onClick={onSetUsual}
+            className="mt-2 w-full rounded-xl bg-surface-2 py-2.5 text-[13px] font-medium text-text-dim"
+          >
+            {usualLabel ?? 'Make this the usual day'}
+          </button>
+        )}
 
         <Label className="mt-4 mb-1.5 block">Golf</Label>
         <div className="flex flex-col gap-1.5">

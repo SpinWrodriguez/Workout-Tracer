@@ -20,8 +20,15 @@ import { emptySet, newSessionId, type SessionDraft } from './sessions';
 /* -------------------------------------------------------------------------- */
 
 export const BLOCK_SCHEDULE_KEY = 'blockSchedule';
+export const BLOCK_PLAN_KEY = 'blockPlan';
 
-/** What a slot is: which weekday it lands on and how hard it is meant to be. */
+/**
+ * What a workout is: how hard it is meant to be, and the weekday it USUALLY
+ * falls on. "Usually" is the whole point — the weekday used to be the workout's
+ * only address, so moving Wednesday's session to Thursday moved it in every
+ * week that would ever exist. What happens on a particular date is a separate
+ * thing entirely; see DatePlan.
+ */
 export interface ScheduledDay {
   weekday: Weekday;
   intensity: Intensity;
@@ -46,7 +53,27 @@ export interface ScheduledDay {
 export type BlockSchedule = Partial<Record<DaySlot, ScheduledDay>>;
 export type ScheduleByBlock = Record<string, BlockSchedule>;
 
-const SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
+/* -------------------------------------------------------------------------- */
+/*  What is actually happening on a given date.                               */
+/*                                                                            */
+/*  The recurring pattern says where a workout usually falls; this says where  */
+/*  it fell in one particular week. An entry wins over the pattern, and null    */
+/*  is a decision rather than an absence: "nothing on this date", as against    */
+/*  "no opinion, use the usual day".                                          */
+/*                                                                            */
+/*  Without this layer the two questions are the same question, and rescheduling*/
+/*  one Wednesday rewrites every Wednesday from here to the end of the block.  */
+/* -------------------------------------------------------------------------- */
+
+export type DatePlan = Record<string, DaySlot | null>;
+export type PlanByBlock = Record<string, DatePlan>;
+
+/*
+ * Every workout id. Generated weeks still take A, B, C, X, Y in that order, so
+ * a week built by an older version lands on exactly the slots it always did;
+ * D-J are what "Add a day" reaches for once those are used.
+ */
+export const SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -95,10 +122,90 @@ export async function writeSchedule(blockId: string, schedule: BlockSchedule): P
   });
 }
 
-/** The day slot programmed for a given date, if any. */
-export function slotForDate(schedule: BlockSchedule, dateIso: string): DaySlot | undefined {
+/**
+ * What is programmed for one date: whatever was planned for that date, and
+ * otherwise whichever workout usually falls on that weekday. A null entry
+ * means the date was deliberately cleared, so the usual day does not creep
+ * back in.
+ */
+export function slotForDate(
+  schedule: BlockSchedule,
+  dateIso: string,
+  plan: DatePlan = {},
+): DaySlot | undefined {
+  const planned = plan[dateIso];
+  if (planned !== undefined) return planned ?? undefined;
   const weekday = weekdayOf(dateIso);
   return SLOTS.find((slot) => schedule[slot]?.weekday === weekday);
+}
+
+/**
+ * Puts one workout on one date, and nothing else. Anything already on that
+ * date is displaced, and the workout's own previous date that week is cleared,
+ * so dragging is a move rather than a copy.
+ */
+export function planDate(
+  plan: DatePlan,
+  schedule: BlockSchedule,
+  weekDates: string[],
+  slot: DaySlot | undefined,
+  dateIso: string,
+): DatePlan {
+  const next: DatePlan = { ...plan };
+
+  // Every date in the displayed week is pinned before anything moves. Without
+  // this the untouched days still resolve through the recurring pattern, so
+  // moving one session shuffles the others as a side effect.
+  for (const date of weekDates) {
+    if (next[date] === undefined) next[date] = slotForDate(schedule, date, plan) ?? null;
+  }
+
+  if (slot === undefined) {
+    next[dateIso] = null;
+    return next;
+  }
+  for (const date of weekDates) {
+    if (date !== dateIso && next[date] === slot) next[date] = null;
+  }
+  next[dateIso] = slot;
+  return next;
+}
+
+/** Makes a workout's usual weekday match where it currently sits. */
+export function setUsualWeekday(
+  schedule: BlockSchedule,
+  slot: DaySlot,
+  weekday: Weekday,
+): BlockSchedule {
+  return assignSlot(schedule, slot, weekday);
+}
+
+export function normalisePlan(value: unknown): PlanByBlock {
+  if (!isRecord(value)) return {};
+  const out: PlanByBlock = {};
+  for (const [blockId, dates] of Object.entries(value)) {
+    if (!isRecord(dates)) continue;
+    const map: DatePlan = {};
+    for (const [date, slot] of Object.entries(dates)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      if (slot === null) map[date] = null;
+      else if (typeof slot === 'string' && SLOTS.includes(slot as DaySlot)) {
+        map[date] = slot as DaySlot;
+      }
+    }
+    if (Object.keys(map).length > 0) out[blockId] = map;
+  }
+  return out;
+}
+
+export async function readPlans(): Promise<PlanByBlock> {
+  const row = await db.settings.get(BLOCK_PLAN_KEY);
+  return normalisePlan(row?.value);
+}
+
+export async function writePlan(blockId: string, plan: DatePlan): Promise<void> {
+  const all = await readPlans();
+  await db.settings.put({ key: BLOCK_PLAN_KEY, value: { ...all, [blockId]: plan } });
 }
 
 /** The inverse map: which slot, if any, is trained on each weekday. */
@@ -190,17 +297,25 @@ export function configFromSchedule(schedule: BlockSchedule): {
 export interface BlockPlan {
   block: Block;
   schedule: BlockSchedule;
+  /** What is planned on specific dates, overriding the usual weekdays. */
+  dates: DatePlan;
   entries: BlockExercise[];
 }
 
 export async function readBlockPlan(): Promise<BlockPlan | undefined> {
   const block = await db.block.orderBy('startDate').reverse().first();
   if (!block) return undefined;
-  const [schedules, entries] = await Promise.all([
+  const [schedules, plans, entries] = await Promise.all([
     readSchedules(),
+    readPlans(),
     db.blockExercise.where('blockId').equals(block.id).toArray(),
   ]);
-  return { block, schedule: schedules[block.id] ?? {}, entries };
+  return {
+    block,
+    schedule: schedules[block.id] ?? {},
+    dates: plans[block.id] ?? {},
+    entries,
+  };
 }
 
 export function entriesForSlot(entries: BlockExercise[], slot: DaySlot): BlockExercise[] {

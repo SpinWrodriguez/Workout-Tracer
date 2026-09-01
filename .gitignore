@@ -28,3 +28,6 @@ dev-dist
 
 # scratch driver scripts
 *.tmp.mjs
+
+# Local scratch space for verification scripts
+.scratch/

@@ -12,6 +12,9 @@ import {
   daysUntilWeekday,
   draftFromPlan,
   configFromSchedule,
+  normalisePlan,
+  planDate,
+  setUsualWeekday,
   entriesForSlot,
   nextSlot,
   normaliseSchedule,
@@ -369,5 +372,68 @@ describe('prescribing a hold', () => {
     await updateBlockExercise(row as BlockExercise, { repRangeHigh: 400 });
     const after = (await db.blockExercise.toArray()).find((e) => e.exerciseId === 'bb_back_squat');
     expect(after?.repRangeHigh).toBe(50);
+  });
+});
+
+/*
+ * The bug this guards: a workout's weekday used to be its only address, so
+ * rescheduling one Wednesday rewrote every Wednesday in the block.
+ */
+describe('moving a session in one week', () => {
+  const schedule: BlockSchedule = {
+    A: { weekday: 1, intensity: 'heavy' }, // Mon
+    B: { weekday: 3, intensity: 'heavy' }, // Wed
+  };
+  // A Monday-start week.
+  const week = [
+    '2026-08-31', '2026-09-01', '2026-09-02', '2026-09-03',
+    '2026-09-04', '2026-09-05', '2026-09-06',
+  ];
+
+  it('resolves a date from the usual weekday when nothing was planned', () => {
+    expect(slotForDate(schedule, '2026-09-02')).toBe('B');
+    expect(slotForDate(schedule, '2026-09-03')).toBeUndefined();
+  });
+
+  it('leaves every other week alone', () => {
+    // Wednesday's session pushed to Thursday, this week only.
+    const plan = planDate({}, schedule, week, 'B', '2026-09-03');
+    expect(slotForDate(schedule, '2026-09-03', plan)).toBe('B');
+    expect(slotForDate(schedule, '2026-09-02', plan)).toBeUndefined();
+
+    // Next Wednesday is untouched: the usual day never moved.
+    expect(slotForDate(schedule, '2026-09-09', plan)).toBe('B');
+  });
+
+  it('does not shuffle the sessions it was not asked to move', () => {
+    const plan = planDate({}, schedule, week, 'B', '2026-09-03');
+    expect(slotForDate(schedule, '2026-08-31', plan)).toBe('A');
+  });
+
+  it('displaces whatever was already on the target date', () => {
+    const plan = planDate({}, schedule, week, 'B', '2026-08-31');
+    expect(slotForDate(schedule, '2026-08-31', plan)).toBe('B');
+    // A is not silently doubled up on the same day.
+    expect(slotForDate(schedule, '2026-09-02', plan)).toBeUndefined();
+  });
+
+  it('clears a date without disturbing the pattern', () => {
+    const plan = planDate({}, schedule, week, undefined, '2026-09-02');
+    expect(slotForDate(schedule, '2026-09-02', plan)).toBeUndefined();
+    expect(slotForDate(schedule, '2026-09-09', plan)).toBe('B');
+  });
+
+  it('promotes a move to every week only when asked', () => {
+    const moved = setUsualWeekday(schedule, 'B', 4);
+    expect(slotForDate(moved, '2026-09-03')).toBe('B');
+    expect(slotForDate(moved, '2026-09-10')).toBe('B');
+    expect(slotForDate(moved, '2026-09-09')).toBeUndefined();
+  });
+
+  it('keeps only dates it understands', () => {
+    expect(normalisePlan({ b: { '2026-09-02': 'B', nonsense: 'B', '2026-09-03': 'ZZ' } })).toEqual({
+      b: { '2026-09-02': 'B' },
+    });
+    expect(normalisePlan({ b: { '2026-09-02': null } })).toEqual({ b: { '2026-09-02': null } });
   });
 });

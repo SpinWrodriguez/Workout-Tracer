@@ -26,16 +26,20 @@ import {
 import { readTraining, writeTraining, DEFAULT_TRAINING, type TrainingPrefs } from '../db/settings';
 import {
   addBlockExercise,
-  assignSlot,
   clearDaySlot,
   configFromSchedule,
   entriesForSlot,
   moveBlockExercise,
   orderedSlots,
+  planDate,
+  readPlans,
   readSchedules,
   removeBlockExercise,
-  slotsByWeekday,
+  SLOTS,
+  slotForDate,
+  setUsualWeekday,
   updateBlockExercise,
+  writePlan,
   writeSchedule,
   type BlockSchedule,
 } from '../lib/program';
@@ -46,7 +50,7 @@ import { Card, Chip, Empty, Label, Screen, SegmentedToggle } from '../components
 import { WeekStrip, type WeekStripDay } from '../components/WeekStrip';
 import { shiftIso, weekStart } from '../lib/format';
 
-const DAY_SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
+const DAY_SLOTS = SLOTS;
 const SESSION_COUNTS = ['2', '3', '4', '5'] as const;
 const SESSION_LENGTHS = ['30', '40', '60'] as const;
 type SessionLength = (typeof SESSION_LENGTHS)[number];
@@ -117,6 +121,11 @@ export function ProgramScreen({
     [block?.id],
     undefined,
   );
+  const datePlan = useLiveQuery(
+    async () => (block ? ((await readPlans())[block.id] ?? {}) : {}),
+    [block?.id],
+    undefined,
+  );
 
   const sessionRows = useLiveQuery(async () => {
     const start = weekStart(anchor);
@@ -178,14 +187,18 @@ export function ProgramScreen({
   const gripLabel = gripDays.map((day) => WEEKDAY_LABEL[day]).join(' and ');
 
   const week: WeekStripDay[] = useMemo(() => {
-    const planned = slotsByWeekday(schedule ?? {});
     return buildWeek({
       anchorDate: anchor,
       golfDays: golfDays ?? [],
       sessions: sessionRows ?? [],
       exercisesById: byId,
-    }).map((day) => ({ ...day, plannedSlot: planned[day.weekday] }));
-  }, [anchor, golfDays, sessionRows, byId, schedule]);
+    }).map((day) => ({
+      ...day,
+      // Resolved per date, so a session moved in one week shows as moved in
+      // that week and nowhere else.
+      plannedSlot: slotForDate(schedule ?? {}, day.date, datePlan ?? {}),
+    }));
+  }, [anchor, golfDays, sessionRows, byId, schedule, datePlan]);
 
   /** Slots the block actually defines, for the day editor's gym options. */
   const definedSlots = useMemo(
@@ -219,8 +232,28 @@ export function ProgramScreen({
     await writeSchedule(block.id, { ...stored, [slot]: next });
   };
 
-  const saveSchedule = async (next: BlockSchedule) => {
-    if (block) await writeSchedule(block.id, next);
+  const weekDates = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => shiftIso(weekStart(anchor), i)),
+    [anchor],
+  );
+
+  /** Moves a workout to one date. The recurring pattern is left alone. */
+  const movePlanned = async (slot: DaySlot | undefined, date: string) => {
+    if (!block) return;
+    const current = (await readPlans())[block.id] ?? {};
+    await writePlan(block.id, planDate(current, schedule ?? {}, weekDates, slot, date));
+  };
+
+  /** Promotes where a workout sits this week into where it always sits. */
+  const makeUsual = async (slot: DaySlot, date: string) => {
+    if (!block) return;
+    await writeSchedule(block.id, setUsualWeekday(schedule ?? {}, slot, weekdayOf(date)));
+    // The date entry has done its job; leaving it would pin this one week
+    // against a pattern that now agrees with it anyway.
+    const current = (await readPlans())[block.id] ?? {};
+    const cleaned = { ...current };
+    delete cleaned[date];
+    await writePlan(block.id, cleaned);
   };
 
   const violations = week.filter((day) => day.violation);
@@ -507,11 +540,11 @@ export function ProgramScreen({
           week={week}
           labelFor={labelFor}
           onPickDay={setEditingDate}
-          onMoveSlot={(slot, weekday) => void saveSchedule(assignSlot(schedule ?? {}, slot, weekday))}
+          onMoveSlot={(slot, date) => void movePlanned(slot, date)}
         />
         <p className="mt-3 text-[12px] font-medium text-text-dim">
-          Tap a day to set gym, golf or rest. Drag a session pill to move it — anything already on
-          that day swaps places with it.
+          Tap a day to set gym, golf or rest. Drag a session to move it — this week only. Its usual
+          day stays put unless you say otherwise.
         </p>
 
         {violations.length === 0 ? (
@@ -839,13 +872,13 @@ export function ProgramScreen({
           currentSlot={week.find((day) => day.date === editingDate)?.plannedSlot}
           golf={golfDays?.find((day) => day.date === editingDate)}
           onSetSlot={(slot) => {
-            const weekday = weekdayOf(editingDate);
-            if (slot === undefined) {
-              const current = week.find((day) => day.date === editingDate)?.plannedSlot;
-              if (current) void saveSchedule(assignSlot(schedule ?? {}, current, undefined));
-            } else {
-              void saveSchedule(assignSlot(schedule ?? {}, slot, weekday));
-            }
+            void movePlanned(slot, editingDate);
+            setEditingDate(null);
+          }}
+          usualLabel={`Do this every ${WEEKDAY_LABEL[weekdayOf(editingDate)]}`}
+          onSetUsual={() => {
+            const current = week.find((day) => day.date === editingDate)?.plannedSlot;
+            if (current) void makeUsual(current, editingDate);
             setEditingDate(null);
           }}
           onSetGolf={(status) => {

@@ -8,6 +8,7 @@ import {
   emptyDraft,
   entriesForSlot,
   readBlockPlan,
+  SLOTS,
   slotForDate,
   type BlockPlan,
 } from '../lib/program';
@@ -45,7 +46,7 @@ import { SetRow, type CellField } from '../components/SetRow';
 import { dayLabel } from '../lib/dayLabel';
 import { isTimed, rangeLabel, repUnitWord, stepFor } from '../lib/repUnit';
 
-const DAY_SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
+const DAY_SLOTS = SLOTS;
 
 function outcomeColor(outcome: Progression['outcome']): string {
   switch (outcome) {
@@ -151,7 +152,7 @@ export function SessionScreen({
       // today's programmed session just because one exists.
       const slot = freestyle
         ? undefined
-        : (daySlot ?? (blockPlan ? slotForDate(blockPlan.schedule, date) : undefined));
+        : (daySlot ?? (blockPlan ? slotForDate(blockPlan.schedule, date, blockPlan.dates) : undefined));
       const programmed =
         blockPlan && slot ? entriesForSlot(blockPlan.entries, slot).length > 0 : false;
 

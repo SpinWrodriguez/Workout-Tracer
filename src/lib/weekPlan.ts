@@ -1,6 +1,6 @@
 import { db } from '../db/db';
 import type { BlockExercise, DaySlot } from '../db/types';
-import { dateOfWeekday, type Weekday } from './golf';
+import { weekdayOf, type Weekday } from './golf';
 import { shiftIso, todayIso, weekStart } from './format';
 import { entriesForSlot, readBlockPlan, slotForDate } from './program';
 import type { Intensity } from './weekTemplate';
@@ -57,20 +57,35 @@ export async function readWeekPlan(): Promise<WeekPlan | undefined> {
     ]),
   ];
 
+  /*
+   * Resolve the week date by date rather than workout by workout. A workout's
+   * usual weekday is only a default now, so asking "where does this one fall"
+   * would miss the week where it was moved — asking "what is on this date"
+   * cannot.
+   */
+  const weekDates = Array.from({ length: 7 }, (_, i) => shiftIso(from, i));
+  const dateOf = new Map<DaySlot, string>();
+  for (const date of weekDates) {
+    const slot = slotForDate(plan.schedule, date, plan.dates);
+    if (slot !== undefined && !dateOf.has(slot)) dateOf.set(slot, date);
+  }
+
   const days: PlannedDay[] = slots
     .map((slot) => {
       const scheduled = plan.schedule[slot];
+      const date = dateOf.get(slot);
       return {
         slot,
-        weekday: scheduled?.weekday,
+        // Where it is THIS week if it is in it, otherwise where it usually is.
+        weekday: date ? weekdayOf(date) : scheduled?.weekday,
         intensity: scheduled?.intensity ?? ('heavy' as Intensity),
         entries: entriesForSlot(plan.entries, slot),
-        date: scheduled?.weekday ? dateOfWeekday(today, scheduled.weekday) : undefined,
+        date,
         done: loggedSlots.has(slot),
         name: scheduled?.name,
       };
     })
-    // Scheduled days in weekday order; anything unscheduled trails behind.
+    // This week in date order; anything not in it trails behind.
     .sort((a, b) => (a.weekday ?? 99) - (b.weekday ?? 99) || a.slot.localeCompare(b.slot));
 
   /*
@@ -86,7 +101,7 @@ export async function readWeekPlan(): Promise<WeekPlan | undefined> {
     days,
     next: (upcoming[0] ?? pending[0])?.slot,
     today,
-    todaySlot: slotForDate(plan.schedule, today),
+    todaySlot: slotForDate(plan.schedule, today, plan.dates),
     scheduled: Object.keys(plan.schedule).length > 0,
   };
 }
