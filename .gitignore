@@ -25,3 +25,6 @@ dist-ssr
 
 # vite-plugin-pwa dev output
 dev-dist
+
+# scratch driver scripts
+*.tmp.mjs

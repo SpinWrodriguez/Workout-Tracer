@@ -63,6 +63,41 @@ export function slotForDate(schedule: BlockSchedule, dateIso: string): DaySlot |
   return SLOTS.find((slot) => schedule[slot] === weekday);
 }
 
+/** The inverse map: which slot, if any, is trained on each weekday. */
+export function slotsByWeekday(schedule: BlockSchedule): Partial<Record<Weekday, DaySlot>> {
+  const out: Partial<Record<Weekday, DaySlot>> = {};
+  for (const slot of SLOTS) {
+    const weekday = schedule[slot];
+    if (weekday !== undefined) out[weekday] = slot;
+  }
+  return out;
+}
+
+/** Moves a slot to a weekday, evicting whatever already sat there. */
+export function assignSlot(
+  schedule: BlockSchedule,
+  slot: DaySlot,
+  weekday: Weekday | undefined,
+): BlockSchedule {
+  const next: BlockSchedule = { ...schedule };
+  if (weekday === undefined) {
+    delete next[slot];
+    return next;
+  }
+  // Two sessions cannot share a weekday, so the occupant swaps into the slot's
+  // old day if it had one, and is otherwise unscheduled.
+  const displaced = (Object.keys(next) as DaySlot[]).find(
+    (other) => other !== slot && next[other] === weekday,
+  );
+  const previous = next[slot];
+  next[slot] = weekday;
+  if (displaced) {
+    if (previous === undefined) delete next[displaced];
+    else next[displaced] = previous;
+  }
+  return next;
+}
+
 /** Slots in the order they are trained, for "what's next" style prompts. */
 export function orderedSlots(schedule: BlockSchedule): { slot: DaySlot; weekday: Weekday }[] {
   return SLOTS.filter((slot) => schedule[slot] !== undefined)

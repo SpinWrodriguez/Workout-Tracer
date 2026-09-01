@@ -6,6 +6,7 @@ import { EXERCISES } from '../db/seed/exercises';
 import type { BlockExercise } from '../db/types';
 import { generateBlock } from './blockBuilder';
 import {
+  assignSlot,
   daysUntilWeekday,
   draftFromPlan,
   entriesForSlot,
@@ -14,6 +15,7 @@ import {
   readBlockPlan,
   readSchedules,
   slotForDate,
+  slotsByWeekday,
   writeSchedule,
 } from './program';
 
@@ -146,5 +148,33 @@ describe('a generated block survives the round trip to a session', () => {
     const plan = await readBlockPlan();
     expect(entriesForSlot(plan?.entries ?? [], 'C')).toEqual([]);
     expect(draftFromPlan({ plan: plan!, slot: 'C', exercisesById: byId }).exercises).toEqual([]);
+  });
+});
+
+describe('editing the week by hand', () => {
+  it('inverts the schedule to weekday → slot', () => {
+    expect(slotsByWeekday({ A: 1, B: 4 })).toEqual({ 1: 'A', 4: 'B' });
+    expect(slotsByWeekday({})).toEqual({});
+  });
+
+  it('moves a slot to a free weekday', () => {
+    expect(assignSlot({ A: 1, B: 4 }, 'B', 5)).toEqual({ A: 1, B: 5 });
+  });
+
+  it('swaps when the target weekday is already taken', () => {
+    // Dropping A onto Thursday must not leave two sessions on one day.
+    expect(assignSlot({ A: 1, B: 4 }, 'A', 4)).toEqual({ A: 4, B: 1 });
+  });
+
+  it('unschedules the displaced slot when the mover had no day', () => {
+    expect(assignSlot({ B: 4 }, 'A', 4)).toEqual({ A: 4 });
+  });
+
+  it('clears a slot without touching the others', () => {
+    expect(assignSlot({ A: 1, B: 4 }, 'A', undefined)).toEqual({ B: 4 });
+  });
+
+  it('is a no-op when a slot is dropped back on its own day', () => {
+    expect(assignSlot({ A: 1, B: 4 }, 'A', 1)).toEqual({ A: 1, B: 4 });
   });
 });

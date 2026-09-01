@@ -125,20 +125,6 @@ export function ExercisePicker({
                       {exercise.loadMode === 'rpe_only' && ' · RPE only'}
                     </span>
                   </span>
-                  {exercise.gripLoad === 'high' && (
-                    <span
-                      className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-bg"
-                      style={{ background: 'var(--color-volume)' }}
-                      title="High grip load — the Phase 3 golf rule watches this"
-                    >
-                      GRIP
-                    </span>
-                  )}
-                  {exercise.isHinge && (
-                    <span className="shrink-0 rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-text-dim">
-                      HINGE
-                    </span>
-                  )}
                   <span className="shrink-0 text-text-dim">{already ? '✓' : '+'}</span>
                 </button>
                 {onInfo && (

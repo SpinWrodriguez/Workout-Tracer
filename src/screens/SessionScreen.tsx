@@ -611,9 +611,6 @@ export function SessionScreen({
                 <Label>bar {activeExercise.barWeight} kg</Label>
               )}
               {activeExercise.loadMode === 'rpe_only' && <Label>band — log RPE and reps only</Label>}
-              {activeExercise.gripLoad === 'high' && (
-                <Label className="text-volume!">high grip load</Label>
-              )}
               {activeExercise.isHinge && <Label>hinge — do this fresh</Label>}
             </div>
 

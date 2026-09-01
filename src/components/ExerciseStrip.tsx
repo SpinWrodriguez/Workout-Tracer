@@ -73,11 +73,6 @@ export function ExerciseStrip({
             </span>
             <span className="mt-0.5 block text-[9px] font-medium text-text-faint">
               {STATION_GLYPH[exercise.station]}
-              {exercise.gripLoad === 'high' && (
-                <span className="ml-1 text-volume" title="High grip load — golf-sensitive">
-                  grip
-                </span>
-              )}
             </span>
             {logged > 0 && (
               <span
