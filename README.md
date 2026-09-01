@@ -10,7 +10,7 @@ Phase 5 (AI block review, heart rate, Apple Health) is not started — see *What
 
 ```bash
 npm install
-npm run dev              # http://localhost:5173
+npm run dev              # http://localhost:5173/Workout-Tracer/
 npm run build            # typecheck + production build (emits the service worker)
 npm test                 # vitest — includes every phase's acceptance criteria
 npm run lint
