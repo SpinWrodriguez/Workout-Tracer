@@ -180,3 +180,102 @@ export function draftFromPlan({
 export function emptyDraft(blockId: string, slot: DaySlot, date = todayIso()): SessionDraft {
   return { id: newSessionId(date), blockId, daySlot: slot, date, exercises: [] };
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Hand-editing a block.                                                     */
+/*                                                                            */
+/*  The generator is a starting point, not a cage: every day can be built or   */
+/*  rewritten by hand. `order` is renormalised on every write so it stays a    */
+/*  dense 0..n-1 sequence no matter what was added or removed.                 */
+/* -------------------------------------------------------------------------- */
+
+const DEFAULT_TARGET_SETS = 3;
+const DEFAULT_REPS = { low: 8, high: 10 };
+
+async function renumber(blockId: string, slot: DaySlot): Promise<void> {
+  const rows = await db.blockExercise
+    .where('blockId')
+    .equals(blockId)
+    .filter((row) => row.daySlot === slot)
+    .toArray();
+  rows.sort((a, b) => a.order - b.order);
+  await db.blockExercise.bulkPut(rows.map((row, i) => ({ ...row, order: i })));
+}
+
+export async function addBlockExercise(
+  blockId: string,
+  slot: DaySlot,
+  exerciseId: string,
+): Promise<void> {
+  const existing = await db.blockExercise.get([blockId, exerciseId, slot]);
+  if (existing) return; // already on this day
+  const rows = await db.blockExercise.where('blockId').equals(blockId).toArray();
+  const order = rows.filter((row) => row.daySlot === slot).length;
+  await db.blockExercise.put({
+    blockId,
+    exerciseId,
+    daySlot: slot,
+    targetSets: DEFAULT_TARGET_SETS,
+    repRangeLow: DEFAULT_REPS.low,
+    repRangeHigh: DEFAULT_REPS.high,
+    order,
+  });
+}
+
+export async function removeBlockExercise(
+  blockId: string,
+  slot: DaySlot,
+  exerciseId: string,
+): Promise<void> {
+  await db.blockExercise.delete([blockId, exerciseId, slot]);
+  await renumber(blockId, slot);
+}
+
+export async function updateBlockExercise(
+  entry: BlockExercise,
+  patch: Partial<Pick<BlockExercise, 'targetSets' | 'repRangeLow' | 'repRangeHigh'>>,
+): Promise<void> {
+  const next = { ...entry, ...patch };
+  // A range that crosses over is meaningless; keep low at or below high.
+  if (next.repRangeLow > next.repRangeHigh) {
+    if (patch.repRangeLow !== undefined) next.repRangeHigh = next.repRangeLow;
+    else next.repRangeLow = next.repRangeHigh;
+  }
+  next.targetSets = Math.max(1, Math.min(10, next.targetSets));
+  next.repRangeLow = Math.max(1, Math.min(50, next.repRangeLow));
+  next.repRangeHigh = Math.max(1, Math.min(50, next.repRangeHigh));
+  await db.blockExercise.put(next);
+}
+
+/** Moves one exercise up or down within its day. */
+export async function moveBlockExercise(
+  blockId: string,
+  slot: DaySlot,
+  exerciseId: string,
+  direction: -1 | 1,
+): Promise<void> {
+  const rows = entriesForSlot(
+    await db.blockExercise.where('blockId').equals(blockId).toArray(),
+    slot,
+  );
+  const index = rows.findIndex((row) => row.exerciseId === exerciseId);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= rows.length) return;
+  const reordered = [...rows];
+  const [moved] = reordered.splice(index, 1);
+  reordered.splice(target, 0, moved as BlockExercise);
+  await db.blockExercise.bulkPut(reordered.map((row, i) => ({ ...row, order: i })));
+}
+
+/** Removes a whole day: its exercises and its place in the week. */
+export async function clearDaySlot(blockId: string, slot: DaySlot): Promise<void> {
+  const rows = await db.blockExercise.where('blockId').equals(blockId).toArray();
+  await db.blockExercise.bulkDelete(
+    rows.filter((row) => row.daySlot === slot).map((row) => [row.blockId, row.exerciseId, row.daySlot] as [string, string, string]),
+  );
+  const schedules = await readSchedules();
+  const schedule = schedules[blockId];
+  if (schedule?.[slot] !== undefined) {
+    await writeSchedule(blockId, assignSlot(schedule, slot, undefined));
+  }
+}

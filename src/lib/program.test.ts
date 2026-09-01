@@ -6,7 +6,9 @@ import { EXERCISES } from '../db/seed/exercises';
 import type { BlockExercise } from '../db/types';
 import { generateBlock } from './blockBuilder';
 import {
+  addBlockExercise,
   assignSlot,
+  clearDaySlot,
   daysUntilWeekday,
   draftFromPlan,
   entriesForSlot,
@@ -14,8 +16,11 @@ import {
   normaliseSchedule,
   readBlockPlan,
   readSchedules,
+  moveBlockExercise,
+  removeBlockExercise,
   slotForDate,
   slotsByWeekday,
+  updateBlockExercise,
   writeSchedule,
 } from './program';
 
@@ -176,5 +181,83 @@ describe('editing the week by hand', () => {
 
   it('is a no-op when a slot is dropped back on its own day', () => {
     expect(assignSlot({ A: 1, B: 4 }, 'A', 1)).toEqual({ A: 1, B: 4 });
+  });
+});
+
+describe('hand-editing a block', () => {
+  const base = (slot: 'A' | 'B', exerciseId: string, order: number): BlockExercise => ({
+    blockId: 'block_1',
+    exerciseId,
+    daySlot: slot,
+    targetSets: 3,
+    repRangeLow: 8,
+    repRangeHigh: 10,
+    order,
+  });
+
+  it('appends a new exercise at the end of its day', async () => {
+    await db.blockExercise.put(base('A', 'bb_back_squat', 0));
+    await addBlockExercise('block_1', 'A', 'bb_bench_press');
+    const rows = entriesForSlot(await db.blockExercise.toArray(), 'A');
+    expect(rows.map((r) => r.exerciseId)).toEqual(['bb_back_squat', 'bb_bench_press']);
+    expect(rows[1]).toMatchObject({ order: 1, targetSets: 3, repRangeLow: 8, repRangeHigh: 10 });
+  });
+
+  it('will not add the same exercise to a day twice', async () => {
+    await addBlockExercise('block_1', 'A', 'bb_back_squat');
+    await addBlockExercise('block_1', 'A', 'bb_back_squat');
+    expect(entriesForSlot(await db.blockExercise.toArray(), 'A')).toHaveLength(1);
+  });
+
+  it('closes the gap in order when one is removed', async () => {
+    for (const [i, id] of ['bb_back_squat', 'bb_bench_press', 'bb_rdl'].entries()) {
+      await db.blockExercise.put(base('A', id, i));
+    }
+    await removeBlockExercise('block_1', 'A', 'bb_bench_press');
+    const rows = entriesForSlot(await db.blockExercise.toArray(), 'A');
+    expect(rows.map((r) => r.exerciseId)).toEqual(['bb_back_squat', 'bb_rdl']);
+    expect(rows.map((r) => r.order)).toEqual([0, 1]);
+  });
+
+  it('reorders within the day and stops at the ends', async () => {
+    for (const [i, id] of ['bb_back_squat', 'bb_bench_press', 'bb_rdl'].entries()) {
+      await db.blockExercise.put(base('A', id, i));
+    }
+    await moveBlockExercise('block_1', 'A', 'bb_rdl', -1);
+    expect(entriesForSlot(await db.blockExercise.toArray(), 'A').map((r) => r.exerciseId)).toEqual([
+      'bb_back_squat',
+      'bb_rdl',
+      'bb_bench_press',
+    ]);
+    await moveBlockExercise('block_1', 'A', 'bb_back_squat', -1);
+    expect(entriesForSlot(await db.blockExercise.toArray(), 'A')[0]?.exerciseId).toBe(
+      'bb_back_squat',
+    );
+  });
+
+  it('keeps the rep range from crossing over', async () => {
+    const entry = base('A', 'bb_back_squat', 0);
+    await db.blockExercise.put(entry);
+    await updateBlockExercise(entry, { repRangeLow: 14 });
+    expect(await db.blockExercise.get(['block_1', 'bb_back_squat', 'A'])).toMatchObject({
+      repRangeLow: 14,
+      repRangeHigh: 14,
+    });
+  });
+
+  it('clamps sets to something a human would actually do', async () => {
+    const entry = base('A', 'bb_back_squat', 0);
+    await db.blockExercise.put(entry);
+    await updateBlockExercise(entry, { targetSets: 99 });
+    expect((await db.blockExercise.get(['block_1', 'bb_back_squat', 'A']))?.targetSets).toBe(10);
+  });
+
+  it('deleting a day clears its exercises and its place in the week', async () => {
+    await db.blockExercise.bulkPut([base('A', 'bb_back_squat', 0), base('B', 'bb_bench_press', 0)]);
+    await writeSchedule('block_1', { A: 1, B: 4 });
+    await clearDaySlot('block_1', 'A');
+    expect(entriesForSlot(await db.blockExercise.toArray(), 'A')).toEqual([]);
+    expect(entriesForSlot(await db.blockExercise.toArray(), 'B')).toHaveLength(1);
+    expect((await readSchedules()).block_1).toEqual({ B: 4 });
   });
 });

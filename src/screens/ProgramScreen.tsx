@@ -22,13 +22,21 @@ import {
   type SplitId,
 } from '../lib/blockBuilder';
 import {
+  addBlockExercise,
   assignSlot,
+  clearDaySlot,
+  entriesForSlot,
+  moveBlockExercise,
   readSchedules,
+  removeBlockExercise,
   slotsByWeekday,
+  updateBlockExercise,
   writeSchedule,
   type BlockSchedule,
 } from '../lib/program';
 import { DayEditor } from '../components/DayEditor';
+import { DaySlotCard } from '../components/DaySlotCard';
+import { ExercisePicker } from '../components/ExercisePicker';
 import { Card, Chip, Empty, Label, Screen, SegmentedToggle } from '../components/Layout';
 import { WeekStrip, type WeekStripDay } from '../components/WeekStrip';
 import { shiftIso, weekStart } from '../lib/format';
@@ -80,6 +88,8 @@ export function ProgramScreen({
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [split, setSplit] = useState<SplitId>('full_body');
   const [customDayTypes, setCustomDayTypes] = useState<DayType[]>(['upper', 'lower', 'full']);
+  const [editingSlot, setEditingSlot] = useState<DaySlot | null>(null);
+  const [addingTo, setAddingTo] = useState<DaySlot | null>(null);
 
   const block = useLiveQuery(() => db.block.orderBy('startDate').reverse().first(), [], undefined);
   const golfDays = useLiveQuery(() => db.golfDay.toArray(), [], undefined);
@@ -458,52 +468,57 @@ export function ProgramScreen({
       )}
 
       {DAY_SLOTS.map((slot) => {
-        const list = (slots ?? [])
-          .filter((s) => s.daySlot === slot)
-          .sort((a, b) => a.order - b.order);
-        if (list.length === 0) return null;
+        const list = entriesForSlot(slots ?? [], slot);
+        const isEditing = editingSlot === slot;
+        if (list.length === 0 && !isEditing) return null;
         const weekday = schedule?.[slot];
-        const isToday = weekday !== undefined && weekday === weekdayOf(todayIso());
         return (
-          <Card
+          <DaySlotCard
             key={slot}
-            title={`Day ${slot}`}
-            className="mt-3"
-            trailing={
-              <span className="flex items-center gap-2">
-                {weekday !== undefined && (
-                  <Label className={isToday ? 'text-text!' : ''}>
-                    {isToday ? 'today' : WEEKDAY_LABEL[weekday]}
-                  </Label>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onStartDay(slot)}
-                  className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold ${
-                    isToday ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
-                  }`}
-                >
-                  Start
-                </button>
-              </span>
-            }
-          >
-            {list.map((entry) => (
-              <div
-                key={entry.exerciseId}
-                className="flex items-baseline justify-between gap-3 py-1.5"
-              >
-                <span className="truncate text-[15px] font-medium">
-                  {byId.get(entry.exerciseId)?.name ?? entry.exerciseId}
-                </span>
-                <Label>
-                  {entry.targetSets} × {entry.repRangeLow}-{entry.repRangeHigh}
-                </Label>
-              </div>
-            ))}
-          </Card>
+            slot={slot}
+            weekday={weekday}
+            entries={list}
+            exercisesById={byId}
+            editing={isEditing}
+            isToday={weekday !== undefined && weekday === weekdayOf(todayIso())}
+            onToggleEdit={() => setEditingSlot(isEditing ? null : slot)}
+            onStart={() => onStartDay(slot)}
+            onAdd={() => setAddingTo(slot)}
+            onRemove={(exerciseId) => {
+              if (block) void removeBlockExercise(block.id, slot, exerciseId);
+            }}
+            onMove={(exerciseId, direction) => {
+              if (block) void moveBlockExercise(block.id, slot, exerciseId, direction);
+            }}
+            onUpdate={(entry, patch) => void updateBlockExercise(entry, patch)}
+            onClearDay={() => {
+              if (block && window.confirm(`Delete day ${slot} and everything in it?`)) {
+                void clearDaySlot(block.id, slot);
+                setEditingSlot(null);
+              }
+            }}
+          />
         );
       })}
+
+      {/* Building a block by hand starts here: claim the next free slot. */}
+      {block && (
+        <button
+          type="button"
+          onClick={() => {
+            const next = DAY_SLOTS.find(
+              (slot) => entriesForSlot(slots ?? [], slot).length === 0,
+            );
+            if (next) {
+              setEditingSlot(next);
+              setAddingTo(next);
+            }
+          }}
+          className="mt-3 h-11 w-full rounded-full bg-surface-2 text-sm font-medium text-text-dim"
+        >
+          Add a day
+        </button>
+      )}
 
       {(slots?.length ?? 0) === 0 && !preview && (
         <Card title="No day slots yet" className="mt-3">
@@ -513,6 +528,15 @@ export function ProgramScreen({
             progressive overload work.
           </p>
         </Card>
+      )}
+
+      {addingTo && block && (
+        <ExercisePicker
+          exercises={exercises}
+          selectedIds={entriesForSlot(slots ?? [], addingTo).map((entry) => entry.exerciseId)}
+          onPick={(exerciseId) => void addBlockExercise(block.id, addingTo, exerciseId)}
+          onClose={() => setAddingTo(null)}
+        />
       )}
 
       {editingDate && (
