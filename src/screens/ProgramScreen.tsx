@@ -4,7 +4,7 @@ import { db } from '../db/db';
 import type { DaySlot, Exercise, GolfDay, Muscle, MuscleId } from '../db/types';
 import { MUSCLES } from '../db/seed/muscles';
 import { friendlyDate, longDate, todayIso } from '../lib/format';
-import { WEEKDAY_LABEL, buildWeek, gripSafeWeekdays, weekdayOf, type Weekday } from '../lib/golf';
+import { WEEKDAY_LABEL, buildWeek, weekdayOf, type Weekday } from '../lib/golf';
 import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import { balanceSets, generateDay, type DayPlan } from '../lib/blockBuilder';
@@ -183,12 +183,6 @@ export function ProgramScreen({
   const heavyCount = effectiveHeavy.length;
   const heavyLabel = effectiveHeavy.map((day) => WEEKDAY_LABEL[day]).join(' and ');
 
-  /* Which of those days can actually carry grip work — computed, not claimed.
-     A heavy Thursday two days out from a round still loses it. */
-  const gripDays = effectiveHeavy.filter((day) =>
-    gripSafeWeekdays(training.golfWeekdays as never).includes(day),
-  );
-  const gripLabel = gripDays.map((day) => WEEKDAY_LABEL[day]).join(' and ');
 
   const week: WeekStripDay[] = useMemo(() => {
     return buildWeek({
@@ -610,16 +604,7 @@ export function ProgramScreen({
           onPickDay={setEditingDate}
           onMoveSlot={(slot, date) => void movePlanned(slot, date)}
         />
-        <p className="mt-3 text-[12px] font-medium text-text-dim">
-          Tap a day to set gym, golf or rest. Drag a session to move it — this week only. Its usual
-          day stays put unless you say otherwise.
-        </p>
-
-        {violations.length === 0 ? (
-          <p className="mt-2 text-[12px] font-medium text-text-dim">
-            No rule violations this week.
-          </p>
-        ) : (
+        {violations.length === 0 ? null : (
           <div className="mt-3 rounded-xl bg-surface-2 p-3">
             <p className="text-[13px] font-semibold" style={{ color: 'var(--color-rir-1)' }}>
               {violations.length} golf rule violation{violations.length === 1 ? '' : 's'}
@@ -677,11 +662,9 @@ export function ProgramScreen({
               ))}
             </div>
             <Label className="mt-1.5 block">
-              {heavyWeekdays === null
-                ? 'Balanced for you — the first two are heavy, the rest light.'
-                : heavyWeekdays.length === 0
-                  ? 'Every session light. A deload week — no day is compulsorily heavy.'
-                  : `${heavyLabel} heavy, the rest light.`}
+              {heavyWeekdays?.length === 0
+                ? 'All light — a deload week.'
+                : `${heavyLabel} heavy, the rest light.`}
             </Label>
 
             {Number(sessionsPerWeek) > maxSessionsFor(training.golfWeekdays as never) && (
@@ -742,9 +725,7 @@ export function ProgramScreen({
 
             {showAdvanced && (
               <>
-                <Label className="mt-3 block">
-                  Emphasise these muscles (balanced if none are picked)
-                </Label>
+                <Label className="mt-3 block">Emphasise</Label>
                 {(['upper', 'lower', 'core'] as const).map((region) => (
                   <div key={region} className="mt-2">
                     <Label className="mb-1.5 block">{REGION_LABEL[region]}</Label>
@@ -771,16 +752,6 @@ export function ProgramScreen({
               </>
             )}
 
-            <p className="mt-4 text-[12px] font-medium text-text-dim">
-              {heavyCount === 0
-                ? 'Every session is light and about 25 min.'
-                : `${heavyLabel} ${heavyCount === 1 ? 'is the heavy session' : 'are the heavy sessions'}; every other one is light and about 25 min.`}{' '}
-              {gripDays.length === 0
-                ? 'No session is both heavy and clear enough of your rounds to carry grip work.'
-                : `Grip work can only go on ${gripLabel}.`}{' '}
-              Golf days and the weekly set target live in Settings.
-            </p>
-
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
@@ -797,10 +768,7 @@ export function ProgramScreen({
                 Fill the empty days
               </button>
             </div>
-            <p className="mt-2 text-[12px] font-medium text-text-dim">
-              Filling only touches days that are still empty — anything you built or generated
-              already is left exactly as it is. Generate a single day from its own card below.
-            </p>
+
           </>
         ) : (
           <Empty>--</Empty>
@@ -834,9 +802,7 @@ export function ProgramScreen({
               {violation.message}
             </p>
           ))}
-          <p className="mt-2.5 text-[11px] font-medium text-text-faint">
-            Notes, not rules — ignore any of these you disagree with.
-          </p>
+
         </Card>
       )}
 
@@ -922,12 +888,8 @@ export function ProgramScreen({
       )}
 
       {(slots?.length ?? 0) === 0 && Object.keys(schedule ?? {}).length === 0 && (
-        <Card title="No days yet" className="mt-3">
+        <Card title="No workouts yet" className="mt-3">
           <Empty>--- sets</Empty>
-          <p className="mt-2 text-[13px] text-text-dim">
-            Set up the days above, then generate them one at a time or all at once. Exercises stay
-            fixed for the whole block — that is what makes progressive overload work.
-          </p>
         </Card>
       )}
 

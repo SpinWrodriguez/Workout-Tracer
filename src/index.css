@@ -73,13 +73,18 @@
 
 @layer theme {
   :root[data-theme='light'] {
-    --color-bg: #f2f2f5;
+    /* Tinted rather than neutral: a page of grey and white had no colour in
+       it at all, and a cool ground is what makes the orange read as an accent
+       instead of the only thing on screen. Elevation still runs UP to white. */
+    --color-bg: #e9edf6;
     --color-surface: #ffffff;
-    --color-surface-2: #eaeaef;
-    --color-border: #dedee4;
+    --color-surface-2: #dde3f1;
+    --color-border: #ccd4e6;
 
     --color-text: #0a0a0a;
-    --color-text-dim: #6b6b73;
+    /* Darkened with the tint: 12px labels sit on the chips as well as on white
+       cards, and the old value fell to 4.1:1 once the chips gained colour. */
+    --color-text-dim: #5f5f6a;
     --color-text-faint: #a0a0a8;
 
     --color-volume: #c1500f;

@@ -78,7 +78,8 @@ describe('palette parity', () => {
   });
 
   it('inverts the neutral ramp: grey page, white cards', () => {
-    expect(light.get('--color-bg')).toBe('#f2f2f5');
+    // The rule, not the literal: the page is darker than the cards, whatever
+    // hue the ground happens to be.
     expect(light.get('--color-surface')).toBe('#ffffff');
     // Elevation is still lightness, just the other way up.
     expect(luminance(light.get('--color-surface') as string)).toBeGreaterThan(
@@ -193,3 +194,25 @@ function contrast(a: string, b: string): number {
   const lb = luminance(b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
+
+describe('the light ground', () => {
+  it('is tinted rather than neutral grey', () => {
+    // "More colour" is only worth having if it is actually there: the page
+    // must not be a pure grey, and it must be cooler than it is warm.
+    const [r, g, bl] = ['#', ...(light.get('--color-bg') as string).slice(1).match(/../g)!].slice(1)
+      .map((pair) => parseInt(pair as string, 16));
+    expect(bl).toBeGreaterThan(r as number);
+    expect(bl as number).toBeGreaterThan(g as number);
+  });
+
+  it('keeps secondary text readable on the tinted chips', () => {
+    // The chips and inputs darkened along with the page, so the label colour
+    // on top of them has to be re-checked rather than assumed.
+    expect(
+      contrast(light.get('--color-text-dim') as string, light.get('--color-surface-2') as string),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrast(light.get('--color-text') as string, light.get('--color-bg') as string),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+});

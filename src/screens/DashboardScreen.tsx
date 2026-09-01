@@ -200,12 +200,7 @@ export function DashboardScreen({
             );
           })}
 
-          {!program?.scheduled && (
-            <p className="mt-3 text-[12px] font-medium text-text-dim">
-              No weekdays assigned yet — set up the days on Program to place these around your
-              rounds.
-            </p>
-          )}
+
         </Card>
       )}
 
@@ -280,9 +275,6 @@ export function DashboardScreen({
         ) : (
           <>
             <Empty>{EM_WEIGHT}</Empty>
-            <p className="mt-1 text-[12px] font-medium text-text-dim">
-              Import the nutrition backup in Settings to bring in the shared weigh-in history.
-            </p>
           </>
         )}
       </Card>

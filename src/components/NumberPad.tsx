@@ -242,7 +242,9 @@ export function NumberPad({
           className="h-12 rounded-xl text-sm font-medium text-text-dim"
           onClick={() => commit('close')}
         >
-          Close
+          {/* Not "Close": the screen header now owns that word, and two of them
+              on screen at once is a coin toss. */}
+          Hide
         </button>
       </div>
     </div>

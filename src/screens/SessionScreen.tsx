@@ -34,7 +34,7 @@ import {
   type DraftSet,
   type SessionDraft,
 } from '../lib/sessions';
-import { Card, Label, PrimaryCTA, Screen, SegmentedToggle } from '../components/Layout';
+import { Card, Label, Screen, SegmentedToggle } from '../components/Layout';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ExerciseDetail } from '../components/ExerciseDetail';
 import { ExerciseStrip } from '../components/ExerciseStrip';
@@ -98,6 +98,10 @@ export function SessionScreen({
   const [picking, setPicking] = useState(false);
   const [detailId, setDetailId] = useState<string | undefined>(undefined);
   const [cell, setCell] = useState<ActiveCell | null>(null);
+  /* What the draft looked like when it was loaded or last saved. Save is only
+     offered when it differs — a button that is always there is not a prompt,
+     it is furniture. */
+  const [baseline, setBaseline] = useState<string | undefined>(undefined);
   const [effortCell, setEffortCell] = useState<ActiveCell | null>(null);
   const [startedAt] = useState(() => Date.now());
   const [history, setHistory] = useState<Record<string, SetLog[]>>({});
@@ -132,6 +136,7 @@ export function SessionScreen({
         if (cancelled) return;
         if (existing) {
           setDraft(existing);
+          setBaseline(JSON.stringify(existing));
           setActiveId(existing.exercises[0]?.exerciseId);
           return;
         }
@@ -159,11 +164,14 @@ export function SessionScreen({
       if (blockPlan && slot && programmed) {
         const next = draftFromPlan({ plan: blockPlan, slot, exercisesById, date });
         setDraft(next);
+        setBaseline(JSON.stringify(next));
         setActiveId(next.exercises[0]?.exerciseId);
         return;
       }
 
-      setDraft(emptyDraft(blockPlan?.block.id ?? DEFAULT_BLOCK_ID, slot ?? 'A', date));
+      const blank = emptyDraft(blockPlan?.block.id ?? DEFAULT_BLOCK_ID, slot ?? 'A', date);
+      setBaseline(JSON.stringify(blank));
+      setDraft(blank);
       setPicking(true);
     })();
     return () => {
@@ -448,6 +456,8 @@ export function SessionScreen({
   );
 
   const loggedSets = draft ? countLoggedSets(draft) : 0;
+  /* Unsaved work is a comparison, not a hunch. */
+  const dirty = draft !== undefined && baseline !== undefined && JSON.stringify(draft) !== baseline;
 
   const handleSave = async () => {
     if (!draft || saving) return;
@@ -465,6 +475,7 @@ export function SessionScreen({
         },
         exercisesById,
       );
+      setBaseline(JSON.stringify(draft));
       onExit();
     } finally {
       setSaving(false);
@@ -531,10 +542,28 @@ export function SessionScreen({
     <>
       <Screen
         title="Workout"
-        pad={cell ? 'keypad' : 'cta'}
+        pad={cell ? 'keypad' : 'none'}
         trailing={
-          <span className="pb-1 text-[13px] font-medium text-text-dim">
-            {friendlyDate(draft.date)}
+          <span className="flex items-center gap-2 pb-1">
+            <span className="text-[13px] font-medium text-text-dim">
+              {friendlyDate(draft.date)}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  dirty &&
+                  loggedSets > 0 &&
+                  !window.confirm('Leave without saving? The sets you logged will be lost.')
+                ) {
+                  return;
+                }
+                onExit();
+              }}
+              className="rounded-full bg-surface-2 px-3.5 py-1.5 text-[13px] font-medium text-text-dim"
+            >
+              Close
+            </button>
           </span>
         }
         header={
@@ -826,27 +855,23 @@ export function SessionScreen({
             </button>
           )}
         </Card>
+
+        {/* At the end of the screen rather than pinned over it: a button that
+            is always in front of you is furniture, not a prompt. It appears
+            when there is something unsaved and goes away once there is not. */}
+        {dirty && loggedSets > 0 && (
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={saving}
+            className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
+          >
+            {saving ? 'Saving…' : `Save · ${loggedSets} sets`}
+          </button>
+        )}
       </Screen>
 
-      {!cell && (
-        <PrimaryCTA
-          onClick={handleSave}
-          disabled={saving || loggedSets === 0}
-          secondary={
-            <button
-              type="button"
-              onClick={onExit}
-              className="w-full py-1.5 text-[13px] font-medium text-text-dim"
-            >
-              Discard and go back
-            </button>
-          }
-        >
-          {loggedSets === 0
-            ? 'Log a set to save'
-            : `${sessionId ? 'Save changes' : 'Finish session'} · ${loggedSets} sets`}
-        </PrimaryCTA>
-      )}
+
 
       {padTarget && cell && (
         <NumberPad

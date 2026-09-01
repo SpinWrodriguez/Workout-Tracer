@@ -270,9 +270,7 @@ export function DaySlotCard({
             onBlur={() => onRename(typed.trim() || undefined)}
             className="mt-1 h-11 w-full rounded-xl bg-surface-2 px-3 text-[15px] font-medium outline-none placeholder:text-text-faint"
           />
-          <span className="label mt-1 block">
-            Leave it blank and the day names itself from what is in it.
-          </span>
+
         </label>
       )}
 

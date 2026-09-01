@@ -66,11 +66,7 @@ export function DayEditor({
 
         <Label className="mt-4 mb-1.5 block">Gym</Label>
         <div className="flex flex-col gap-1.5">
-          {slots.length === 0 && (
-            <p className="text-[13px] text-text-dim">
-              No day slots yet — generate a week above and they will show up here.
-            </p>
-          )}
+
           {slots.map((slot) =>
             option(currentSlot === slot, () => onSetSlot(slot), labelFor(slot)),
           )}
@@ -80,7 +76,6 @@ export function DayEditor({
         {/* Moving a session used to move it in every week that would ever
             exist. It now moves this date; making it the standing arrangement
             is a separate, deliberate thing. */}
-        <Label className="mt-2 block">Changes this date only.</Label>
         {currentSlot && onSetUsual && (
           <button
             type="button"

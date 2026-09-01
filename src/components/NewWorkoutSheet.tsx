@@ -107,10 +107,7 @@ export function NewWorkoutSheet({
         )}
       </div>
 
-      <p className="mt-5 text-[12px] leading-snug font-medium text-text-dim">
-        It goes in your workouts list. Put it in the week whenever you like — nothing is scheduled
-        until you say so, and the golf rule is checked against the day you pick.
-      </p>
+
     </Sheet>
   );
 }
