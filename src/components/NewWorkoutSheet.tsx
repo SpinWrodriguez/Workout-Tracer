@@ -32,13 +32,23 @@ export function NewWorkoutSheet({
   onCreate,
   onBlank,
   onClose,
+  onAsk,
+  modelAvailable = false,
+  asking = false,
+  askError,
 }: {
   onCreate: (focus: WorkoutFocus, intensity: Intensity) => void;
   onBlank: () => void;
   onClose: () => void;
+  /** Describe the session in words and let a model choose the exercises. */
+  onAsk?: (goal: string) => void;
+  modelAvailable?: boolean;
+  asking?: boolean;
+  askError?: string;
 }) {
   const [focus, setFocus] = useState<WorkoutFocus>('full');
   const [intensity, setIntensity] = useState<Intensity>('heavy');
+  const [goal, setGoal] = useState('');
 
   const row = (active: boolean, onClick: () => void, label: string, hint?: string) => (
     <button
@@ -88,6 +98,38 @@ export function NewWorkoutSheet({
         </div>
       }
     >
+      {onAsk && modelAvailable && (
+        <>
+          <Label className="mt-1 block">Ask for one</Label>
+          <textarea
+            rows={2}
+            value={goal}
+            onChange={(event) => setGoal(event.target.value)}
+            placeholder="Today I feel tired — something easy"
+            className="mt-1.5 w-full resize-none rounded-xl bg-surface-2 px-3 py-2.5 text-[15px] placeholder:text-text-faint"
+          />
+          <button
+            type="button"
+            disabled={asking || goal.trim().length < 3}
+            onClick={() => onAsk(goal)}
+            className="mt-2 h-11 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
+          >
+            {asking ? 'Thinking…' : 'Build it from that'}
+          </button>
+          {askError && (
+            <p className="mt-2 text-[12px] font-medium" style={{ color: 'var(--color-warn)' }}>
+              {askError}
+            </p>
+          )}
+          <Label className="mt-2 block">
+            It picks from your exercise list only, and every choice is checked against
+            the rules before it lands. Where it goes in the week is still up to you.
+          </Label>
+          <div className="mt-4 h-px bg-border" />
+          <Label className="mt-4 block">Or choose yourself</Label>
+        </>
+      )}
+
       <Label className="mt-1 block">Trains</Label>
       <div className="mt-2 flex flex-col gap-1.5">
         {WORKOUT_FOCUSES.map((option) =>

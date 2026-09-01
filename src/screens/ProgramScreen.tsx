@@ -47,6 +47,8 @@ import {
 } from '../lib/program';
 import { DayEditor } from '../components/DayEditor';
 import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
+import { isModelAvailable } from '../lib/askModel';
+import { generateAiWorkout, templateForAiWorkout, type AiWorkout } from '../lib/aiWorkout';
 import { DaySlotCard } from '../components/DaySlotCard';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { Card, Chip, Empty, Label, Screen, SegmentedToggle } from '../components/Layout';
@@ -85,6 +87,8 @@ export function ProgramScreen({
   const [showAdvanced, setShowAdvanced] = useState(false);
   /* Collapsed: the starter week is a shortcut, not the way the screen works. */
   const [showStarter, setShowStarter] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState<string | undefined>(undefined);
   const [training, setTraining] = useState<TrainingPrefs>(DEFAULT_TRAINING);
   /* What the schedule looked like when the controls last synced to it, so a
      choice being made right now is not stamped on mid-edit. */
@@ -529,6 +533,100 @@ export function ProgramScreen({
     setEditingSlot(slot);
   };
 
+  /**
+   * A workout described in words. The model chooses the exercises; everything
+   * about where it goes, what it may exclude and what it costs stays here.
+   *
+   * The proposal is validated on its own, against a template derived from the
+   * focus and intensity the model asked for — not against the stored week,
+   * because this workout has no day yet and a rule about placement cannot
+   * apply to something unplaced.
+   */
+  const askForWorkout = async (goal: string) => {
+    if (!block || asking) return;
+    const slot = freeSlot();
+    if (!slot) {
+      setAskError('Every workout slot in this block is taken.');
+      return;
+    }
+    setAsking(true);
+    setAskError(undefined);
+    try {
+      const current = await db.blockExercise.where('blockId').equals(block.id).toArray();
+      const stored = (await readSchedules())[block.id] ?? {};
+      const existing = orderedSlots(stored).map((entry) => ({
+        slot: entry.slot,
+        name: labelFor(entry.slot),
+        focus: stored[entry.slot]?.focus,
+        intensity: (stored[entry.slot]?.intensity ?? 'heavy') as 'heavy' | 'light',
+        exerciseIds: current
+          .filter((row) => row.daySlot === entry.slot)
+          .map((row) => row.exerciseId),
+      }));
+
+      const outcome = await generateAiWorkout({
+        blockId: block.id,
+        slot,
+        goal,
+        exercises,
+        existing,
+        validate: (workout: AiWorkout) => {
+          const template = templateForAiWorkout(workout, slot, Number(sessionMinutes));
+          return validateBlock(
+            { days: [{ slot, weekday: template.weekday, exercises: workout.exercises }] },
+            {
+              exercisesById: byId,
+              // Unplaced, so there is no date to be clear of. Assigning it to a
+              // day inside the buffer is what surfaces a grip conflict, and the
+              // week's rule check says so there.
+              golfWeekdays: [],
+              weeklySetTarget: training.weeklySetTarget,
+              sessionBudgetMinutes: Number(sessionMinutes),
+              hasHistory: hasHistory ?? false,
+              laddersFor: (exercise) => ladderFor(exercise, inventory),
+              template: [template],
+              nameFor: () => workout.name ?? `Day ${slot}`,
+            },
+          );
+        },
+      });
+
+      if (!outcome.ok) {
+        setAskError(outcome.reason);
+        return;
+      }
+
+      const template = templateForAiWorkout(outcome.workout, slot, Number(sessionMinutes));
+      await db.blockExercise.bulkPut(outcome.workout.exercises);
+      await writeSchedule(block.id, {
+        ...stored,
+        [slot]: {
+          intensity: outcome.workout.intensity,
+          focus: outcome.workout.focus,
+          variant: 0,
+          effortCue: template.effortCue,
+          generated: true,
+          // The model's name if it gave a usable one, otherwise derived from the
+          // contents exactly as a hand-made workout is.
+          name:
+            outcome.workout.name ??
+            describeDay(
+              outcome.workout.exercises
+                .map((entry) => byId.get(entry.exerciseId))
+                .filter((exercise): exercise is Exercise => exercise !== undefined),
+              outcome.workout.intensity,
+            ),
+        },
+      });
+      setCreating(false);
+      setEditingSlot(slot);
+    } catch (cause) {
+      setAskError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setAsking(false);
+    }
+  };
+
   /** An empty workout to fill by hand. */
   const createBlankWorkout = async () => {
     if (!block) return;
@@ -959,6 +1057,10 @@ export function ProgramScreen({
 
       {creating && (
         <NewWorkoutSheet
+          onAsk={(goal) => void askForWorkout(goal)}
+          modelAvailable={isModelAvailable()}
+          asking={asking}
+          askError={askError}
           onCreate={(focus, intensity) => {
             setCreating(false);
             void createWorkout(focus, intensity);

@@ -5,6 +5,7 @@ import { downloadBackup, importBackup, type ImportReport } from '../lib/backup';
 import { Card, Label, Screen } from '../components/Layout';
 import { InventoryEditor } from '../components/InventoryEditor';
 import { ThemePicker } from '../components/ThemePicker';
+import { ModelKeyEditor } from '../components/ModelKeyEditor';
 import { TrainingPrefsEditor } from '../components/TrainingPrefsEditor';
 import { NutritionSync } from '../components/NutritionSync';
 import { clearFreeDb, fetchAndStoreFreeDb, mappedIds, type EnrichReport } from '../lib/freeDb';
@@ -87,6 +88,10 @@ export function SettingsScreen() {
           immediately. If this is not the build you expect, close the app fully and reopen it.
         </p>
       </Card>
+
+      <div className="mt-3">
+        <ModelKeyEditor />
+      </div>
 
       <Card title="Backup" className="mt-3">
         <p className="text-[13px] text-text-dim">
