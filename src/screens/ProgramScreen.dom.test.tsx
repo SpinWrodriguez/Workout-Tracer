@@ -9,8 +9,11 @@
 
 import {
   BLOCK_ID,
+  confirmWith,
   exercises,
+  exercisesById,
   named,
+  seedPlan,
   seedSchedule,
   seedWorkout,
   user,
@@ -115,6 +118,100 @@ describe('making a workout', () => {
       expect(dayButton(dayOfThisWeek(offset)).getAttribute('aria-label')).not.toContain(
         created?.name,
       );
+    }
+  });
+});
+
+describe('placement is one week, not every week', () => {
+  it('does not give a generated workout a standing weekday', async () => {
+    /* The bug this replaced: generating four days wrote a weekday onto each
+       workout, and a weekday is the RECURRING address — so one press filled
+       every week the block would ever have. */
+    await seedSchedule({ A: { weekday: undefined, intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+    const { ui } = await openProgram();
+
+    const card = await workoutCard('Monday squats');
+    await ui.click(within(card).getByRole('button', { name: 'Edit' }));
+    confirmWith(true);
+    await ui.click(await screen.findByRole('button', { name: 'Regenerate' }));
+
+    await waitFor(async () => {
+      const stored = (await readSchedules())[BLOCK_ID]?.A;
+      expect(stored?.generated).toBe(true);
+    });
+    expect((await readSchedules())[BLOCK_ID]?.A?.weekday).toBeUndefined();
+    // And nothing appeared on the calendar off the back of it.
+    expect((await readPlans())[BLOCK_ID] ?? {}).toEqual({});
+  });
+
+  it('judges the golf rule by the date a workout sits on, not a stored weekday', async () => {
+    /* A high-grip lift two days before a round is the thing this app exists to
+       prevent. It has to keep working now that the weekday is derived from the
+       calendar rather than stored on the workout. */
+    const saturday = dayOfThisWeek(5);
+    await db.golfDay.put({ date: saturday, status: 'planned', holes: 18 });
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Deadlift day' } });
+    await seedWorkout('A', ['bb_deadlift']);
+    const { ui } = await openProgram();
+
+    // Unplaced: there is no date, so there is nothing to be clear of.
+    expect(screen.queryByRole('heading', { name: 'Worth fixing' })).toBeNull();
+
+    // Put it on the Thursday before the round and the rule speaks.
+    await ui.click(dayButton(THURSDAY));
+    const sheet = await screen.findByRole('heading', {
+      name: WEEKDAY_LABEL[weekdayOf(THURSDAY)],
+    });
+    await ui.click(
+      await within(sheet.parentElement as HTMLElement).findByRole('button', {
+        name: 'Deadlift day',
+      }),
+    );
+
+    const problems = await screen.findByRole('heading', { name: 'Worth fixing' });
+    expect((problems.closest('section') as HTMLElement).textContent).toMatch(/round/i);
+  });
+
+  it('builds a workout clear of grip work when its date sits before a round', async () => {
+    /* Not merely flagged afterwards — excluded up front. The generator is told
+       what the day allows, and the day is known from the DATE it is planned on
+       in the week being looked at. */
+    await db.golfDay.put({ date: dayOfThisWeek(5), status: 'planned', holes: 18 });
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Thursday session' } });
+    await seedWorkout('A', ['bb_deadlift']);
+    await seedPlan({ [THURSDAY]: 'A' });
+    const { ui } = await openProgram();
+
+    const card = await workoutCard('Thursday session');
+    await ui.click(within(card).getByRole('button', { name: 'Edit' }));
+    confirmWith(true);
+    await ui.click(await screen.findByRole('button', { name: 'Regenerate' }));
+
+    await waitFor(async () => {
+      const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
+      expect(rows.some((row) => row.exerciseId !== 'bb_deadlift')).toBe(true);
+    });
+    const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
+    const grippy = rows.filter((row) => exercisesById.get(row.exerciseId)?.gripLoad === 'high');
+    expect(grippy.map((row) => named(row.exerciseId))).toEqual([]);
+  });
+});
+
+describe('the starter week', () => {
+  it('is gone — the screen is workouts and a calendar', async () => {
+    await openProgram();
+    /* It made workouts AND placed them in one press, which is the conflation
+       every other part of this screen was untangled to avoid. */
+    for (const gone of [
+      'Build a starter week',
+      'Set up the days',
+      'Fill the empty days',
+      'Sessions per week',
+      'Heavy days',
+      'Session length',
+    ]) {
+      expect(screen.queryByText(gone)).toBeNull();
     }
   });
 });

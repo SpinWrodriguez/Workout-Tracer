@@ -6,7 +6,12 @@ import {
   type TrainingPrefs,
 } from '../db/settings';
 import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
-import { Card, Chip, Label } from './Layout';
+import {
+  SESSION_SHAPES,
+  SESSION_SHAPE_HINT,
+  SESSION_SHAPE_LABEL,
+} from '../lib/weekTemplate';
+import { Card, Chip, Label, SegmentedToggle } from './Layout';
 
 /* -------------------------------------------------------------------------- */
 /*  Training preferences: set once, rarely changed.                           */
@@ -17,6 +22,9 @@ import { Card, Chip, Label } from './Layout';
 /* -------------------------------------------------------------------------- */
 
 const WEEKEND: Weekday[] = [6, 7];
+
+const SESSION_LENGTHS = ['30', '40', '60'] as const;
+const SESSION_LENGTH_LABEL = { '30': '30 min', '40': '40 min', '60': '60 min' };
 
 export function TrainingPrefsEditor() {
   const [prefs, setPrefs] = useState<TrainingPrefs | null>(null);
@@ -64,6 +72,31 @@ export function TrainingPrefsEditor() {
           </Chip>
         ))}
       </div>
+
+      <Label className="mt-4 block">Session length</Label>
+      <p className="mt-1 text-[13px] text-text-dim">
+        The time budget every generated workout is built to fit. It was on the Program screen,
+        re-answered every time even though the answer never changes.
+      </p>
+      <div className="mt-1.5">
+        <SegmentedToggle
+          options={SESSION_LENGTHS}
+          value={String(prefs.sessionMinutes) as (typeof SESSION_LENGTHS)[number]}
+          onChange={(next) => patch({ sessionMinutes: Number(next) })}
+          labels={SESSION_LENGTH_LABEL}
+        />
+      </div>
+
+      <Label className="mt-4 block">Split</Label>
+      <div className="mt-1.5">
+        <SegmentedToggle
+          options={SESSION_SHAPES}
+          value={prefs.shape}
+          onChange={(next) => patch({ shape: next })}
+          labels={SESSION_SHAPE_LABEL}
+        />
+      </div>
+      <Label className="mt-1.5 block">{SESSION_SHAPE_HINT[prefs.shape]}</Label>
 
       <Label className="mt-4 block">Weekly set target</Label>
       <div className="mt-1.5 flex items-center gap-2">

@@ -70,7 +70,6 @@ export function DaySlotCard({
   onClearDay,
   onGenerate,
   onShuffle,
-  canGenerate,
   generated,
   label,
   customName,
@@ -92,7 +91,6 @@ export function DaySlotCard({
   onGenerate: () => void;
   onShuffle: () => void;
   /** False when the day has no weekday yet, so there is nothing to build to. */
-  canGenerate: boolean;
   /** This day came out of the generator, so re-rolling it costs nothing. */
   generated: boolean;
   /** What to show: a name the user typed, or one derived from the exercises. */
@@ -148,15 +146,13 @@ export function DaySlotCard({
       {entries.length === 0 && (
         <>
           <Empty>--- sets</Empty>
-          {canGenerate && (
-            <button
-              type="button"
-              onClick={onGenerate}
-              className="mt-3 h-11 w-full rounded-full bg-cta font-semibold text-bg"
-            >
-              Build this workout
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onGenerate}
+            className="mt-3 h-11 w-full rounded-full bg-cta font-semibold text-bg"
+          >
+            Build this workout
+          </button>
         </>
       )}
 
@@ -245,7 +241,7 @@ export function DaySlotCard({
 
       {/* Offered only on a generated workout: it re-rolls the draw, and on one
           built by hand that would silently throw the work away. */}
-      {!editing && entries.length > 0 && generated && canGenerate && (
+      {!editing && entries.length > 0 && generated && (
         <button
           type="button"
           onClick={onShuffle}
@@ -283,7 +279,7 @@ export function DaySlotCard({
           >
             Add exercise
           </button>
-          {canGenerate && entries.length > 0 && (
+          {entries.length > 0 && (
             <button
               type="button"
               onClick={onGenerate}

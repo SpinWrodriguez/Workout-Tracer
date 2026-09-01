@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import type { DaySlot, Exercise, GolfDay, Muscle, MuscleId } from '../db/types';
-import { MUSCLES } from '../db/seed/muscles';
+import type { DaySlot, Exercise, GolfDay } from '../db/types';
 import { friendlyDate, longDate, todayIso } from '../lib/format';
 import { WEEKDAY_LABEL, buildWeek, weekdayOf, type Weekday } from '../lib/golf';
 import { readInventory } from '../db/settings';
@@ -17,28 +16,18 @@ import {
 } from '../lib/blockValidation';
 import { dayLabel, describeDay, shortDayLabels } from '../lib/dayLabel';
 import {
-  DEFAULT_THIRD_DAY,
-  MAX_SESSIONS,
-  maxSessionsFor,
   templateDayFor,
-  templateWeek,
-  templateWeekdays,
   workoutTemplate,
   type WorkoutFocus,
-  SESSION_SHAPES,
-  SESSION_SHAPE_HINT,
-  SESSION_SHAPE_LABEL,
-  type SessionShape,
   type TemplateDay,
 } from '../lib/weekTemplate';
-import { readTraining, writeTraining, DEFAULT_TRAINING, type TrainingPrefs } from '../db/settings';
+import { readTraining, DEFAULT_TRAINING, type TrainingPrefs } from '../db/settings';
 import {
   addBlockExercise,
   clearDaySlot,
-  configFromSchedule,
+  definedSlotsOf,
   entriesForSlot,
   moveBlockExercise,
-  orderedSlots,
   planDate,
   readPlans,
   readSchedules,
@@ -49,7 +38,6 @@ import {
   updateBlockExercise,
   writePlan,
   writeSchedule,
-  type BlockSchedule,
 } from '../lib/program';
 import { DayEditor } from '../components/DayEditor';
 import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
@@ -59,20 +47,11 @@ import { briefPayload, buildBrief, undertrained, type DayConstraints } from '../
 import { readAiInstructions } from '../db/settings';
 import { DaySlotCard } from '../components/DaySlotCard';
 import { ExercisePicker } from '../components/ExercisePicker';
-import { Card, Chip, Empty, Label, Screen, SegmentedToggle } from '../components/Layout';
+import { Card, Empty, Label, Screen } from '../components/Layout';
 import { WeekStrip, type WeekStripDay } from '../components/WeekStrip';
 import { shiftIso, weekStart } from '../lib/format';
 
 const DAY_SLOTS = SLOTS;
-const SESSION_COUNTS = ['2', '3', '4', '5'] as const;
-const SESSION_LENGTHS = ['30', '40', '60'] as const;
-type SessionLength = (typeof SESSION_LENGTHS)[number];
-
-const REGION_LABEL: Record<Muscle['region'], string> = {
-  upper: 'Upper',
-  lower: 'Lower',
-  core: 'Core',
-};
 
 export function ProgramScreen({
   exercises,
@@ -82,25 +61,10 @@ export function ProgramScreen({
   onStartDay: (slot: DaySlot) => void;
 }) {
   const [anchor, setAnchor] = useState(() => todayIso());
-  const [sessionsPerWeek, setSessionsPerWeek] = useState<(typeof SESSION_COUNTS)[number]>('2');
-  const [sessionMinutes, setSessionMinutes] = useState<SessionLength>('40');
-  const [focus, setFocus] = useState<MuscleId[]>([]);
-  /* Which draw each day is showing. Its presence is also what says "this day
-     came from the generator", which is what earns it a Shuffle button. */
   const [editingDate, setEditingDate] = useState<string | null>(null);
-  const [thirdDay] = useState<number>(DEFAULT_THIRD_DAY);
-  /* null means the app balances it; an empty array means every session light. */
-  const [heavyWeekdays, setHeavyWeekdays] = useState<Weekday[] | null>(null);
-  const [shape, setShape] = useState<SessionShape>('mixed');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  /* Collapsed: the starter week is a shortcut, not the way the screen works. */
-  const [showStarter, setShowStarter] = useState(false);
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState<string | undefined>(undefined);
   const [training, setTraining] = useState<TrainingPrefs>(DEFAULT_TRAINING);
-  /* What the schedule looked like when the controls last synced to it, so a
-     choice being made right now is not stamped on mid-edit. */
-  const [seenSchedule, setSeenSchedule] = useState<string | undefined>(undefined);
   const [editingSlot, setEditingSlot] = useState<DaySlot | null>(null);
   const [addingTo, setAddingTo] = useState<DaySlot | null>(null);
   const [creating, setCreating] = useState(false);
@@ -112,11 +76,7 @@ export function ProgramScreen({
       if (!cancelled) setInventory(next);
     });
     void readTraining().then((next) => {
-      if (!cancelled) {
-        setTraining(next);
-        setSessionMinutes(String(next.sessionMinutes) as SessionLength);
-        setShape(next.shape);
-      }
+      if (!cancelled) setTraining(next);
     });
     return () => {
       cancelled = true;
@@ -160,42 +120,11 @@ export function ProgramScreen({
 
   const byId = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
 
-  /* The days this many sessions lands on, so the heavy picker can list them. */
-  const sessionWeekdays = useMemo(
-    () =>
-      templateWeekdays(
-        Number(sessionsPerWeek),
-        training.golfWeekdays as never,
-        thirdDay as never,
-      ),
-    [sessionsPerWeek, training.golfWeekdays, thirdDay],
-  );
-
-  /*
-   * The controls are a view of the program, not a fresh form. Opening Program
-   * with three days scheduled and being told "2 sessions, Mon and Tue heavy"
-   * describes somebody else's week — and generating from it would quietly
-   * rebuild yours to match.
-   *
-   * Re-synced only when the stored schedule actually changes, so a selection
-   * being made right now survives until it is applied or abandoned.
-   */
-  const fromSchedule = configFromSchedule(schedule ?? {});
-  const scheduleKey = JSON.stringify(fromSchedule);
-  if (fromSchedule && scheduleKey !== seenSchedule) {
-    setSeenSchedule(scheduleKey);
-    setSessionsPerWeek(
-      String(
-        Math.max(2, Math.min(fromSchedule.sessionsPerWeek, MAX_SESSIONS)),
-      ) as (typeof SESSION_COUNTS)[number],
-    );
-    setHeavyWeekdays(fromSchedule.heavyWeekdays);
-  }
-
-  const effectiveHeavy = heavyWeekdays ?? sessionWeekdays.slice(0, 2);
-  const heavyCount = effectiveHeavy.length;
-  const heavyLabel = effectiveHeavy.map((day) => WEEKDAY_LABEL[day]).join(' and ');
-
+  /* Session length and split shape are training preferences, edited in
+     Settings. They were on this screen as part of the starter week, which put
+     two program-wide settings inside a shortcut nobody had to use. */
+  const sessionMinutes = training.sessionMinutes;
+  const shape = training.shape;
 
   const week: WeekStripDay[] = useMemo(() => {
     return buildWeek({
@@ -211,10 +140,14 @@ export function ProgramScreen({
     }));
   }, [anchor, golfDays, sessionRows, byId, schedule, datePlan]);
 
-  /** Slots the block actually defines, for the day editor's gym options. */
+  /**
+   * Every workout this block defines, placed or not. Read from the schedule as
+   * well as the exercise rows, so a workout made and not yet filled in still
+   * has a name, an effort, and a place in the day editor's list.
+   */
   const definedSlots = useMemo(
-    () => [...new Set((slots ?? []).map((entry) => entry.daySlot))].sort(),
-    [slots],
+    () => definedSlotsOf(schedule ?? {}, slots ?? []),
+    [schedule, slots],
   );
 
   /**
@@ -280,8 +213,6 @@ export function ProgramScreen({
 
   const violations = week.filter((day) => day.violation);
 
-  const focusOrDefault = focus.length > 0 ? focus : (block?.focusMuscles ?? []);
-
   const setGolf = async (date: string, status: GolfDay['status'] | undefined) => {
     if (status === undefined) await db.golfDay.delete(date);
     else {
@@ -290,74 +221,72 @@ export function ProgramScreen({
     }
   };
 
-  /* The week the settings above describe: which slots exist, on which day, at
-     what effort. Exercises are nobody's business here. */
-  const templateDays = useMemo(
+  /**
+   * Where a workout sits in the week ON SCREEN, if it sits anywhere. This is
+   * the only address that matters now: placement is a date, so the answer
+   * differs from week to week and that is the point.
+   */
+  const dateFor = (slot: DaySlot): string | undefined =>
+    week.find((day) => day.plannedSlot === slot)?.date;
+
+  /** The workouts on the visible week, in the order they are trained. */
+  const placedSlots = useMemo(
     () =>
-      templateWeek({
-        sessionsPerWeek: Number(sessionsPerWeek),
-        shape,
-        thirdDay: thirdDay as never,
-        heavyWeekdays: heavyWeekdays ?? undefined,
-        golfWeekdays: training.golfWeekdays as never,
-        minutesPerSession: Number(sessionMinutes),
-      }),
-    [sessionsPerWeek, shape, thirdDay, heavyWeekdays, training.golfWeekdays, sessionMinutes],
+      week
+        .map((day) => day.plannedSlot)
+        .filter((slot): slot is DaySlot => slot !== undefined),
+    [week],
   );
 
   /**
-   * The constraints one slot should be generated under. The schedule wins over
-   * the template wherever they disagree, because a day dragged to Thursday has
-   * Thursday's grip clearance whatever the template originally intended.
+   * The constraints one workout should be generated and judged under.
+   *
+   * The weekday comes from the DATE it is planned on in the week being looked
+   * at — not from a stored weekday and not from a template's idea of where a
+   * third session goes. A workout dragged to Thursday has Thursday's grip
+   * clearance, and next week it may be somewhere else entirely.
    */
-  const templateFor = (slot: DaySlot): TemplateDay | undefined => {
-    const fromWeek = templateDays.find((day) => day.slot === slot);
+  const templateFor = (slot: DaySlot): TemplateDay => {
     const scheduled = schedule?.[slot];
-    const weekday = scheduled?.weekday ?? fromWeek?.weekday;
-    if (weekday === undefined) return undefined;
-    const intensity = scheduled?.intensity ?? fromWeek?.intensity ?? 'heavy';
+    const intensity = scheduled?.intensity ?? 'heavy';
+    const date = dateFor(slot);
+    const weekday = date !== undefined ? weekdayOf(date) : scheduled?.weekday;
 
-    // Position among the days of the same effort picks the pattern set, so a
-    // second heavy day complements the first rather than repeating it.
-    const peers = orderedSlots(schedule ?? {}).filter(
-      (entry) => (schedule?.[entry.slot]?.intensity ?? 'heavy') === intensity,
+    /*
+     * Unplaced. There is no date, so there is nothing for the golf rule to be
+     * clear of — and inventing a weekday to satisfy it is exactly how a lat
+     * pulldown once passed validation two days before a round. Assigning the
+     * workout to a day is what surfaces a conflict, which is where it belongs.
+     */
+    if (weekday === undefined) {
+      return workoutTemplate({
+        slot,
+        // 'full' for a workout made before focus was stored: it is the only
+        // honest default, since the day covers everything and nothing.
+        focus: scheduled?.focus ?? 'full',
+        intensity,
+        minutesPerSession: sessionMinutes,
+      });
+    }
+
+    // Position among the workouts of the same effort picks the pattern set, so
+    // a second heavy day complements the first rather than repeating it.
+    const peers = placedSlots.filter(
+      (other) => (schedule?.[other]?.intensity ?? 'heavy') === intensity,
     );
-    const fromSchedule = peers.findIndex((entry) => entry.slot === slot);
-    const index =
-      fromSchedule >= 0
-        ? fromSchedule
-        : templateDays.filter((day) => day.intensity === intensity).findIndex((day) => day.slot === slot);
 
     return templateDayFor({
       slot,
       weekday,
       intensity,
-      // Ask for what the workout was made to be. Absent on older workouts, and
-      // templateDayFor falls back to inferring from the week for those.
+      // What the workout was made to be. Absent on ones made before this was
+      // stored; templateDayFor falls back to inferring from the weekday there.
       focus: scheduled?.focus,
-      index: Math.max(0, index),
+      index: Math.max(0, peers.indexOf(slot)),
       shape,
-      minutesPerSession: Number(sessionMinutes),
+      minutesPerSession: sessionMinutes,
       golfWeekdays: training.golfWeekdays as never,
     });
-  };
-
-  /** Lays out the week without filling anything in: slots, days, effort. */
-  const setUpWeek = async () => {
-    if (!block) return;
-    const next: BlockSchedule = { ...(schedule ?? {}) };
-    for (const day of templateDays) {
-      next[day.slot] = {
-        // Spread first: laying the week out again must not forget that a day
-        // was generated, or its Shuffle button vanishes.
-        ...(next[day.slot] ?? {}),
-        weekday: day.weekday,
-        intensity: day.intensity,
-        effortCue: day.effortCue,
-      };
-    }
-    await writeSchedule(block.id, next);
-    await db.block.put({ ...block, focusMuscles: focusOrDefault });
   };
 
   /** Builds one day in memory. Writes nothing — see writeDay. */
@@ -368,7 +297,7 @@ export function ProgramScreen({
     return generateDay({
       blockId: block.id,
       exercises,
-      focusMuscles: focusOrDefault,
+      focusMuscles: block.focusMuscles ?? [],
       template,
       exclude,
       variant,
@@ -376,10 +305,14 @@ export function ProgramScreen({
     });
   };
 
-  /** Replaces one slot's exercises and its place in the week. Nothing else. */
+  /**
+   * Replaces one workout's exercises. It does NOT place it: writing a weekday
+   * here is what put a workout into every week that would ever exist, so
+   * generating four days filled the whole calendar instead of one week.
+   */
   const writeDay = async (day: DayPlan, variant: number) => {
     if (!block) return;
-    await db.transaction('rw', [db.block, db.blockExercise], async () => {
+    await db.transaction('rw', [db.blockExercise], async () => {
       const stale = (await db.blockExercise.where('blockId').equals(block.id).toArray()).filter(
         (entry) => entry.daySlot === day.slot,
       );
@@ -389,7 +322,6 @@ export function ProgramScreen({
         ),
       );
       await db.blockExercise.bulkPut(day.exercises);
-      await db.block.put({ ...block, focusMuscles: focusOrDefault });
     });
     // Read fresh: this runs in a loop, and the live query lags behind it.
     const stored = (await readSchedules())[block.id] ?? {};
@@ -402,7 +334,6 @@ export function ProgramScreen({
          * first regenerate, which quietly undid the whole point of storing it.
          */
         ...stored[day.slot],
-        weekday: day.weekday,
         intensity: day.intensity,
         effortCue: day.effortCue,
         generated: true,
@@ -506,13 +437,13 @@ export function ProgramScreen({
       slot,
       focus,
       intensity,
-      minutesPerSession: Number(sessionMinutes),
+      minutesPerSession: sessionMinutes,
     });
     const current = await db.blockExercise.where('blockId').equals(block.id).toArray();
     const day = generateDay({
       blockId: block.id,
       exercises,
-      focusMuscles: focusOrDefault,
+      focusMuscles: block.focusMuscles ?? [],
       template,
       // Complements what the other workouts hold, without touching them.
       exclude: current.map((entry) => entry.exerciseId),
@@ -562,14 +493,18 @@ export function ProgramScreen({
     try {
       const current = await db.blockExercise.where('blockId').equals(block.id).toArray();
       const stored = (await readSchedules())[block.id] ?? {};
-      const existing = orderedSlots(stored).map((entry) => ({
-        slot: entry.slot,
-        name: labelFor(entry.slot),
-        focus: stored[entry.slot]?.focus,
-        intensity: (stored[entry.slot]?.intensity ?? 'heavy') as 'heavy' | 'light',
-        exerciseIds: current
-          .filter((row) => row.daySlot === entry.slot)
-          .map((row) => row.exerciseId),
+      /*
+       * Every workout in the block, placed or not. It used to read only the
+       * placed ones, which was fine while generating also placed — now that it
+       * does not, that filter would have hidden the whole block from the model
+       * and had it propose the same session over and over.
+       */
+      const existing = definedSlotsOf(stored, current).map((other) => ({
+        slot: other,
+        name: labelFor(other),
+        focus: stored[other]?.focus,
+        intensity: (stored[other]?.intensity ?? 'heavy') as 'heavy' | 'light',
+        exerciseIds: current.filter((row) => row.daySlot === other).map((row) => row.exerciseId),
       }));
 
       /*
@@ -627,7 +562,7 @@ export function ProgramScreen({
           const template = templateForAiWorkout(
             workout,
             slot,
-            Number(sessionMinutes),
+            sessionMinutes,
             placed,
           );
           return validateBlock(
@@ -655,7 +590,7 @@ export function ProgramScreen({
                */
               golfWeekdays: forDate ? (training.golfWeekdays as never) : [],
               weeklySetTarget: training.weeklySetTarget,
-              sessionBudgetMinutes: Number(sessionMinutes),
+              sessionBudgetMinutes: sessionMinutes,
               hasHistory: hasHistory ?? false,
               laddersFor: (exercise) => ladderFor(exercise, inventory),
               template: [template],
@@ -673,7 +608,7 @@ export function ProgramScreen({
       const template = templateForAiWorkout(
         outcome.workout,
         slot,
-        Number(sessionMinutes),
+        sessionMinutes,
         placed,
       );
       await db.blockExercise.bulkPut(outcome.workout.exercises);
@@ -728,58 +663,27 @@ export function ProgramScreen({
     setAddingTo(slot);
   };
 
-  /**
-   * Fills the days that are empty, each seeing the ones before it, then spends
-   * the week's set budget across only those days — a day you built by hand
-   * counts toward the weekly total but is never edited to hit it.
-   */
-  const fillEmptyDays = async () => {
-    if (!block) return;
-    await setUpWeek();
-    const existing = await db.blockExercise.where('blockId').equals(block.id).toArray();
-    const exclude = existing.map((entry) => entry.exerciseId);
-
-    const built: DayPlan[] = [];
-    const used = [...exclude];
-    for (const day of templateDays) {
-      if (existing.some((entry) => entry.daySlot === day.slot)) continue;
-      const generated = buildSlot(day.slot, 0, used);
-      if (!generated) continue;
-      built.push(generated);
-      used.push(...generated.exercises.map((entry) => entry.exerciseId));
-    }
-    if (built.length === 0) return;
-
-    const fixedSets = existing.reduce((n, entry) => n + entry.targetSets, 0);
-    const template = built
-      .map((day) => templateFor(day.slot))
-      .filter((day): day is TemplateDay => day !== undefined);
-    balanceSets(built, template, byId, training.weeklySetTarget, fixedSets);
-
-    for (const day of built) await writeDay(day, 0);
-  };
-
   /*
-   * The rules, run against what is actually in the block rather than against a
-   * proposal. The old preview was the only thing that ever validated, so a day
-   * built or edited by hand was never checked at all — the rules now apply to
-   * every day however it got there.
+   * The rules, run against what is actually on the calendar rather than against
+   * a proposal. The old preview was the only thing that ever validated, so a
+   * day built or edited by hand was never checked at all.
    *
-   * The template handed to the validator is built from where the days ACTUALLY
-   * are, so dragging a session to another weekday is a decision to respect, not
-   * a violation to report. Its grip and spinal rules re-derive from that day.
+   * Judged over the WEEK ON SCREEN, by date. That is what keeps the golf rule
+   * honest now that placement is per week: a session sitting on Thursday this
+   * week is checked against Thursday, and a workout with no day is not checked
+   * for placement at all because it has no placement to be wrong about.
    */
   const blockViolations = useMemo(() => {
-    const scheduled = orderedSlots(schedule ?? {});
-    if (scheduled.length === 0 || (slots ?? []).length === 0) return [];
-    const template = scheduled
-      .map((entry) => templateFor(entry.slot))
-      .filter((day): day is TemplateDay => day !== undefined);
+    const placed = week
+      .filter((day) => day.plannedSlot !== undefined)
+      .map((day) => ({ slot: day.plannedSlot as DaySlot, date: day.date }));
+    if (placed.length === 0 || (slots ?? []).length === 0) return [];
+    const template = placed.map((entry) => templateFor(entry.slot));
     const context: ValidationContext = {
       exercisesById: byId,
       golfWeekdays: training.golfWeekdays as never,
       weeklySetTarget: training.weeklySetTarget,
-      sessionBudgetMinutes: Number(sessionMinutes),
+      sessionBudgetMinutes: sessionMinutes,
       hasHistory: hasHistory ?? false,
       laddersFor: (exercise) => ladderFor(exercise, inventory),
       template,
@@ -787,16 +691,16 @@ export function ProgramScreen({
     };
     return validateBlock(
       {
-        days: template.map((day) => ({
-          slot: day.slot,
-          weekday: day.weekday,
-          exercises: entriesForSlot(slots ?? [], day.slot),
+        days: placed.map((entry) => ({
+          slot: entry.slot,
+          weekday: weekdayOf(entry.date),
+          exercises: entriesForSlot(slots ?? [], entry.slot),
         })),
       },
       context,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schedule, slots, byId, training, sessionMinutes, hasHistory, inventory, shape]);
+  }, [week, schedule, slots, byId, training, sessionMinutes, hasHistory, inventory, shape]);
 
   const problems = blockViolations.filter(
     (violation) => severityOf(violation.code) === 'problem' && violation.fix !== undefined,
@@ -867,175 +771,16 @@ export function ProgramScreen({
             <p className="text-[13px] font-medium text-text-dim">
               {longDate(block.startDate)} — {longDate(block.endDate)}
             </p>
-
-            <Label className="mt-4 block">Session length</Label>
-            <div className="mt-1.5">
-              <SegmentedToggle
-                options={SESSION_LENGTHS}
-                value={sessionMinutes}
-                onChange={(next) => {
-                  setSessionMinutes(next);
-                  const prefs = { ...training, sessionMinutes: Number(next) };
-                  setTraining(prefs);
-                  void writeTraining(prefs);
-                }}
-                labels={{ '30': '30 min', '40': '40 min', '60': '60 min' }}
-              />
-            </div>
-
-            {/* A shortcut, and labelled as one. It creates workouts AND places
-                them in the week in a single action, which is the one thing on
-                this screen that still conflates the two. Collapsed by default
-                so the screen reads as workouts and a calendar; kept because it
-                is the fastest path from an empty block to a full week, which is
-                what a first run needs. */}
-            <button
-              type="button"
-              onClick={() => setShowStarter((prev) => !prev)}
-              className="mt-4 flex w-full items-center justify-between gap-3 text-left"
-            >
-              <span className="text-[13px] font-medium text-text-dim">
-                Build a starter week
-              </span>
-              <span className="text-[12px] font-medium text-text-dim">
-                {showStarter ? 'Hide' : 'Show'}
-              </span>
-            </button>
-
-            {showStarter && (
-              <>
-                <Label className="mt-2 block">
-                  Fills the week in one go — it makes the workouts and puts them on
-                  days. Everything below can be changed afterwards, and a workout
-                  you make yourself is never placed for you.
-                </Label>
-            <Label className="mt-4 block">Sessions per week</Label>
-            <div className="mt-1.5">
-              <SegmentedToggle
-                options={SESSION_COUNTS}
-                value={sessionsPerWeek}
-                onChange={setSessionsPerWeek}
-              />
-            </div>
-
-            <Label className="mt-4 block">Heavy days</Label>
-            <div className="mt-1.5 flex gap-1.5">
-              {sessionWeekdays.map((weekday) => (
-                <Chip
-                  key={weekday}
-                  active={effectiveHeavy.includes(weekday)}
-                  onClick={() =>
-                    setHeavyWeekdays((prev) => {
-                      // The first tap adopts whatever the app was already doing,
-                      // so toggling one day does not silently clear the others.
-                      const base = prev ?? sessionWeekdays.slice(0, 2);
-                      return base.includes(weekday)
-                        ? base.filter((day) => day !== weekday)
-                        : [...base, weekday].sort((a, b) => a - b);
-                    })
-                  }
-                  tone="volume"
-                >
-                  {WEEKDAY_LABEL[weekday]}
-                </Chip>
-              ))}
-            </div>
+            {/* Session length, the split shape and the muscles to emphasise all
+                used to live here, wrapped around a shortcut that made workouts
+                AND placed them in one press. That shortcut wrote a standing
+                weekday, so filling four days filled every week there would ever
+                be. The settings moved to Settings, the shortcut is gone, and
+                what is left is the one thing this card was ever for: which
+                block you are in. */}
             <Label className="mt-1.5 block">
-              {heavyWeekdays?.length === 0
-                ? 'All light — a deload week.'
-                : `${heavyLabel} heavy, the rest light.`}
+              Make workouts below, then drop them on the days you want them.
             </Label>
-
-            {Number(sessionsPerWeek) > maxSessionsFor(training.golfWeekdays as never) && (
-              <p className="mt-2 text-[12px] font-medium" style={{ color: 'var(--color-warn)' }}>
-                Your golf days leave room for{' '}
-                {maxSessionsFor(training.golfWeekdays as never)} sessions a week.
-              </p>
-            )}
-
-            {/* Focus shapes the heavy days, so with none of them it changes
-                nothing and has no business on the screen. */}
-            {heavyCount > 0 && (
-              <>
-                <Label className="mt-4 block">Focus</Label>
-                <div className="mt-1.5">
-                  <SegmentedToggle
-                    options={SESSION_SHAPES}
-                    value={shape}
-                    onChange={(next) => {
-                      setShape(next);
-                      const prefs = { ...training, shape: next };
-                      setTraining(prefs);
-                      void writeTraining(prefs);
-                    }}
-                    labels={SESSION_SHAPE_LABEL}
-                  />
-                </div>
-                <Label className="mt-1.5 block">{SESSION_SHAPE_HINT[shape]}</Label>
-              </>
-            )}
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => void setUpWeek()}
-                className="h-11 flex-1 rounded-full bg-surface-2 text-[13px] font-medium text-text-dim"
-              >
-                Set up the days
-              </button>
-              <button
-                type="button"
-                onClick={() => void fillEmptyDays()}
-                className="h-11 flex-[2] rounded-full bg-cta font-semibold text-bg"
-              >
-                Fill the empty days
-              </button>
-            </div>
-              </>
-            )}
-
-            {/* Everything else is fixed by the template or lives in Settings. */}
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((prev) => !prev)}
-              className="mt-4 flex w-full items-center justify-between gap-3 text-left"
-            >
-              <span className="text-[13px] font-medium text-text-dim">Advanced</span>
-              <span className="text-[12px] font-medium text-text-dim">
-                {showAdvanced ? 'Hide' : 'Show'}
-              </span>
-            </button>
-
-            {showAdvanced && (
-              <>
-                <Label className="mt-3 block">Emphasise</Label>
-                {(['upper', 'lower', 'core'] as const).map((region) => (
-                  <div key={region} className="mt-2">
-                    <Label className="mb-1.5 block">{REGION_LABEL[region]}</Label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {MUSCLES.filter((muscle) => muscle.region === region).map((muscle) => (
-                        <Chip
-                          key={muscle.id}
-                          active={focusOrDefault.includes(muscle.id)}
-                          onClick={() =>
-                            setFocus((prev) => {
-                              const base = prev.length > 0 ? prev : (block.focusMuscles ?? []);
-                              return base.includes(muscle.id)
-                                ? base.filter((m) => m !== muscle.id)
-                                : [...base, muscle.id];
-                            })
-                          }
-                        >
-                          {muscle.name}
-                        </Chip>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-
-
-
           </>
         ) : (
           <Empty>--</Empty>
@@ -1076,18 +821,21 @@ export function ProgramScreen({
         const isEditing = editingSlot === slot;
         const scheduled = schedule?.[slot];
         if (list.length === 0 && !isEditing && scheduled === undefined) return null;
-        const weekday = scheduled?.weekday;
+        /* Where it sits in the week on screen, not a standing weekday. A card
+           claiming "Mon" for a workout that is on Wednesday this week is the
+           same confusion the DatePlan layer exists to end. */
+        const date = dateFor(slot);
         return (
           <DaySlotCard
             key={slot}
             label={labelFor(slot)}
             customName={scheduled?.name}
             onRename={(name) => void renameSlot(slot, name)}
-            weekday={weekday}
+            weekday={date !== undefined ? weekdayOf(date) : undefined}
             entries={list}
             exercisesById={byId}
             editing={isEditing}
-            isToday={weekday !== undefined && weekday === weekdayOf(todayIso())}
+            isToday={date === todayIso()}
             intensity={scheduled?.intensity ?? 'heavy'}
             onToggleEdit={() => setEditingSlot(isEditing ? null : slot)}
             onStart={() => onStartDay(slot)}
@@ -1099,7 +847,6 @@ export function ProgramScreen({
               if (block) void moveBlockExercise(block.id, slot, exerciseId, direction);
             }}
             onUpdate={(entry, patch) => void updateBlockExercise(entry, patch)}
-            canGenerate={templateFor(slot) !== undefined}
             generated={scheduled?.generated === true}
             onGenerate={() => {
               // Only ever destructive with a yes: a workout built by hand is

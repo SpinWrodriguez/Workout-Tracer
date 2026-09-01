@@ -534,3 +534,20 @@ export async function clearDaySlot(blockId: string, slot: DaySlot): Promise<void
     );
   }
 }
+
+/**
+ * Every workout the block defines, whether or not it has a day. Read from the
+ * schedule as well as the exercise rows, because a workout made and not yet
+ * filled in is still a workout — and because placement is now a date, so
+ * filtering by a standing weekday hides most of them.
+ */
+export function definedSlotsOf(
+  schedule: BlockSchedule,
+  entries: BlockExercise[],
+): DaySlot[] {
+  const defined = new Set<DaySlot>([
+    ...(Object.keys(schedule) as DaySlot[]).filter((slot) => schedule[slot] !== undefined),
+    ...entries.map((entry) => entry.daySlot),
+  ]);
+  return SLOTS.filter((slot) => defined.has(slot));
+}

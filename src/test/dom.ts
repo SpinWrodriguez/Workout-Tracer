@@ -21,7 +21,7 @@ import { EXERCISES } from '../db/seed/exercises';
 import { seedDatabase } from '../db/seed';
 import { DEFAULT_BLOCK_ID } from '../db/seed';
 import type { Block, BlockExercise, DaySlot, Exercise } from '../db/types';
-import { writeSchedule, type BlockSchedule } from '../lib/program';
+import { writePlan, writeSchedule, type BlockSchedule } from '../lib/program';
 
 /*
  * jsdom has no layout, so it does not implement scrollIntoView. The session
@@ -113,4 +113,9 @@ export function draw(ui: ReactElement): RenderResult {
 /** Stubs window.confirm for one test, so a guarded action can be driven. */
 export function confirmWith(answer: boolean): void {
   vi.spyOn(window, 'confirm').mockReturnValue(answer);
+}
+
+/** What is planned on specific dates, which is the only placement that recurs nowhere. */
+export async function seedPlan(plan: Record<string, DaySlot>): Promise<void> {
+  await writePlan(BLOCK_ID, plan);
 }
