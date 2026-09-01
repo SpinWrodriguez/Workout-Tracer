@@ -10,6 +10,7 @@ import { Card, Empty, Label, Screen } from '../components/Layout';
 import { BodyWeightChart } from '../components/LazyCharts';
 import { ThemeToggleButton } from '../components/ThemePicker';
 import { Ring } from '../components/Ring';
+import { slotName } from '../lib/slotName';
 
 /**
  * Weekly targets for a realistic two-session week (spec §1): ~6 exercises a
@@ -143,7 +144,7 @@ export function DashboardScreen({
     >
       {programDays.length > 0 && (
         <Card
-          title={program?.todaySlot ? `Today · day ${program.todaySlot}` : 'This week'}
+          title={program?.todaySlot ? `Today · ${slotName(program.todaySlot)}` : 'This week'}
           className="mb-3"
         >
           {programDays.map((day, i) => {
@@ -156,7 +157,7 @@ export function DashboardScreen({
               <div key={day.slot} className={i > 0 ? 'mt-3 border-t border-border pt-3' : ''}>
                 <div className="flex items-center justify-between gap-3">
                   <span className="flex items-baseline gap-2">
-                    <span className="card-title">Day {day.slot}</span>
+                    <span className="card-title">{slotName(day.slot)}</span>
                     <Label className={isToday ? 'text-text!' : ''}>
                       {isToday ? 'today' : day.weekday ? WEEKDAY_LABEL[day.weekday] : 'unscheduled'}
                       {day.intensity === 'light' ? ' · light' : ''}
@@ -281,7 +282,7 @@ export function DashboardScreen({
               >
                 <span className="text-[15px] font-medium">{friendlyDate(session.date)}</span>
                 <Label>
-                  day {session.daySlot}
+                  {slotName(session.daySlot)}
                   {session.durationMin ? ` · ${session.durationMin} min` : ''}
                 </Label>
               </button>

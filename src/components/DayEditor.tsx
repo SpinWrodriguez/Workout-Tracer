@@ -1,6 +1,7 @@
 import type { DaySlot, GolfDay } from '../db/types';
 import { longDate } from '../lib/format';
 import { WEEKDAY_LABEL, weekdayOf } from '../lib/golf';
+import { slotName } from '../lib/slotName';
 import { Label } from './Layout';
 
 /* -------------------------------------------------------------------------- */
@@ -63,7 +64,7 @@ export function DayEditor({
             </p>
           )}
           {slots.map((slot) =>
-            option(currentSlot === slot, () => onSetSlot(slot), `Day ${slot}`),
+            option(currentSlot === slot, () => onSetSlot(slot), slotName(slot)),
           )}
           {currentSlot && option(false, () => onSetSlot(undefined), 'No gym this day', 'clear')}
         </div>

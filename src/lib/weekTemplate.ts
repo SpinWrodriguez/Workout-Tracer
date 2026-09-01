@@ -248,3 +248,37 @@ export function templateWeek({
 export function weekdayAllowed(weekday: Weekday, golfWeekdays: Weekday[] = []): boolean {
   return !FORBIDDEN_WEEKDAYS.includes(weekday) && !golfWeekdays.includes(weekday);
 }
+
+/* -------------------------------------------------------------------------- */
+/*  One day of the template, on demand.                                       */
+/*                                                                            */
+/*  Regenerating a single day needs the same constraints templateWeek() would  */
+/*  have handed it, but the day may not be in the current week at all — a slot */
+/*  built by hand on a Sunday has no entry in a two-session template. This     */
+/*  rebuilds the constraints from what the slot actually is, so per-day        */
+/*  generation runs through exactly the same rules as the weekly pass.         */
+/*                                                                            */
+/*  `index` is the day's position among days of ITS OWN intensity: it selects  */
+/*  which pattern set to use, so two heavy days complement rather than repeat. */
+/* -------------------------------------------------------------------------- */
+export function templateDayFor({
+  slot,
+  weekday,
+  intensity,
+  index = 0,
+  shape = 'mixed',
+  minutesPerSession = 40,
+  golfWeekdays = [],
+}: {
+  slot: DaySlot;
+  weekday: Weekday;
+  intensity: Intensity;
+  index?: number;
+  shape?: SessionShape;
+  minutesPerSession?: number;
+  golfWeekdays?: Weekday[];
+}): TemplateDay {
+  if (intensity === 'light') return lightDay(slot, weekday, index);
+  const set = index % 2 === 0 ? SHAPE_PATTERNS[shape].a : SHAPE_PATTERNS[shape].b;
+  return heavyDay(slot, weekday, set, minutesPerSession, golfWeekdays);
+}

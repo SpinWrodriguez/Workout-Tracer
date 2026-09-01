@@ -278,3 +278,17 @@ describe('hand-editing a block', () => {
     expect((await readSchedules()).block_1).toEqual({ B: { weekday: 4, intensity: 'heavy' } });
   });
 });
+
+describe('remembering which days came from the generator', () => {
+  it('keeps the flag across a round trip and leaves hand-built days without it', () => {
+    const schedule = normaliseSchedule({
+      b: {
+        A: { weekday: 1, intensity: 'heavy', generated: true },
+        B: { weekday: 2, intensity: 'heavy' },
+      },
+    });
+    expect(schedule.b?.A?.generated).toBe(true);
+    // Absent, not false: shuffling is offered only where it costs nothing.
+    expect(schedule.b?.B?.generated).toBeUndefined();
+  });
+});

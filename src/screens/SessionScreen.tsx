@@ -42,6 +42,7 @@ import { NumberPad, type PadTarget } from '../components/NumberPad';
 import { RestTimerBar } from '../components/RestTimer';
 import { useRestTimer } from '../lib/restTimer';
 import { SetRow, type CellField } from '../components/SetRow';
+import { SLOT_NAME, slotName } from '../lib/slotName';
 
 const DAY_SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
 
@@ -567,7 +568,7 @@ export function SessionScreen({
                 onClick={() => loadSlot(draft.daySlot as DaySlot)}
                 className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg"
               >
-                Load day {draft.daySlot} · {programmedForSlot.length} exercises
+                Load {slotName(draft.daySlot)} · {programmedForSlot.length} exercises
               </button>
             )}
             <button
@@ -723,10 +724,11 @@ export function SessionScreen({
         )}
 
         <Card title="Session details" className="mt-3">
-          <Label>Day slot</Label>
+          <Label>Day</Label>
           <div className="mt-1.5">
             <SegmentedToggle
               options={DAY_SLOTS}
+              labels={SLOT_NAME}
               value={(draft.daySlot as DaySlot) ?? 'A'}
               onChange={(slot) => setDraft({ ...draft, daySlot: slot })}
             />

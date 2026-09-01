@@ -24,6 +24,13 @@ export interface ScheduledDay {
   intensity: Intensity;
   /** Shown while logging, e.g. "Leave 3-4 reps in the tank". */
   effortCue?: string;
+  /**
+   * This day came out of the generator. Persisted rather than kept in screen
+   * state so re-rolling it survives a reload — and so a day built by hand is
+   * still recognisable as one after the app restarts, which is what keeps
+   * "shuffle" from being offered where it would throw away real work.
+   */
+  generated?: boolean;
 }
 
 export type BlockSchedule = Partial<Record<DaySlot, ScheduledDay>>;
@@ -52,6 +59,9 @@ export function normaliseSchedule(value: unknown): ScheduleByBlock {
         weekday: weekday as Weekday,
         intensity,
         effortCue: intensity === 'light' ? LIGHT_DAY_CUE : undefined,
+        // Absent rather than false: a hand-built day keeps the shape it has
+        // always had, and only generated days carry the extra key.
+        ...(value.generated === true ? { generated: true } : {}),
       };
     }
     if (Object.keys(map).length > 0) out[blockId] = map;

@@ -7,15 +7,20 @@ import { friendlyDate, longDate, todayIso } from '../lib/format';
 import { WEEKDAY_LABEL, buildWeek, gripSafeWeekdays, weekdayOf, type Weekday } from '../lib/golf';
 import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
-import { generateBlock, type GeneratedBlock } from '../lib/blockBuilder';
+import { balanceSets, generateDay, type DayPlan } from '../lib/blockBuilder';
+import { validateBlock, type ValidationContext } from '../lib/blockValidation';
+import { slotName } from '../lib/slotName';
 import {
   DEFAULT_THIRD_DAY,
   maxSessionsFor,
+  templateDayFor,
+  templateWeek,
   templateWeekdays,
   SESSION_SHAPES,
   SESSION_SHAPE_HINT,
   SESSION_SHAPE_LABEL,
   type SessionShape,
+  type TemplateDay,
 } from '../lib/weekTemplate';
 import { readTraining, DEFAULT_TRAINING, type TrainingPrefs } from '../db/settings';
 import {
@@ -24,6 +29,7 @@ import {
   clearDaySlot,
   entriesForSlot,
   moveBlockExercise,
+  orderedSlots,
   readSchedules,
   removeBlockExercise,
   slotsByWeekday,
@@ -60,7 +66,9 @@ export function ProgramScreen({
   const [sessionsPerWeek, setSessionsPerWeek] = useState<(typeof SESSION_COUNTS)[number]>('2');
   const [sessionMinutes, setSessionMinutes] = useState<SessionLength>('40');
   const [focus, setFocus] = useState<MuscleId[]>([]);
-  const [preview, setPreview] = useState<GeneratedBlock | null>(null);
+  /* Which draw each day is showing. Its presence is also what says "this day
+     came from the generator", which is what earns it a Shuffle button. */
+  const [variantBySlot, setVariantBySlot] = useState<Partial<Record<DaySlot, number>>>({});
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [thirdDay] = useState<number>(DEFAULT_THIRD_DAY);
   /* null means the app balances it; an empty array means every session light. */
@@ -174,47 +182,225 @@ export function ProgramScreen({
     }
   };
 
-  const generate = () => {
-    if (!block) return;
-    setPreview(
-      generateBlock({
-        blockId: block.id,
-        exercises,
-        focusMuscles: focusOrDefault,
+  /* The week the settings above describe: which slots exist, on which day, at
+     what effort. Exercises are nobody's business here. */
+  const templateDays = useMemo(
+    () =>
+      templateWeek({
         sessionsPerWeek: Number(sessionsPerWeek),
-        golfWeekdays: training.golfWeekdays as never,
         shape,
         thirdDay: thirdDay as never,
         heavyWeekdays: heavyWeekdays ?? undefined,
+        golfWeekdays: training.golfWeekdays as never,
         minutesPerSession: Number(sessionMinutes),
-        weeklySetTarget: training.weeklySetTarget,
-        hasHistory: hasHistory ?? false,
-        laddersFor: (exercise) => ladderFor(exercise, inventory),
       }),
+    [sessionsPerWeek, shape, thirdDay, heavyWeekdays, training.golfWeekdays, sessionMinutes],
+  );
+
+  /**
+   * The constraints one slot should be generated under. The schedule wins over
+   * the template wherever they disagree, because a day dragged to Thursday has
+   * Thursday's grip clearance whatever the template originally intended.
+   */
+  const templateFor = (slot: DaySlot): TemplateDay | undefined => {
+    const fromWeek = templateDays.find((day) => day.slot === slot);
+    const scheduled = schedule?.[slot];
+    const weekday = scheduled?.weekday ?? fromWeek?.weekday;
+    if (weekday === undefined) return undefined;
+    const intensity = scheduled?.intensity ?? fromWeek?.intensity ?? 'heavy';
+
+    // Position among the days of the same effort picks the pattern set, so a
+    // second heavy day complements the first rather than repeating it.
+    const peers = orderedSlots(schedule ?? {}).filter(
+      (entry) => (schedule?.[entry.slot]?.intensity ?? 'heavy') === intensity,
     );
+    const fromSchedule = peers.findIndex((entry) => entry.slot === slot);
+    const index =
+      fromSchedule >= 0
+        ? fromSchedule
+        : templateDays.filter((day) => day.intensity === intensity).findIndex((day) => day.slot === slot);
+
+    return templateDayFor({
+      slot,
+      weekday,
+      intensity,
+      index: Math.max(0, index),
+      shape,
+      minutesPerSession: Number(sessionMinutes),
+      golfWeekdays: training.golfWeekdays as never,
+    });
   };
 
-  const applyPreview = async () => {
-    if (!block || !preview) return;
+  /** Lays out the week without filling anything in: slots, days, effort. */
+  const setUpWeek = async () => {
+    if (!block) return;
+    const next: BlockSchedule = { ...(schedule ?? {}) };
+    for (const day of templateDays) {
+      next[day.slot] = {
+        // Spread first: laying the week out again must not forget that a day
+        // was generated, or its Shuffle button vanishes.
+        ...(next[day.slot] ?? {}),
+        weekday: day.weekday,
+        intensity: day.intensity,
+        effortCue: day.effortCue,
+      };
+    }
+    await writeSchedule(block.id, next);
+    await db.block.put({ ...block, focusMuscles: focusOrDefault });
+  };
+
+  /** Builds one day in memory. Writes nothing — see writeDay. */
+  const buildSlot = (slot: DaySlot, variant: number, exclude: string[]) => {
+    if (!block) return undefined;
+    const template = templateFor(slot);
+    if (!template) return undefined;
+    return generateDay({
+      blockId: block.id,
+      exercises,
+      focusMuscles: focusOrDefault,
+      template,
+      exclude,
+      variant,
+      hasHistory: hasHistory ?? false,
+    });
+  };
+
+  /** Replaces one slot's exercises and its place in the week. Nothing else. */
+  const writeDay = async (day: DayPlan) => {
+    if (!block) return;
     await db.transaction('rw', [db.block, db.blockExercise], async () => {
-      await db.blockExercise.where('blockId').equals(block.id).delete();
-      await db.blockExercise.bulkPut(preview.days.flatMap((day) => day.exercises));
+      const stale = (await db.blockExercise.where('blockId').equals(block.id).toArray()).filter(
+        (entry) => entry.daySlot === day.slot,
+      );
+      await db.blockExercise.bulkDelete(
+        stale.map(
+          (entry) => [entry.blockId, entry.exerciseId, entry.daySlot] as [string, string, string],
+        ),
+      );
+      await db.blockExercise.bulkPut(day.exercises);
       await db.block.put({ ...block, focusMuscles: focusOrDefault });
     });
-    // The builder decided which weekday each slot lands on, and that is half
-    // the golf rule. BlockExercise has nowhere to put it, so it is stored
-    // beside the block — without it nothing can answer "what am I doing today".
-    await writeSchedule(
-      block.id,
-      Object.fromEntries(
-        preview.days.map((day) => [
-          day.slot,
-          { weekday: day.weekday, intensity: day.intensity, effortCue: day.effortCue },
-        ]),
-      ),
-    );
-    setPreview(null);
+    // Read fresh: this runs in a loop, and the live query lags behind it.
+    const stored = (await readSchedules())[block.id] ?? {};
+    await writeSchedule(block.id, {
+      ...stored,
+      [day.slot]: {
+        weekday: day.weekday,
+        intensity: day.intensity,
+        effortCue: day.effortCue,
+        generated: true,
+      },
+    });
   };
+
+  /**
+   * Generates ONE day. It replaces that slot and nothing else — the days you
+   * built by hand are not inputs to this, they are constraints on it.
+   */
+  const generateSlot = async (slot: DaySlot, variant: number) => {
+    if (!block) return;
+    /*
+     * What every other day already holds, read fresh rather than taken from the
+     * live query. Scoped to what is IN the block, never to what an earlier
+     * discarded proposal suggested — that is what stops repeated presses
+     * walking downhill.
+     */
+    const current = await db.blockExercise.where('blockId').equals(block.id).toArray();
+    const exclude = current
+      .filter((entry) => entry.daySlot !== slot)
+      .map((entry) => entry.exerciseId);
+
+    const day = buildSlot(slot, variant, exclude);
+    if (!day) return;
+
+    /*
+     * Re-spend the week's set budget on this day alone. Without it, shuffling
+     * a day that the weekly pass had topped up silently drops the week back
+     * under target — the sets come back at the template default and nothing
+     * puts them back.
+     */
+    const template = templateFor(slot);
+    const fixedSets = current
+      .filter((entry) => entry.daySlot !== slot)
+      .reduce((n, entry) => n + entry.targetSets, 0);
+    if (template) balanceSets([day], [template], byId, training.weeklySetTarget, fixedSets);
+
+    await writeDay(day);
+    setVariantBySlot((prev) => ({ ...prev, [slot]: variant }));
+  };
+
+  /**
+   * Fills the days that are empty, each seeing the ones before it, then spends
+   * the week's set budget across only those days — a day you built by hand
+   * counts toward the weekly total but is never edited to hit it.
+   */
+  const fillEmptyDays = async () => {
+    if (!block) return;
+    await setUpWeek();
+    const existing = await db.blockExercise.where('blockId').equals(block.id).toArray();
+    const exclude = existing.map((entry) => entry.exerciseId);
+
+    const built: DayPlan[] = [];
+    const used = [...exclude];
+    for (const day of templateDays) {
+      if (existing.some((entry) => entry.daySlot === day.slot)) continue;
+      const generated = buildSlot(day.slot, 0, used);
+      if (!generated) continue;
+      built.push(generated);
+      used.push(...generated.exercises.map((entry) => entry.exerciseId));
+    }
+    if (built.length === 0) return;
+
+    const fixedSets = existing.reduce((n, entry) => n + entry.targetSets, 0);
+    const template = built
+      .map((day) => templateFor(day.slot))
+      .filter((day): day is TemplateDay => day !== undefined);
+    balanceSets(built, template, byId, training.weeklySetTarget, fixedSets);
+
+    for (const day of built) await writeDay(day);
+    setVariantBySlot((prev) => ({
+      ...prev,
+      ...Object.fromEntries(built.map((day) => [day.slot, 0])),
+    }));
+  };
+
+  /*
+   * The rules, run against what is actually in the block rather than against a
+   * proposal. The old preview was the only thing that ever validated, so a day
+   * built or edited by hand was never checked at all — the rules now apply to
+   * every day however it got there.
+   *
+   * The template handed to the validator is built from where the days ACTUALLY
+   * are, so dragging a session to another weekday is a decision to respect, not
+   * a violation to report. Its grip and spinal rules re-derive from that day.
+   */
+  const blockViolations = useMemo(() => {
+    const scheduled = orderedSlots(schedule ?? {});
+    if (scheduled.length === 0 || (slots ?? []).length === 0) return [];
+    const template = scheduled
+      .map((entry) => templateFor(entry.slot))
+      .filter((day): day is TemplateDay => day !== undefined);
+    const context: ValidationContext = {
+      exercisesById: byId,
+      golfWeekdays: training.golfWeekdays as never,
+      weeklySetTarget: training.weeklySetTarget,
+      sessionBudgetMinutes: Number(sessionMinutes),
+      hasHistory: hasHistory ?? false,
+      laddersFor: (exercise) => ladderFor(exercise, inventory),
+      template,
+    };
+    return validateBlock(
+      {
+        days: template.map((day) => ({
+          slot: day.slot,
+          weekday: day.weekday,
+          exercises: entriesForSlot(slots ?? [], day.slot),
+        })),
+      },
+      context,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schedule, slots, byId, training, sessionMinutes, hasHistory, inventory, shape]);
 
   return (
     <Screen title="Program">
@@ -414,104 +600,53 @@ export function ProgramScreen({
               Golf days and the weekly set target live in Settings.
             </p>
 
-            <button
-              type="button"
-              onClick={generate}
-              className="mt-3 h-11 w-full rounded-full bg-cta font-semibold text-bg"
-            >
-              Generate week
-            </button>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => void setUpWeek()}
+                className="h-11 flex-1 rounded-full bg-surface-2 text-[13px] font-medium text-text-dim"
+              >
+                Set up the days
+              </button>
+              <button
+                type="button"
+                onClick={() => void fillEmptyDays()}
+                className="h-11 flex-[2] rounded-full bg-cta font-semibold text-bg"
+              >
+                Fill the empty days
+              </button>
+            </div>
+            <p className="mt-2 text-[12px] font-medium text-text-dim">
+              Filling only touches days that are still empty — anything you built or generated
+              already is left exactly as it is. Generate a single day from its own card below.
+            </p>
           </>
         ) : (
           <Empty>--</Empty>
         )}
       </Card>
 
-      {preview && (
-        <Card title="Proposed block" className="mt-3">
-          <p className="text-[13px] leading-snug text-text-dim">{preview.rationale}</p>
-          {preview.violations.length > 0 && (
-            <div className="mt-3 rounded-xl bg-surface-2 p-3">
-              <p className="text-[13px] font-semibold" style={{ color: 'var(--color-rir-1)' }}>
-                {preview.violations.length} rule
-                {preview.violations.length === 1 ? '' : 's'} still broken
-              </p>
-              {preview.violations.map((violation) => (
-                <p
-                  key={violation.code + (violation.exerciseId ?? '') + (violation.slot ?? '')}
-                  className="mt-1 text-[12px] leading-snug font-medium text-text-dim"
-                >
-                  {violation.message}
-                </p>
-              ))}
-            </div>
-          )}
-
-          {preview.warnings.map((warning) => (
+      {blockViolations.length > 0 && (
+        <Card title="Rule check" className="mt-3">
+          <p className="text-[13px] font-semibold" style={{ color: 'var(--color-rir-1)' }}>
+            {blockViolations.length} thing{blockViolations.length === 1 ? '' : 's'} to fix
+          </p>
+          {blockViolations.map((violation) => (
             <p
-              key={warning}
-              className="mt-2 text-[12px] font-medium"
-              style={{ color: 'var(--color-warn)' }}
+              key={violation.code + (violation.exerciseId ?? '') + (violation.slot ?? '')}
+              className="mt-1.5 text-[12px] leading-snug font-medium text-text-dim"
             >
-              {warning}
+              {violation.message}
             </p>
           ))}
-
-          {preview.days.map((day) => (
-            <div key={day.slot} className="mt-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="card-title">
-                  Day {day.slot}
-                  <span className="ml-2 text-[12px] font-medium text-text-dim">
-                    {day.weekdayLabel} · {day.intensity}
-                  </span>
-                </span>
-                <Label>~{day.estimatedMinutes} min</Label>
-              </div>
-              {day.exercises.map((entry) => {
-                const exercise = byId.get(entry.exerciseId);
-                return (
-                  <div
-                    key={entry.exerciseId}
-                    className="flex items-baseline justify-between gap-3 py-1"
-                  >
-                    <span className="truncate text-[14px] font-medium">
-                      {exercise?.name ?? entry.exerciseId}
-
-                    </span>
-                    <Label>
-                      {entry.targetSets} × {entry.repRangeLow}-{entry.repRangeHigh}
-                    </Label>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-
-          <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPreview(null)}
-              className="h-11 flex-1 rounded-full bg-surface-2 font-medium text-text-dim"
-            >
-              Discard
-            </button>
-            <button
-              type="button"
-              onClick={() => void applyPreview()}
-              className="h-11 flex-1 rounded-full bg-cta font-semibold text-bg"
-            >
-              Use this block
-            </button>
-          </div>
         </Card>
       )}
 
       {DAY_SLOTS.map((slot) => {
         const list = entriesForSlot(slots ?? [], slot);
         const isEditing = editingSlot === slot;
-        if (list.length === 0 && !isEditing) return null;
         const scheduled = schedule?.[slot];
+        if (list.length === 0 && !isEditing && scheduled === undefined) return null;
         const weekday = scheduled?.weekday;
         return (
           <DaySlotCard
@@ -533,8 +668,24 @@ export function ProgramScreen({
               if (block) void moveBlockExercise(block.id, slot, exerciseId, direction);
             }}
             onUpdate={(entry, patch) => void updateBlockExercise(entry, patch)}
+            canGenerate={templateFor(slot) !== undefined}
+            generated={variantBySlot[slot] !== undefined || scheduled?.generated === true}
+            onGenerate={() => {
+              // Only ever destructive with a yes: a day built by hand is not
+              // something to overwrite because a button was nearby.
+              if (
+                list.length > 0 &&
+                !window.confirm(
+                  `Replace the ${list.length} exercises in ${slotName(slot)} with a generated day?`,
+                )
+              ) {
+                return;
+              }
+              void generateSlot(slot, 0);
+            }}
+            onShuffle={() => void generateSlot(slot, (variantBySlot[slot] ?? 0) + 1)}
             onClearDay={() => {
-              if (block && window.confirm(`Delete day ${slot} and everything in it?`)) {
+              if (block && window.confirm(`Delete ${slotName(slot)} and everything in it?`)) {
                 void clearDaySlot(block.id, slot);
                 setEditingSlot(null);
               }
@@ -562,12 +713,12 @@ export function ProgramScreen({
         </button>
       )}
 
-      {(slots?.length ?? 0) === 0 && !preview && (
-        <Card title="No day slots yet" className="mt-3">
+      {(slots?.length ?? 0) === 0 && Object.keys(schedule ?? {}).length === 0 && (
+        <Card title="No days yet" className="mt-3">
           <Empty>--- sets</Empty>
           <p className="mt-2 text-[13px] text-text-dim">
-            Generate a week above. Exercises stay fixed for the whole block — that is what makes
-            progressive overload work.
+            Set up the days above, then generate them one at a time or all at once. Exercises stay
+            fixed for the whole block — that is what makes progressive overload work.
           </p>
         </Card>
       )}

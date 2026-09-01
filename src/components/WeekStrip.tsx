@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import type { DaySlot } from '../db/types';
+import { slotName } from '../lib/slotName';
 import { WEEKDAY_LABEL, type WeekDay, type Weekday } from '../lib/golf';
 import { fromIsoDate } from '../lib/format';
 
@@ -93,7 +94,7 @@ export function WeekStrip({
                 onClick={() => onPickDay(day.date)}
                 className="block w-full"
                 aria-label={`${WEEKDAY_LABEL[day.weekday]} ${day.date}${
-                  day.plannedSlot ? `, day ${day.plannedSlot}` : ''
+                  day.plannedSlot ? `, ${slotName(day.plannedSlot)}` : ''
                 }${day.golf ? `, golf ${day.golf.status}` : ''}${
                   day.violation ? ', rule violation' : ''
                 }`}
@@ -116,7 +117,7 @@ export function WeekStrip({
                   role="button"
                   tabIndex={0}
                   onPointerDown={startDrag(day.plannedSlot, index)}
-                  aria-label={`Day ${day.plannedSlot} — drag to move`}
+                  aria-label={`${slotName(day.plannedSlot)} — drag to move`}
                   className={`mt-1.5 cursor-grab touch-none rounded-lg py-1 text-center text-[11px] font-bold select-none ${
                     drag?.slot === day.plannedSlot ? 'opacity-30' : ''
                   } ${done ? 'bg-cta text-bg' : 'bg-volume text-bg'}`}

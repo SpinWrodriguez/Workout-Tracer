@@ -1,5 +1,6 @@
 import type { BlockExercise, DaySlot, Exercise, MovementPattern, MuscleId } from '../db/types';
 import { GRIP_BUFFER_DAYS, WEEKDAY_LABEL, type Weekday } from './golf';
+import { slotName } from './slotName';
 import { weekdayAllowed, type TemplateDay } from './weekTemplate';
 
 /* -------------------------------------------------------------------------- */
@@ -186,13 +187,13 @@ export function validateBlock(
       violations.push({
         code: 'forbidden_day',
         slot: day.slot,
-        message: `Day ${day.slot} is scheduled on ${WEEKDAY_LABEL[day.weekday]}, which is never a training day.`,
+        message: `${slotName(day.slot)} is scheduled on ${WEEKDAY_LABEL[day.weekday]}, which is never a training day.`,
       });
     } else if (template && template.weekday !== day.weekday) {
       violations.push({
         code: 'forbidden_day',
         slot: day.slot,
-        message: `Day ${day.slot} is on ${WEEKDAY_LABEL[day.weekday]} but the template puts it on ${template.weekdayLabel}.`,
+        message: `${slotName(day.slot)} is on ${WEEKDAY_LABEL[day.weekday]} but the template puts it on ${template.weekdayLabel}.`,
       });
     }
 
@@ -200,7 +201,7 @@ export function validateBlock(
       violations.push({
         code: 'light_day_violation',
         slot: day.slot,
-        message: `Day ${day.slot} has ${day.exercises.length} exercises; the template allows ${template.maxExercises}.`,
+        message: `${slotName(day.slot)} has ${day.exercises.length} exercises; the template allows ${template.maxExercises}.`,
       });
     }
 
@@ -213,7 +214,7 @@ export function validateBlock(
           code: 'unknown_exercise',
           slot: day.slot,
           exerciseId: entry.exerciseId,
-          message: `Day ${day.slot}: "${entry.exerciseId}" is not in the exercise table. Use only ids from the table provided.`,
+          message: `${slotName(day.slot)}: "${entry.exerciseId}" is not in the exercise table. Use only ids from the table provided.`,
         });
         continue;
       }
@@ -229,7 +230,7 @@ export function validateBlock(
           code: 'rep_range',
           slot: day.slot,
           exerciseId: exercise.id,
-          message: `Day ${day.slot}: ${exercise.name} prescribed ${entry.repRangeLow}-${entry.repRangeHigh} reps, but it only takes ${exercise.repMin}-${exercise.repMax}.`,
+          message: `${slotName(day.slot)}: ${exercise.name} prescribed ${entry.repRangeLow}-${entry.repRangeHigh} reps, but it only takes ${exercise.repMin}-${exercise.repMax}.`,
         });
       }
 
@@ -241,7 +242,7 @@ export function validateBlock(
             code: 'grip_conflict',
             slot: day.slot,
             exerciseId: exercise.id,
-            message: `Day ${day.slot} is ${WEEKDAY_LABEL[day.weekday]}, ${clear} day${clear === 1 ? '' : 's'} before the next round. ${exercise.name} is high grip load and needs more than ${GRIP_BUFFER_DAYS}. Move it to a day with more clearance.`,
+            message: `${slotName(day.slot)} is ${WEEKDAY_LABEL[day.weekday]}, ${clear} day${clear === 1 ? '' : 's'} before the next round. ${exercise.name} is high grip load and needs more than ${GRIP_BUFFER_DAYS}. Move it to a day with more clearance.`,
           });
         }
       }
@@ -256,7 +257,7 @@ export function validateBlock(
             code: 'light_day_violation',
             slot: day.slot,
             exerciseId: exercise.id,
-            message: `Day ${day.slot} is the light session: ${exercise.name} is high grip load and does not belong on it.`,
+            message: `${slotName(day.slot)} is the light session: ${exercise.name} is high grip load and does not belong on it.`,
           });
         }
         if (template.excludeSpinalHigh && exercise.spinalLoad === 'high') {
@@ -264,7 +265,7 @@ export function validateBlock(
             code: 'light_day_violation',
             slot: day.slot,
             exerciseId: exercise.id,
-            message: `Day ${day.slot} is the light session: ${exercise.name} is a heavy spinal-load lift and does not belong on it.`,
+            message: `${slotName(day.slot)} is the light session: ${exercise.name} is a heavy spinal-load lift and does not belong on it.`,
           });
         }
         if (entry.targetSets > template.setsPerExercise) {
@@ -272,7 +273,7 @@ export function validateBlock(
             code: 'light_day_violation',
             slot: day.slot,
             exerciseId: exercise.id,
-            message: `Day ${day.slot} is the light session: ${exercise.name} is prescribed ${entry.targetSets} sets, and light days cap at ${template.setsPerExercise}.`,
+            message: `${slotName(day.slot)} is the light session: ${exercise.name} is prescribed ${entry.targetSets} sets, and light days cap at ${template.setsPerExercise}.`,
           });
         }
       }
@@ -283,7 +284,7 @@ export function validateBlock(
           code: 'skill_too_advanced',
           slot: day.slot,
           exerciseId: exercise.id,
-          message: `Day ${day.slot}: ${exercise.name} is an advanced movement and this is a first block with no logged history. Choose a beginner or intermediate alternative.`,
+          message: `${slotName(day.slot)}: ${exercise.name} is an advanced movement and this is a first block with no logged history. Choose a beginner or intermediate alternative.`,
         });
       }
 
@@ -296,7 +297,7 @@ export function validateBlock(
             code: 'unloadable_weight',
             slot: day.slot,
             exerciseId: exercise.id,
-            message: `Day ${day.slot}: ${exercise.name} start weight ${entry.startWeightKg} kg cannot be loaded. Nearest loadable values are ${nearestRungs(ladder, entry.startWeightKg).join(' or ')} kg.`,
+            message: `${slotName(day.slot)}: ${exercise.name} start weight ${entry.startWeightKg} kg cannot be loaded. Nearest loadable values are ${nearestRungs(ladder, entry.startWeightKg).join(' or ')} kg.`,
           });
         }
       }
@@ -311,7 +312,7 @@ export function validateBlock(
       violations.push({
         code: 'spinal_stacking',
         slot: day.slot,
-        message: `Day ${day.slot} stacks ${spinalHigh} heavy spinal-load lifts (${names}). Keep it to one per session.`,
+        message: `${slotName(day.slot)} stacks ${spinalHigh} heavy spinal-load lifts (${names}). Keep it to one per session.`,
       });
     }
 
@@ -322,7 +323,7 @@ export function validateBlock(
       violations.push({
         code: 'over_time_budget',
         slot: day.slot,
-        message: `Day ${day.slot} needs ${minutes} min including rest, over the ${budget} min budget. Drop an accessory or cut a set.`,
+        message: `${slotName(day.slot)} needs ${minutes} min including rest, over the ${budget} min budget. Drop an accessory or cut a set.`,
       });
     }
   }

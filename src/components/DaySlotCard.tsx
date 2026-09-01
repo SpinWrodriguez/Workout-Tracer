@@ -1,5 +1,6 @@
 import type { BlockExercise, DaySlot, Exercise } from '../db/types';
 import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
+import { slotName } from '../lib/slotName';
 import { Card, Empty, Label } from './Layout';
 
 /* -------------------------------------------------------------------------- */
@@ -59,6 +60,10 @@ export function DaySlotCard({
   onMove,
   onUpdate,
   onClearDay,
+  onGenerate,
+  onShuffle,
+  canGenerate,
+  generated,
 }: {
   slot: DaySlot;
   weekday?: Weekday;
@@ -74,10 +79,16 @@ export function DaySlotCard({
   onMove: (exerciseId: string, direction: -1 | 1) => void;
   onUpdate: (entry: BlockExercise, patch: Partial<BlockExercise>) => void;
   onClearDay: () => void;
+  onGenerate: () => void;
+  onShuffle: () => void;
+  /** False when the day has no weekday yet, so there is nothing to build to. */
+  canGenerate: boolean;
+  /** This day came out of the generator, so re-rolling it costs nothing. */
+  generated: boolean;
 }) {
   return (
     <Card
-      title={`Day ${slot}`}
+      title={slotName(slot)}
       className="mt-3"
       trailing={
         <span className="flex items-center gap-2">
@@ -108,7 +119,20 @@ export function DaySlotCard({
         </span>
       }
     >
-      {entries.length === 0 && <Empty>--- sets</Empty>}
+      {entries.length === 0 && (
+        <>
+          <Empty>--- sets</Empty>
+          {canGenerate && (
+            <button
+              type="button"
+              onClick={onGenerate}
+              className="mt-3 h-11 w-full rounded-full bg-cta font-semibold text-bg"
+            >
+              Generate this day
+            </button>
+          )}
+        </>
+      )}
 
       {entries.map((entry, index) => {
         const exercise = exercisesById.get(entry.exerciseId);
@@ -189,6 +213,18 @@ export function DaySlotCard({
         );
       })}
 
+      {/* Shuffle is offered only on a generated day: it re-rolls the draw, and
+          on a hand-built day that would silently throw the day away. */}
+      {!editing && entries.length > 0 && generated && canGenerate && (
+        <button
+          type="button"
+          onClick={onShuffle}
+          className="mt-3 h-9 w-full rounded-full bg-surface-2 text-[12px] font-medium text-text-dim"
+        >
+          Shuffle this day
+        </button>
+      )}
+
       {editing && (
         <div className="mt-3 flex gap-2">
           <button
@@ -198,6 +234,15 @@ export function DaySlotCard({
           >
             Add exercise
           </button>
+          {canGenerate && entries.length > 0 && (
+            <button
+              type="button"
+              onClick={onGenerate}
+              className="h-11 rounded-full bg-surface-2 px-4 text-[13px] font-medium text-text-dim"
+            >
+              Regenerate
+            </button>
+          )}
           <button
             type="button"
             onClick={onClearDay}
