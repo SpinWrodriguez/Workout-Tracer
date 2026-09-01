@@ -79,10 +79,18 @@ rather than assuming it was intended.
 These are load-bearing and were each the fix for a real bug. Read the comments
 at the top of the file before changing any of them.
 
-- **A workout is not a day.** `BlockSchedule[slot]` is the workout — its name,
-  effort, and the weekday it *usually* falls on (optional). `DatePlan` says what
-  is on a specific date and wins over the pattern. Conflating them is what made
-  moving one Wednesday move every Wednesday. See `src/lib/program.ts`.
+- **A workout is not a day, and placement is one week.** `BlockSchedule[slot]`
+  is the workout — its name, effort, focus. `DatePlan` says what is on a
+  specific date, and it is the only thing generation writes. The optional
+  `weekday` is a standing day the user sets deliberately ("Do this every
+  Monday") and nothing else may write it: doing so put a generated workout into
+  every week of the block at once. Conflating the two is also what made moving
+  one Wednesday move every Wednesday. See `src/lib/program.ts`.
+- **The week's rules are judged by date.** `ProgramScreen.templateFor` derives a
+  workout's weekday from the date it sits on in the week being viewed, and
+  validation runs over that week. An unplaced workout is not judged for
+  placement, because it has none to be wrong about — inventing a weekday to
+  judge it against is how a lat pulldown once passed two days before a round.
 - **Nothing self-reports compliance.** `blockValidation.ts` recomputes rather
   than trusting what a generator claims. If you add a model anywhere, its output
   is a proposal to be validated, never an answer.

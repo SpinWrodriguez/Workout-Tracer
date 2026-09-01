@@ -92,6 +92,10 @@ export const WORKOUT_FOCUS_LABEL: Record<WorkoutFocus, string> = {
   core: 'Core & carries',
 };
 
+/**
+ * The patterns a focus asks for. Repeats are deliberate: 'lower' wants two
+ * squat-pattern movements, not one squat mentioned twice.
+ */
 const FOCUS_PATTERNS: Record<WorkoutFocus, MovementPattern[]> = {
   full: ['hinge', 'squat', 'push_h', 'pull_h', 'core'],
   upper: ['pull_h', 'pull_v', 'push_h', 'push_v', 'core'],
@@ -100,6 +104,11 @@ const FOCUS_PATTERNS: Record<WorkoutFocus, MovementPattern[]> = {
   pull: ['pull_h', 'pull_v', 'hinge', 'core'],
   core: ['core', 'rotation', 'carry', 'core'],
 };
+
+/** The distinct patterns a focus covers, for telling a model what to aim at. */
+export function patternsForFocus(focus: WorkoutFocus): MovementPattern[] {
+  return [...new Set(FOCUS_PATTERNS[focus])];
+}
 
 /**
  * Constraints for a workout that has no day yet. The weekday is a placeholder
@@ -314,8 +323,19 @@ export function templateWeek({
 }
 
 /** True when a session may be scheduled on this weekday at all. */
+/**
+ * Whether a session may sit on a weekday AT ALL.
+ *
+ * A round is the only thing that bars one now. Friday and Saturday used to be
+ * barred outright, which was a fact about where the TEMPLATE puts sessions when
+ * it chooses the days itself — and it still is, see FORBIDDEN_WEEKDAYS and
+ * availableExtraDays. It was never a fact about what a lifter is allowed to do.
+ * Now that the days are picked by hand, treating "the template would not have
+ * chosen Friday" as a rule violation meant the app refused the answer to a
+ * question it had just asked.
+ */
 export function weekdayAllowed(weekday: Weekday, golfWeekdays: Weekday[] = []): boolean {
-  return !FORBIDDEN_WEEKDAYS.includes(weekday) && !golfWeekdays.includes(weekday);
+  return !golfWeekdays.includes(weekday);
 }
 
 /* -------------------------------------------------------------------------- */

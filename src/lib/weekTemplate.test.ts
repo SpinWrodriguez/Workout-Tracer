@@ -54,20 +54,28 @@ describe('the week is a template, not a decision', () => {
     expect(week[2]?.weekdayLabel).toBe('Thu');
   });
 
-  it('never schedules a session on Friday or Saturday', () => {
+  it('never CHOOSES Friday or Saturday for a session', () => {
     expect(FORBIDDEN_WEEKDAYS).toEqual([5, 6]);
-    expect(weekdayAllowed(5)).toBe(false);
-    expect(weekdayAllowed(6)).toBe(false);
     expect(availableExtraDays()).not.toContain(5);
     expect(availableExtraDays()).not.toContain(6);
     // A Friday asked for explicitly is refused, not honoured.
     expect(templateWeek({ sessionsPerWeek: 3, thirdDay: 5 })[2]?.weekdayLabel).toBe('Wed');
   });
 
-  it('offers Sunday only when it is not a golf day', () => {
+  it('still permits a Friday a lifter picks by hand', () => {
+    /*
+     * The template not choosing Friday is a preference about laying out a week.
+     * It is not a rule about what may happen on one — and while it was both,
+     * the week planner refused the days it had just asked the lifter to pick.
+     */
+    expect(weekdayAllowed(5)).toBe(true);
+  });
+
+  it('bars a session on a round, which is the one thing that does bar one', () => {
+    expect(weekdayAllowed(6, [6])).toBe(false);
+    expect(weekdayAllowed(7, [6, 7])).toBe(false);
     expect(availableExtraDays([6])).toContain(7);
     expect(availableExtraDays([6, 7])).not.toContain(7);
-    expect(weekdayAllowed(7, [6, 7])).toBe(false);
   });
 
   it('falls back off Wednesday when Wednesday is somehow a round', () => {

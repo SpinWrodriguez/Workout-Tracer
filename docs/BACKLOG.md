@@ -90,22 +90,21 @@ no behaviour change.
 
 ---
 
-## 4. Finish disentangling generation from scheduling
+## 4. Finish disentangling generation from scheduling — done
 
-Mostly done: workouts are their own objects, placement is a separate act. What
-remains is the quick-start block on the Program screen — "sessions per week /
-heavy days / Set up the days / Fill the empty days" — which still creates AND
-places in one action, and is the only thing still using the "sessions per week"
-vocabulary the user objected to.
+The starter week is gone. It wrote `BlockSchedule.weekday`, the recurring
+address, so generating four days filled every week of the block; that was the
+user-reported bug that finished it off. Generation now writes only a `DatePlan`
+entry, and the two ways in are the AI week planner (`WeekPlanSheet`) and one
+workout at a time.
 
-Options: move it behind a disclosure as an explicit shortcut, or remove it and
-let the week be built by making workouts and dropping them on days.
-
-Check with the user before removing — it is the fastest path from nothing to a
-full week, which matters on a first run.
-
-**Done when:** the Program screen reads as *workouts* and *calendar*, with any
-shortcut clearly marked as one.
+**What is left over:** `templateWeek`, `templateWeekdays`, `maxSessionsFor`,
+`generateBlock` and `configFromSchedule` are now referenced only by their own
+tests. They are the deterministic whole-week engine the starter week used.
+Deleting them touches four test files and would remove the only non-AI path to
+a full week, so it was left alone rather than ripped out in the same change.
+Decide whether a deterministic week builder is still wanted; if not, delete the
+lot and their tests together.
 
 ---
 

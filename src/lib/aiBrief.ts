@@ -2,7 +2,12 @@ import type { Exercise, MuscleId, SetLog } from '../db/types';
 import { MUSCLE_BY_ID } from '../db/seed/muscles';
 import { VOLUME_LOW, setsPerMuscle } from './volume';
 import type { ExistingWorkout } from './aiWorkout';
-import type { Intensity } from './weekTemplate';
+import {
+  patternsForFocus,
+  WORKOUT_FOCUS_LABEL,
+  type Intensity,
+  type WorkoutFocus,
+} from './weekTemplate';
 
 /* -------------------------------------------------------------------------- */
 /*  What the app knows without being told.                                     */
@@ -49,6 +54,12 @@ export interface DayConstraints {
   /** True on a light day: nothing that loads the spine heavily. */
   noHighSpinal?: boolean;
   intensity?: Intensity;
+  /**
+   * What the day was asked to train, when the lifter chose it rather than
+   * leaving it open. Stated as a requirement — still with no reason attached,
+   * because the reason is a calendar the model has been caught misreading.
+   */
+  focus?: WorkoutFocus;
 }
 
 export interface BriefInput {
@@ -123,6 +134,22 @@ export function briefPayload(brief: Brief, input: BriefInput): Record<string, un
   }
   if (input.constraints?.intensity === 'light') {
     constraints.push('This is a light session: two working sets an exercise, higher reps.');
+  }
+  if (input.constraints?.intensity === 'heavy') {
+    constraints.push('This is a heavy session: three working sets an exercise.');
+  }
+  if (input.constraints?.focus) {
+    const focus = input.constraints.focus;
+    /*
+     * Named AND spelled out as patterns. The label alone leaves "Pull" to
+     * interpretation; the patterns are a field the model can see on every
+     * library row, so the requirement is checkable against what it picked.
+     */
+    constraints.push(
+      `This session must train ${WORKOUT_FOCUS_LABEL[focus]}. ` +
+        `Every exercise must have a pattern from: ${patternsForFocus(focus).join(', ')}.`,
+    );
+    constraints.push(`Return focus "${focus}".`);
   }
 
   return {
