@@ -1,4 +1,5 @@
 import { BACKUP_VERSION, db } from '../db/db';
+import { LAST_SYNC_KEY } from '../db/settings';
 import type {
   Activity,
   Block,
@@ -33,11 +34,6 @@ export interface BackupV3 {
     bodyWeight: BodyWeight[];
     activity: Activity[];
     goals: Record<string, Omit<Goals, 'date'>>;
-  };
-  nutrition: {
-    selections: Record<string, unknown>;
-    checked: Record<string, unknown>;
-    savedMeals: SavedMeal[];
   };
   workout: {
     exercise: Exercise[];
@@ -375,9 +371,6 @@ export async function buildBackup(): Promise<BackupV3> {
     bodyWeight,
     activity,
     goals,
-    selections,
-    checked,
-    savedMeals,
     exercise,
     block,
     blockExercise,
@@ -389,9 +382,6 @@ export async function buildBackup(): Promise<BackupV3> {
     db.sharedBodyWeight.toArray(),
     db.sharedActivity.toArray(),
     db.sharedGoals.toArray(),
-    db.nutritionSelections.toArray(),
-    db.nutritionChecked.toArray(),
-    db.nutritionSavedMeals.toArray(),
     db.exercise.toArray(),
     db.block.toArray(),
     db.blockExercise.toArray(),
@@ -409,18 +399,16 @@ export async function buildBackup(): Promise<BackupV3> {
       activity,
       goals: byDate(goals),
     },
-    nutrition: {
-      selections: Object.fromEntries(selections.map((r) => [r.date, r.meals])),
-      checked: Object.fromEntries(checked.map((r) => [r.date, r.meals])),
-      savedMeals,
-    },
     workout: {
       exercise,
       block,
       blockExercise,
       session: session.sort((a, b) => a.date.localeCompare(b.date)),
       setLog,
-      settings,
+      // The remote config holds an API key; a backup file is not the place
+      // for a credential, and it is device-local anyway.
+      // A device fact, not a training fact.
+      settings: settings.filter((row) => row.key !== LAST_SYNC_KEY),
       golfDay: golfDay.sort((a, b) => a.date.localeCompare(b.date)),
     },
   };

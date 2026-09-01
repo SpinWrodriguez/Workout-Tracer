@@ -118,17 +118,10 @@ describe('v3 envelope round trip', () => {
   it('exports the shape in §10', async () => {
     await importBackup(V2_BACKUP);
     const backup = await buildBackup();
-    expect(backup._version).toBe(3);
+    expect(backup._version).toBe(4);
     expect(backup._exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/);
-    expect(Object.keys(backup)).toEqual([
-      '_version',
-      '_exportedAt',
-      'shared',
-      'nutrition',
-      'workout',
-    ]);
+    expect(Object.keys(backup)).toEqual(['_version', '_exportedAt', 'shared', 'workout']);
     expect(Object.keys(backup.shared)).toEqual(['bodyWeight', 'activity', 'goals']);
-    expect(Object.keys(backup.nutrition)).toEqual(['selections', 'checked', 'savedMeals']);
     expect(Object.keys(backup.workout)).toEqual([
       'exercise',
       'block',
@@ -147,13 +140,63 @@ describe('v3 envelope round trip', () => {
     const exported = JSON.parse(JSON.stringify(await buildBackup())) as unknown;
     const before = await snapshot();
 
+    // Re-importing over a populated database changes nothing.
     await importBackup(exported);
     expect(await snapshot()).toEqual(before);
 
-    // ...and into an empty database, which is what a restore actually is.
+    // ...and into an empty one, which is what a restore actually is. Everything
+    // this app owns comes back.
     await Promise.all(db.tables.map((t) => t.clear()));
     await importBackup(exported);
-    expect(await snapshot()).toEqual(before);
+    const after = await snapshot();
+    for (const table of [
+      'bodyWeight',
+      'activity',
+      'goals',
+      'exercise',
+      'block',
+      'session',
+      'setLog',
+    ] as const) {
+      expect(after[table], table).toBe(before[table]);
+    }
+  });
+
+  it('does not carry the nutrition tables any more', async () => {
+    await importBackup(V2_BACKUP);
+    const exported = JSON.parse(JSON.stringify(await buildBackup())) as Record<string, unknown>;
+    // Supabase owns the nutrition data now, so a copy here would be a stale
+    // cache of something this app never reads.
+    expect(exported.nutrition).toBeUndefined();
+    expect(await db.nutritionSelections.count()).toBeGreaterThan(0);
+
+    await Promise.all(db.tables.map((t) => t.clear()));
+    await importBackup(exported);
+    expect(await db.nutritionSelections.count()).toBe(0);
+    // The weigh-ins, which both apps care about, do come back.
+    expect(await db.sharedBodyWeight.count()).toBe(3);
+  });
+
+  it('keeps device facts out of the file but carries the equipment', async () => {
+    await db.settings.bulkPut([
+      { key: 'lastWeightSync', value: '2026-09-01T00:00:00Z' },
+      { key: 'inventory', value: { plates: [] } },
+      { key: 'training', value: { weeklySetTarget: 33 } },
+    ]);
+    const exported = await buildBackup();
+    const keys = exported.workout.settings.map((row) => row.key);
+    expect(keys).toContain('inventory');
+    expect(keys).toContain('training');
+    // When the weigh-ins were last pulled is true of this phone, not of the
+    // training, and restoring it elsewhere would only mislead.
+    expect(keys).not.toContain('lastWeightSync');
+  });
+
+  it('has no Supabase credential to leak, because none is stored', async () => {
+    // The URL and anon key come from the build environment, never the
+    // database, so a backup file cannot carry them however it is produced.
+    const exported = JSON.stringify(await buildBackup());
+    expect(exported).not.toMatch(/supabase|anonKey|apikey/i);
   });
 });
 

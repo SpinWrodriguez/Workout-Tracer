@@ -27,8 +27,15 @@ import type {
 
 export const DB_NAME = 'fitness';
 
-/** Backup envelope version this build reads and writes (spec §10). */
-export const BACKUP_VERSION = 3;
+/**
+ * Backup envelope version this build writes. Versions 2, 3 and 4 all import.
+ *
+ * 4 drops the `nutrition` section from the EXPORT. §10 designed one file for
+ * both apps on the assumption they shared this database; the nutrition app now
+ * keeps its data in Supabase, so a copy carried here is a stale cache of
+ * something this app never reads. Imports stay permissive and still accept it.
+ */
+export const BACKUP_VERSION = 4;
 
 export class FitnessDB extends Dexie {
   // shared — either app reads and writes these

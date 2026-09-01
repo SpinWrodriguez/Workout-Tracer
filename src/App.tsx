@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/db';
 import type { DaySlot } from './db/types';
 import { seedDatabase } from './db/seed';
+import { syncNow } from './lib/nutritionSync';
 import { BottomNav, type Tab } from './components/BottomNav';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
@@ -23,6 +24,12 @@ export default function App() {
 
   useEffect(() => {
     void seedDatabase().finally(() => setReady(true));
+    /*
+     * Pull the nutrition app's weigh-ins on open. Deliberately fire-and-forget:
+     * it must never delay first paint or fail the launch, because the garage
+     * has patchy wifi and everything here works from the local copy.
+     */
+    void syncNow().catch(() => undefined);
   }, []);
 
   if (!ready || exercises === undefined) {

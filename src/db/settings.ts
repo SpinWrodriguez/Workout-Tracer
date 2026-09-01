@@ -98,3 +98,19 @@ export async function readTraining(): Promise<TrainingPrefs> {
 export async function writeTraining(prefs: TrainingPrefs): Promise<void> {
   await db.settings.put({ key: TRAINING_KEY, value: prefs });
 }
+
+/* -------------------------------------------------------------------------- */
+/*  When the nutrition data was last pulled. Excluded from the backup: it is a */
+/*  fact about this device, not about the training.                           */
+/* -------------------------------------------------------------------------- */
+
+export const LAST_SYNC_KEY = 'lastWeightSync';
+
+export async function readLastSync(): Promise<string | undefined> {
+  const row = await db.settings.get(LAST_SYNC_KEY);
+  return typeof row?.value === 'string' ? row.value : undefined;
+}
+
+export async function writeLastSync(at: string): Promise<void> {
+  await db.settings.put({ key: LAST_SYNC_KEY, value: at });
+}

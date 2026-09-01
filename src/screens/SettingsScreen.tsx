@@ -6,6 +6,7 @@ import { Card, Label, Screen } from '../components/Layout';
 import { InventoryEditor } from '../components/InventoryEditor';
 import { ThemePicker } from '../components/ThemePicker';
 import { TrainingPrefsEditor } from '../components/TrainingPrefsEditor';
+import { NutritionSync } from '../components/NutritionSync';
 import { clearFreeDb, fetchAndStoreFreeDb, mappedIds, type EnrichReport } from '../lib/freeDb';
 import { EXERCISES } from '../db/seed/exercises';
 
@@ -72,11 +73,17 @@ export function SettingsScreen() {
     <Screen title="Settings">
       <ThemePicker />
 
+      <div className="mt-3">
+        <NutritionSync />
+      </div>
+
       <Card title="Backup" className="mt-3">
         <p className="text-[13px] text-text-dim">
-          One JSON file covers both apps. Import reads the nutrition app's version 2 export as
-          well as this app's version 3 envelope; it upserts on natural keys, so re-importing the
-          same file never duplicates rows and never deletes anything.
+          A backup of the training data. Import still reads the nutrition app's version 2 export
+          and older combined files, so nothing already saved is stranded — but the export now
+          carries only what this app owns, because the nutrition data lives in Supabase and
+          syncs above. Imports upsert on natural keys, so re-importing never duplicates and
+          never deletes.
         </p>
 
         <input
