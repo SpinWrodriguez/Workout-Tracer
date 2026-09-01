@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   API_KEY_STORAGE_KEY,
   MODEL,
@@ -7,6 +7,11 @@ import {
   writeApiKey,
 } from '../lib/askModel';
 import { isSupabaseConfigured } from '../lib/supabaseSource';
+import {
+  AI_INSTRUCTIONS_MAX,
+  readAiInstructions,
+  writeAiInstructions,
+} from '../db/settings';
 import { Card, Label } from './Layout';
 
 /* -------------------------------------------------------------------------- */
@@ -18,6 +23,71 @@ import { Card, Label } from './Layout';
 /*  version that does not have that property, so when it is available this     */
 /*  card leads with it rather than burying the choice.                         */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * What the lifter is training for, in their own words, read on every
+ * generation. Kept in the database rather than localStorage: unlike the key
+ * this is real content that belongs in a backup and should follow them to
+ * another device. Changing it changes the next workout with nothing else to do.
+ */
+export function AiInstructionsEditor() {
+  const [text, setText] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readAiInstructions().then((stored) => {
+      if (cancelled) return;
+      setText(stored);
+      setLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <Card title="Your goals">
+      <p className="text-[13px] text-text-dim">
+        Anything the model should know that does not change week to week — what you are
+        training for, what you are working around, what you would rather not do. Read every
+        time a workout is generated, so editing this changes the next one.
+      </p>
+      <textarea
+        rows={5}
+        value={text}
+        disabled={!loaded}
+        maxLength={AI_INSTRUCTIONS_MAX}
+        onChange={(event) => {
+          setText(event.target.value);
+          setSaved(false);
+        }}
+        placeholder={
+          'Building muscle while losing fat slowly. Golf matters more than the gym — protect the swing.\n\nLeft shoulder is cranky overhead. Prefer barbell and cable work over machines.'
+        }
+        className="mt-3 w-full resize-none rounded-xl bg-surface-2 px-3 py-2.5 text-[15px] leading-snug placeholder:text-text-faint"
+      />
+      <div className="mt-1 flex items-baseline justify-between gap-3">
+        <Label>
+          {text.length}/{AI_INSTRUCTIONS_MAX}
+        </Label>
+        <Label>Included in a backup, unlike the key below.</Label>
+      </div>
+      <button
+        type="button"
+        disabled={!loaded}
+        onClick={() => {
+          void writeAiInstructions(text);
+          setSaved(true);
+        }}
+        className="mt-3 h-11 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
+      >
+        {saved ? 'Saved' : 'Save goals'}
+      </button>
+    </Card>
+  );
+}
 
 export function ModelKeyEditor() {
   const [key, setKey] = useState(() => readApiKey() ?? '');

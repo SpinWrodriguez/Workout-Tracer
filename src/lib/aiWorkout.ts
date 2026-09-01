@@ -11,10 +11,12 @@ import {
 } from './blockValidation';
 import {
   WORKOUT_FOCUSES,
+  templateDayFor,
   workoutTemplate,
   type Intensity,
   type WorkoutFocus,
 } from './weekTemplate';
+import type { Weekday } from './golf';
 import { askModel, type AskResult } from './askModel';
 
 /* -------------------------------------------------------------------------- */
@@ -101,7 +103,9 @@ export const SYSTEM_PROMPT = `You choose exercises for one workout in a home gym
 
 The gym is a Cortex SM-26 multi-gym, an Olympic barbell, a few kettlebells and bands, in a garage. The lifter is a returning intermediate training two, at best three times a week around weekend golf. Sessions are about 40 minutes.
 
-You will be given the complete exercise library, the workouts already in the current block, and a goal in the lifter's own words. Return one workout.
+You will be given the complete exercise library, the workouts already in the current block, and a goal. Return one workout.
+
+The goal may be the lifter's own words, or a summary the app derived from which muscles are short this week — treat both the same way. You may also be given \`standingInstructions\`, which is what the lifter has said they are training for in general, and \`constraints\`, which are absolute: an exercise a constraint rules out is not available, whatever the goal says.
 
 Rules:
 
@@ -109,6 +113,8 @@ Rules:
 - Respect each exercise's own \`reps\` bounds and \`unit\`. A hold measured in seconds is not a number of reps.
 - Do not repeat what the other workouts in the block already contain, unless the goal explicitly asks for it.
 - Read the goal for effort and emphasis and set \`focus\` and \`intensity\` from it. "Tired", "easy", "gentle" mean \`intensity: "light"\`. Trust the words: a request for an easy session is not an invitation to program a hard one differently.
+- Obey every entry in \`constraints\` exactly. They are not preferences.
+- Where \`standingInstructions\` and the goal disagree, the goal wins — it is about today, the instructions are about the months around it.
 - Order the exercises the way they should be performed. Explosive work first, then hinges while the position still holds, then everything else. A hinge late in a fatigued session is a form risk.
 - Two exercises with \`spinalLoad: "high"\` in one workout is a mistake.
 
@@ -292,9 +298,13 @@ export function describeParseFailure(failure: ParseFailure): string {
 export interface GenerateAiWorkoutInput {
   blockId: string;
   slot: DaySlot;
-  goal: string;
+  /**
+   * The whole user turn, already assembled — goal, standing instructions,
+   * constraints and what the block holds. Built by aiBrief so the app can fill
+   * in for an empty goal box without this module knowing about volume.
+   */
+  user: string;
   exercises: Exercise[];
-  existing: ExistingWorkout[];
   minutesPerSession?: number;
   /** Recomputes the proposal. Returns only what is still wrong with it. */
   validate: (workout: AiWorkout) => Violation[];
@@ -318,7 +328,7 @@ export async function generateAiWorkout(input: GenerateAiWorkoutInput): Promise<
   const ask = input.ask ?? askModel;
   const byId = new Map(input.exercises.map((exercise) => [exercise.id, exercise]));
   const system = buildSystem(input.exercises);
-  const user = buildUser(input.goal, input.existing);
+  const user = input.user;
   const priorTurns: { role: 'assistant' | 'user'; content: string }[] = [];
 
   let lastViolations: Violation[] | undefined;
@@ -363,12 +373,35 @@ export async function generateAiWorkout(input: GenerateAiWorkoutInput): Promise<
   };
 }
 
-/** The template the app derives from what the model asked for. */
+/**
+ * The template the app derives from what the model asked for.
+ *
+ * `weekday` matters more than it looks. workoutTemplate is for a workout with
+ * no day, so its weekday is a placeholder — Monday — and every date-dependent
+ * rule checked against it is then a rule about Monday. Validating a workout
+ * asked for on a Thursday against that placeholder passed a lat pulldown two
+ * days before a round, which is the exact thing this app exists to prevent.
+ *
+ * So: given a real weekday, build the placed template and let the golf
+ * calendar decide what is excluded. Given none, the unplaced one is correct —
+ * there is no date to be clear of yet.
+ */
 export function templateForAiWorkout(
   workout: AiWorkout,
   slot: DaySlot,
   minutesPerSession = 40,
+  placed?: { weekday: Weekday; golfWeekdays: Weekday[] },
 ) {
+  if (placed) {
+    return templateDayFor({
+      slot,
+      weekday: placed.weekday,
+      intensity: workout.intensity,
+      focus: workout.focus,
+      minutesPerSession,
+      golfWeekdays: placed.golfWeekdays,
+    });
+  }
   return workoutTemplate({
     slot,
     focus: workout.focus,

@@ -2,6 +2,8 @@ import type { DaySlot, GolfDay } from '../db/types';
 import { longDate } from '../lib/format';
 import { WEEKDAY_LABEL, weekdayOf } from '../lib/golf';
 
+import { useState } from 'react';
+
 import { Label } from './Layout';
 
 /* -------------------------------------------------------------------------- */
@@ -21,6 +23,10 @@ export function DayEditor({
   onSetSlot,
   onSetGolf,
   onClose,
+  onAsk,
+  modelAvailable = false,
+  asking = false,
+  askError,
 }: {
   date: string;
   /** Slots the block actually defines, so we never offer an empty day. */
@@ -35,8 +41,19 @@ export function DayEditor({
   onSetSlot: (slot: DaySlot | undefined) => void;
   onSetGolf: (status: GolfDay['status'] | undefined) => void;
   onClose: () => void;
+  /**
+   * Build a new workout for this date. The goal is optional: with nothing
+   * typed the app derives one from what is short this week, so the common case
+   * is a single tap.
+   */
+  onAsk?: (goal: string) => void;
+  modelAvailable?: boolean;
+  asking?: boolean;
+  askError?: string;
 }) {
   const weekday = weekdayOf(date);
+  const [goal, setGoal] = useState('');
+  const [expanded, setExpanded] = useState(false);
 
   const option = (active: boolean, onClick: () => void, label: string, sub?: string) => (
     <button
@@ -72,6 +89,50 @@ export function DayEditor({
           )}
           {currentSlot && option(false, () => onSetSlot(undefined), 'No gym this day', 'clear')}
         </div>
+
+        {onAsk && modelAvailable && (
+          <>
+            <button
+              type="button"
+              onClick={() => setExpanded((prev) => !prev)}
+              className="mt-1.5 flex w-full items-center justify-between gap-3 rounded-xl bg-surface-2 px-3.5 py-3 text-left"
+            >
+              <span className="text-[15px] font-medium">Build one with AI</span>
+              <span className="text-[11px] font-medium text-text-dim">
+                {expanded ? 'hide' : 'new workout'}
+              </span>
+            </button>
+
+            {expanded && (
+              <>
+                <textarea
+                  rows={2}
+                  value={goal}
+                  onChange={(event) => setGoal(event.target.value)}
+                  placeholder="Optional — say what you want, or leave it blank"
+                  className="mt-1.5 w-full resize-none rounded-xl bg-surface-2 px-3 py-2.5 text-[14px] placeholder:text-text-faint"
+                />
+                <button
+                  type="button"
+                  disabled={asking}
+                  onClick={() => onAsk(goal)}
+                  className="mt-1.5 h-11 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
+                >
+                  {asking ? 'Thinking…' : goal.trim() ? 'Build it from that' : 'Build what I need'}
+                </button>
+                {askError && (
+                  <p className="mt-1.5 text-[12px] font-medium" style={{ color: 'var(--color-warn)' }}>
+                    {askError}
+                  </p>
+                )}
+                <Label className="mt-1.5 block">
+                  Leave it blank and it aims at whatever muscles are short this week, using
+                  your goals from Settings. It lands on this day.
+                </Label>
+              </>
+            )}
+          </>
+        )}
 
         {/* Moving a session used to move it in every week that would ever
             exist. It now moves this date; making it the standing arrangement

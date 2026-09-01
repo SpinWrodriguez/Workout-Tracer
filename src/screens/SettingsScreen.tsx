@@ -5,7 +5,7 @@ import { downloadBackup, importBackup, type ImportReport } from '../lib/backup';
 import { Card, Label, Screen } from '../components/Layout';
 import { InventoryEditor } from '../components/InventoryEditor';
 import { ThemePicker } from '../components/ThemePicker';
-import { ModelKeyEditor } from '../components/ModelKeyEditor';
+import { AiInstructionsEditor, ModelKeyEditor } from '../components/ModelKeyEditor';
 import { TrainingPrefsEditor } from '../components/TrainingPrefsEditor';
 import { NutritionSync } from '../components/NutritionSync';
 import { clearFreeDb, fetchAndStoreFreeDb, mappedIds, type EnrichReport } from '../lib/freeDb';
@@ -91,6 +91,10 @@ export function SettingsScreen() {
 
       <div className="mt-3">
         <ModelKeyEditor />
+      </div>
+
+      <div className="mt-3">
+        <AiInstructionsEditor />
       </div>
 
       <Card title="Backup" className="mt-3">

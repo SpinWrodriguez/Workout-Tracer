@@ -201,9 +201,8 @@ describe('the validate-and-retry loop', () => {
   const base = {
     blockId: 'b1',
     slot: 'A' as const,
-    goal: 'today I feel tired, generate a nice easy workout',
+    user: buildUser('today I feel tired, generate a nice easy workout', []),
     exercises: EXERCISES,
-    existing: [],
   };
 
   it('accepts a first reply that passes', async () => {

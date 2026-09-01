@@ -7,6 +7,14 @@ import { DEFAULT_INVENTORY, clearLadderCache, type Inventory } from '../lib/load
 /* -------------------------------------------------------------------------- */
 
 export const INVENTORY_KEY = 'inventory';
+/*
+ * The lifter's standing instructions to the model, in their own words. Kept in
+ * the database rather than localStorage, unlike the API key: this is real user
+ * content that belongs in a backup and should follow them to another device.
+ * The key is a secret and stays device-local; a goal is not.
+ */
+export const AI_INSTRUCTIONS_KEY = 'aiInstructions';
+export const AI_INSTRUCTIONS_MAX = 1200;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -121,4 +129,20 @@ export async function readLastSync(): Promise<string | undefined> {
 
 export async function writeLastSync(at: string): Promise<void> {
   await db.settings.put({ key: LAST_SYNC_KEY, value: at });
+}
+
+/**
+ * Free text describing what the lifter is training for. Read on every
+ * generation, so changing it changes the next workout with no other action —
+ * which is the point: goals drift, and a stale instruction is worse than none.
+ */
+export async function readAiInstructions(): Promise<string> {
+  const row = await db.settings.get(AI_INSTRUCTIONS_KEY);
+  return typeof row?.value === 'string' ? row.value : '';
+}
+
+export async function writeAiInstructions(text: string): Promise<void> {
+  const trimmed = text.trim().slice(0, AI_INSTRUCTIONS_MAX);
+  if (trimmed) await db.settings.put({ key: AI_INSTRUCTIONS_KEY, value: trimmed });
+  else await db.settings.delete(AI_INSTRUCTIONS_KEY);
 }

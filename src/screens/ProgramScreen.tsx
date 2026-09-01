@@ -8,7 +8,13 @@ import { WEEKDAY_LABEL, buildWeek, weekdayOf, type Weekday } from '../lib/golf';
 import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import { balanceSets, generateDay, type DayPlan } from '../lib/blockBuilder';
-import { severityOf, validateBlock, type Fix, type ValidationContext } from '../lib/blockValidation';
+import {
+  gripAllowed,
+  severityOf,
+  validateBlock,
+  type Fix,
+  type ValidationContext,
+} from '../lib/blockValidation';
 import { dayLabel, describeDay, shortDayLabels } from '../lib/dayLabel';
 import {
   DEFAULT_THIRD_DAY,
@@ -49,6 +55,8 @@ import { DayEditor } from '../components/DayEditor';
 import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
 import { isModelAvailable } from '../lib/askModel';
 import { generateAiWorkout, templateForAiWorkout, type AiWorkout } from '../lib/aiWorkout';
+import { briefPayload, buildBrief, undertrained, type DayConstraints } from '../lib/aiBrief';
+import { readAiInstructions } from '../db/settings';
 import { DaySlotCard } from '../components/DaySlotCard';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { Card, Chip, Empty, Label, Screen, SegmentedToggle } from '../components/Layout';
@@ -542,7 +550,7 @@ export function ProgramScreen({
    * because this workout has no day yet and a rule about placement cannot
    * apply to something unplaced.
    */
-  const askForWorkout = async (goal: string) => {
+  const askForWorkout = async (goal: string, forDate?: string) => {
     if (!block || asking) return;
     const slot = freeSlot();
     if (!slot) {
@@ -564,22 +572,88 @@ export function ProgramScreen({
           .map((row) => row.exerciseId),
       }));
 
+      /*
+       * What the app can answer for itself. An empty goal box is the normal
+       * case: the shortfall in this week is something the lifter would
+       * otherwise have to read off the Levels screen and retype.
+       */
+      const weekFrom = weekStart(forDate ?? todayIso());
+      const weekSessions = await db.session
+        .where('date')
+        .between(weekFrom, shiftIso(weekFrom, 7), true, false)
+        .toArray();
+      const sessionIds = new Set(weekSessions.map((session) => session.id));
+      const weekLogs = (await db.setLog.toArray()).filter((log) => sessionIds.has(log.sessionId));
+
+      /*
+       * Limits the chosen day imposes. Passed on as prohibitions with no reason
+       * attached — a model told WHY starts reasoning about the calendar, and it
+       * has already been caught getting that wrong.
+       */
+      const placed = forDate
+        ? {
+            weekday: weekdayOf(forDate),
+            golfWeekdays: training.golfWeekdays as never as Weekday[],
+          }
+        : undefined;
+
+      const constraints: DayConstraints = {};
+      if (placed && !gripAllowed(placed.weekday, placed.golfWeekdays)) {
+        constraints.noHighGrip = true;
+      }
+
+      const brief = buildBrief({
+        goal,
+        instructions: await readAiInstructions(),
+        undertrained: undertrained(weekLogs, byId),
+        existing,
+        constraints,
+      });
+
       const outcome = await generateAiWorkout({
         blockId: block.id,
         slot,
-        goal,
+        user: JSON.stringify(
+          briefPayload(brief, {
+            goal,
+            instructions: await readAiInstructions(),
+            undertrained: undertrained(weekLogs, byId),
+            existing,
+            constraints,
+          }),
+        ),
         exercises,
-        existing,
         validate: (workout: AiWorkout) => {
-          const template = templateForAiWorkout(workout, slot, Number(sessionMinutes));
+          const template = templateForAiWorkout(
+            workout,
+            slot,
+            Number(sessionMinutes),
+            placed,
+          );
           return validateBlock(
-            { days: [{ slot, weekday: template.weekday, exercises: workout.exercises }] },
+            {
+              days: [
+                {
+                  slot,
+                  // The real day when there is one. The placeholder inside an
+                  // unplaced template is Monday, and validating a Thursday
+                  // against Monday is how a lat pulldown got two days from a
+                  // round.
+                  weekday: placed?.weekday ?? template.weekday,
+                  exercises: workout.exercises,
+                },
+              ],
+            },
             {
               exercisesById: byId,
-              // Unplaced, so there is no date to be clear of. Assigning it to a
-              // day inside the buffer is what surfaces a grip conflict, and the
-              // week's rule check says so there.
-              golfWeekdays: [],
+              /*
+               * A workout asked for on a specific date is checked against the
+               * real calendar, which is stricter than the unplaced case: the
+               * golf rule applies because there IS a date to be clear of.
+               * Without one there is nothing to be clear of, and assigning it
+               * to a day later is what surfaces the conflict.
+               */
+              golfWeekdays: forDate ? (training.golfWeekdays as never) : [],
               weeklySetTarget: training.weeklySetTarget,
               sessionBudgetMinutes: Number(sessionMinutes),
               hasHistory: hasHistory ?? false,
@@ -596,7 +670,12 @@ export function ProgramScreen({
         return;
       }
 
-      const template = templateForAiWorkout(outcome.workout, slot, Number(sessionMinutes));
+      const template = templateForAiWorkout(
+        outcome.workout,
+        slot,
+        Number(sessionMinutes),
+        placed,
+      );
       await db.blockExercise.bulkPut(outcome.workout.exercises);
       await writeSchedule(block.id, {
         ...stored,
@@ -618,7 +697,18 @@ export function ProgramScreen({
             ),
         },
       });
+      /*
+       * Asked for on a date, so it goes there — the user picked the day, which
+       * is not the same as the generator picking one. The model still never
+       * saw it.
+       */
+      if (forDate) {
+        const plans = (await readPlans())[block.id] ?? {};
+        await writePlan(block.id, { ...plans, [forDate]: slot });
+      }
+
       setCreating(false);
+      setEditingDate(null);
       setEditingSlot(slot);
     } catch (cause) {
       setAskError(cause instanceof Error ? cause.message : String(cause));
@@ -1093,6 +1183,10 @@ export function ProgramScreen({
           date={editingDate}
           slots={definedSlots}
           labelFor={labelFor}
+          onAsk={(goal) => void askForWorkout(goal, editingDate)}
+          modelAvailable={isModelAvailable()}
+          asking={asking}
+          askError={askError}
           currentSlot={week.find((day) => day.date === editingDate)?.plannedSlot}
           golf={golfDays?.find((day) => day.date === editingDate)}
           onSetSlot={(slot) => {
