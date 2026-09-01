@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { DaySlot, Exercise, GolfDay, Muscle, MuscleId } from '../db/types';
@@ -11,6 +11,8 @@ import {
   golfWeekdaysFrom,
   weekdayOf,
 } from '../lib/golf';
+import { readInventory } from '../db/settings';
+import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import {
   DAY_TYPES,
   DAY_TYPE_LABEL,
@@ -90,6 +92,20 @@ export function ProgramScreen({
   const [customDayTypes, setCustomDayTypes] = useState<DayType[]>(['upper', 'lower', 'full']);
   const [editingSlot, setEditingSlot] = useState<DaySlot | null>(null);
   const [addingTo, setAddingTo] = useState<DaySlot | null>(null);
+  const [inventory, setInventory] = useState<Inventory>(DEFAULT_INVENTORY);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readInventory().then((next) => {
+      if (!cancelled) setInventory(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* A first block has no history, which is what bars advanced movements. */
+  const hasHistory = useLiveQuery(async () => (await db.setLog.count()) > 0, [], false);
 
   const block = useLiveQuery(() => db.block.orderBy('startDate').reverse().first(), [], undefined);
   const golfDays = useLiveQuery(() => db.golfDay.toArray(), [], undefined);
@@ -175,6 +191,8 @@ export function ProgramScreen({
         golfWeekdays,
         split,
         customDayTypes,
+        hasHistory: hasHistory ?? false,
+        laddersFor: (exercise) => ladderFor(exercise, inventory),
       }),
     );
   };
@@ -407,6 +425,23 @@ export function ProgramScreen({
       {preview && (
         <Card title="Proposed block" className="mt-3">
           <p className="text-[13px] leading-snug text-text-dim">{preview.rationale}</p>
+          {preview.violations.length > 0 && (
+            <div className="mt-3 rounded-xl bg-surface-2 p-3">
+              <p className="text-[13px] font-semibold" style={{ color: 'var(--color-rir-1)' }}>
+                {preview.violations.length} rule
+                {preview.violations.length === 1 ? '' : 's'} still broken
+              </p>
+              {preview.violations.map((violation) => (
+                <p
+                  key={violation.code + (violation.exerciseId ?? '') + (violation.slot ?? '')}
+                  className="mt-1 text-[12px] leading-snug font-medium text-text-dim"
+                >
+                  {violation.message}
+                </p>
+              ))}
+            </div>
+          )}
+
           {preview.warnings.map((warning) => (
             <p
               key={warning}

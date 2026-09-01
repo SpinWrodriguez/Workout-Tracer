@@ -5,6 +5,7 @@ import { EM_WEIGHT, friendlyDate, kg, rate, shiftIso, todayIso, weekStart } from
 import { linearTrend, rollingAverage, type DatedPoint } from '../lib/stats';
 import { WEEKDAY_LABEL } from '../lib/golf';
 import { entriesForSlot, readBlockPlan, slotForDate } from '../lib/program';
+import { WEEKLY_SET_TARGET } from '../lib/blockValidation';
 import { Card, Empty, Label, Screen } from '../components/Layout';
 import { BodyWeightChart } from '../components/LazyCharts';
 import { ThemeToggleButton } from '../components/ThemePicker';
@@ -15,7 +16,7 @@ import { Ring } from '../components/Ring';
  * session at 3 sets. Editable targets are a Settings concern for a later
  * phase; hard-coding them now keeps Phase 1 honest about what it computes.
  */
-const WEEKLY_TARGET = { sets: 36, exercises: 12, muscles: 10 };
+const WEEKLY_TARGET = { sets: WEEKLY_SET_TARGET, exercises: 12, muscles: 10 };
 
 /** Height of the ring row, and the diameter of the emphasised centre ring. */
 const RING_ROW = 112;

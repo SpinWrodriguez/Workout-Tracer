@@ -38,6 +38,27 @@ export type Station =
   | 'landmine';
 
 export type LoadMode = 'weight' | 'bodyweight' | 'rpe_only';
+
+/**
+ * Movement pattern, stored rather than derived. Weekly coverage is validated
+ * against this, so it has to be a fact about the exercise and not the output of
+ * a name-matching heuristic.
+ */
+export type MovementPattern =
+  | 'squat'
+  | 'hinge'
+  | 'push_h'
+  | 'push_v'
+  | 'pull_h'
+  | 'pull_v'
+  | 'carry'
+  | 'core'
+  | 'rotation';
+
+export type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
+
+/** Axial load. Two 'high' lifts in one session is a lower-back stacking bug. */
+export type SpinalLoad = 'none' | 'low' | 'high';
 export type GripLoad = 'none' | 'low' | 'high';
 export type DaySlot = 'A' | 'B' | 'C' | 'X' | 'Y';
 
@@ -56,6 +77,16 @@ export interface Exercise {
   loadMode: LoadMode;
   gripLoad: GripLoad; // <-- drives the golf rule
   isHinge: boolean; // form-risk flag; schedule fresh, never late in a circuit
+
+  /* --- prescription bounds, validated per exercise ----------------------- */
+  /** A Turkish get-up is 1-5 reps; a global range applied to it is nonsense. */
+  repMin: number;
+  repMax: number;
+  /** Drives the real time estimate, not a flat per-exercise guess. */
+  restSeconds: number;
+  skillLevel: SkillLevel;
+  pattern: MovementPattern;
+  spinalLoad: SpinalLoad;
 }
 
 export interface Muscle {
@@ -82,6 +113,8 @@ export interface BlockExercise {
   repRangeLow: number;
   repRangeHigh: number;
   order: number;
+  /** Snapped to a rung of loadableWeights() for this exercise; validated. */
+  startWeightKg?: number;
 }
 
 export interface Session {

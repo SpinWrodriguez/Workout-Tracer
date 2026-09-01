@@ -14,7 +14,6 @@ import {
 import {
   chooseTrainingWeekdays,
   generateBlock,
-  patternOf,
   splitFits,
   type DayType,
 } from './blockBuilder';
@@ -294,15 +293,15 @@ describe('block builder', () => {
     expect(ids.every((id) => byId.get(id)?.gripLoad !== 'high')).toBe(true);
   });
 
-  it('classifies the seed into sensible patterns', () => {
-    expect(patternOf(byId.get('bb_rdl') as never)).toBe('hinge');
-    expect(patternOf(byId.get('bb_back_squat') as never)).toBe('squat');
-    expect(patternOf(byId.get('bb_bench_press') as never)).toBe('push');
-    expect(patternOf(byId.get('cb_lat_pulldown') as never)).toBe('pull');
-    expect(patternOf(byId.get('kb_suitcase_carry') as never)).toBe('carry');
-    expect(patternOf(byId.get('bw_plank') as never)).toBe('core');
-  });
-});
+  it('stores a movement pattern on every exercise rather than guessing one', () => {
+    expect(byId.get('bb_rdl')?.pattern).toBe('hinge');
+    expect(byId.get('bb_back_squat')?.pattern).toBe('squat');
+    expect(byId.get('bb_bench_press')?.pattern).toBe('push_h');
+    expect(byId.get('cb_lat_pulldown')?.pattern).toBe('pull_v');
+    expect(byId.get('kb_suitcase_carry')?.pattern).toBe('carry');
+    expect(byId.get('bw_plank')?.pattern).toBe('core');
+    expect(byId.get('lm_rotation')?.pattern).toBe('rotation');
+  });});
 
 describe('exercise selection quality', () => {
   it('picks compounds over isolation for the pull slot, even with no focus set', () => {
