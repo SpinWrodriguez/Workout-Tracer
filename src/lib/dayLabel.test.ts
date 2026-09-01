@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EXERCISES } from '../db/seed/exercises';
-import { dayLabel, describeDay } from './dayLabel';
+import { dayLabel, describeDay, shortDayLabels } from './dayLabel';
 
 const byId = new Map(EXERCISES.map((e) => [e.id, e]));
 const pick = (...ids: string[]) =>
@@ -83,5 +83,37 @@ describe('telling two days of the same week apart', () => {
     expect(describeDay(pick('bb_back_squat', 'bb_bench_press', 'bb_bent_over_row'), 'light')).toBe(
       'Full Body Light',
     );
+  });
+});
+
+describe('names small enough for a calendar pill', () => {
+  it('keeps the part that tells the days apart', () => {
+    // A week of full-body sessions: "Full Body" is the bit they share, so it
+    // is the bit worth dropping.
+    expect(shortDayLabels(['Full Body Pull', 'Full Body Push'])).toEqual(['Pull', 'Push']);
+    expect(shortDayLabels(['Full Body Light', 'Full Body Heavy'])).toEqual(['Light', 'Heavy']);
+  });
+
+  it('drops a shared leading word even when it is not "Full Body"', () => {
+    expect(shortDayLabels(['Upper Push', 'Upper Pull'])).toEqual(['Push', 'Pull']);
+  });
+
+  it('never strips a day down to nothing', () => {
+    expect(shortDayLabels(['Upper', 'Upper'])).toEqual(['Upper', 'Upper']);
+  });
+
+  it('falls back to initials when the name is still too long', () => {
+    expect(shortDayLabels(['Upper Push + Core', 'Lower Pull'])).toEqual(['UPC', 'Lower Pull']);
+    expect(shortDayLabels(['Cable Session'])).toEqual(['CS']);
+  });
+
+  it('leaves an unnamed day as its letter', () => {
+    expect(shortDayLabels(['Day A', 'Full Body Pull'])).toEqual(['A', 'Pull']);
+  });
+
+  it('shortens a lone workout the same way it would in company', () => {
+    // Stable across weeks: Monday should not be called "Pull" one week and
+    // "FBP" the next because of what else happened to be scheduled.
+    expect(shortDayLabels(['Full Body Pull'])).toEqual(['Pull']);
   });
 });

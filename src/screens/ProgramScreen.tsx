@@ -9,7 +9,7 @@ import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import { balanceSets, generateDay, type DayPlan } from '../lib/blockBuilder';
 import { severityOf, validateBlock, type Fix, type ValidationContext } from '../lib/blockValidation';
-import { dayLabel, describeDay } from '../lib/dayLabel';
+import { dayLabel, describeDay, shortDayLabels } from '../lib/dayLabel';
 import {
   DEFAULT_THIRD_DAY,
   MAX_SESSIONS,
@@ -218,6 +218,17 @@ export function ProgramScreen({
         .filter((exercise): exercise is Exercise => exercise !== undefined),
       intensity: schedule?.[slot]?.intensity,
     });
+
+  /* Shortened against the rest of the week: what to drop from a name depends
+     on what the other days are called. */
+  const shortLabelFor = (() => {
+    const inWeek = week
+      .map((day) => day.plannedSlot)
+      .filter((slot): slot is DaySlot => slot !== undefined);
+    const shorts = shortDayLabels(inWeek.map((slot) => labelFor(slot)));
+    const map = new Map(inWeek.map((slot, i) => [slot, shorts[i] as string]));
+    return (slot: DaySlot) => map.get(slot) ?? labelFor(slot);
+  })();
 
   const renameSlot = async (slot: DaySlot, name: string | undefined) => {
     if (!block) return;
@@ -623,6 +634,7 @@ export function ProgramScreen({
         <WeekStrip
           week={week}
           labelFor={labelFor}
+          shortLabelFor={shortLabelFor}
           onPickDay={setEditingDate}
           onMoveSlot={(slot, date) => void movePlanned(slot, date)}
         />

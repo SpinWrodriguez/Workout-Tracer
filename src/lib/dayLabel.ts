@@ -122,3 +122,67 @@ export function dayLabel({
   const derived = exercises ? describeDay(exercises, intensity) : undefined;
   return derived ?? slotFallback(slot);
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Names small enough for a calendar pill.                                   */
+/*                                                                            */
+/*  A bare "X" meant something when a day WAS its letter. Now that days are    */
+/*  named, the letter is the one thing on screen that says nothing — but the   */
+/*  name does not fit either, so it is shortened by dropping what carries no   */
+/*  information rather than by cutting characters off the end.                 */
+/*                                                                            */
+/*  "Full Body" first, because in a week of full-body sessions it is the part  */
+/*  every day shares; then any leading word the whole week has in common. What */
+/*  is left is what actually tells them apart.                                */
+/* -------------------------------------------------------------------------- */
+
+/** Longer than this and initials read better than a truncation. */
+const PILL_CHARS = 11;
+
+function words(label: string): string[] {
+  return label
+    .split(/\s+/)
+    .filter((word) => word.length > 0 && word !== '+' && word !== '&');
+}
+
+function initials(parts: string[]): string {
+  return parts
+    .map((word) => word[0]?.toUpperCase() ?? '')
+    .join('')
+    .slice(0, 4);
+}
+
+/**
+ * Short forms for a row of day names, shortened against each other. Pass the
+ * whole week: what to drop depends on what the other days are called.
+ */
+export function shortDayLabels(labels: string[]): string[] {
+  const parts = labels.map((label) => {
+    // An unnamed day is still just its letter, and that is the whole name.
+    const bare = /^Day (\w+)$/.exec(label.trim());
+    if (bare) return [bare[1] as string];
+    const list = words(label);
+    // Generic whatever else is in the week: every session trains the body.
+    if (list.length > 2 && list[0]?.toLowerCase() === 'full' && list[1]?.toLowerCase() === 'body') {
+      return list.slice(2);
+    }
+    return list;
+  });
+
+  // Then whatever leading word they all share, while each keeps something.
+  let guard = 4;
+  while (
+    parts.length > 1 &&
+    guard-- > 0 &&
+    parts.every((list) => list.length > 1) &&
+    parts.every((list) => list[0]?.toLowerCase() === parts[0]?.[0]?.toLowerCase())
+  ) {
+    for (let i = 0; i < parts.length; i += 1) parts[i] = (parts[i] as string[]).slice(1);
+  }
+
+  return parts.map((list) => {
+    const joined = list.join(' ');
+    if (joined.length === 0) return '--';
+    return joined.length <= PILL_CHARS ? joined : initials(list);
+  });
+}

@@ -34,12 +34,15 @@ export function WeekStrip({
   onPickDay,
   onMoveSlot,
   labelFor,
+  shortLabelFor,
 }: {
   week: WeekStripDay[];
   onPickDay: (date: string) => void;
   /** Moves a workout to another DATE — this week only, not every week. */
   onMoveSlot: (slot: DaySlot, date: string) => void;
   labelFor: (slot: DaySlot) => string;
+  /** The pill is ~44px wide: the full name does not fit, the letter says nothing. */
+  shortLabelFor: (slot: DaySlot) => string;
 }) {
   const columns = useRef<(HTMLDivElement | null)[]>([]);
   const [drag, setDrag] = useState<{ slot: DaySlot; x: number; y: number; over: number } | null>(
@@ -120,11 +123,11 @@ export function WeekStrip({
                   tabIndex={0}
                   onPointerDown={startDrag(day.plannedSlot, index)}
                   aria-label={`${labelFor(day.plannedSlot)} — drag to move`}
-                  className={`mt-1.5 cursor-grab touch-none rounded-lg py-1 text-center text-[11px] font-bold select-none ${
+                  className={`mt-1.5 cursor-grab touch-none rounded-lg px-0.5 py-1 text-center text-[9px] leading-[1.15] font-bold break-words hyphens-auto select-none ${
                     drag?.slot === day.plannedSlot ? 'opacity-30' : ''
                   } ${done ? 'bg-cta text-bg' : 'bg-volume text-bg'}`}
                 >
-                  {day.plannedSlot}
+                  {shortLabelFor(day.plannedSlot)}
                 </div>
               ) : day.golf ? (
                 <div

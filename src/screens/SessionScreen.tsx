@@ -8,7 +8,6 @@ import {
   emptyDraft,
   entriesForSlot,
   readBlockPlan,
-  SLOTS,
   slotForDate,
   type BlockPlan,
 } from '../lib/program';
@@ -34,7 +33,7 @@ import {
   type DraftSet,
   type SessionDraft,
 } from '../lib/sessions';
-import { Card, Label, Screen, SegmentedToggle } from '../components/Layout';
+import { Card, Label, Screen } from '../components/Layout';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ExerciseDetail } from '../components/ExerciseDetail';
 import { ExerciseStrip } from '../components/ExerciseStrip';
@@ -46,7 +45,6 @@ import { SetRow, type CellField } from '../components/SetRow';
 import { dayLabel } from '../lib/dayLabel';
 import { isTimed, rangeLabel, repUnitWord, stepFor } from '../lib/repUnit';
 
-const DAY_SLOTS = SLOTS;
 
 function outcomeColor(outcome: Progression['outcome']): string {
   switch (outcome) {
@@ -450,10 +448,14 @@ export function SessionScreen({
     [plan, exercisesById],
   );
 
-  const slotLabels = useMemo(
-    () => Object.fromEntries(DAY_SLOTS.map((slot) => [slot, labelFor(slot)])) as Record<DaySlot, string>,
-    [labelFor],
-  );
+  /* The workout this session belongs to, if it belongs to one at all. */
+  const programmedName = useMemo(() => {
+    const slot = draft?.daySlot as DaySlot | undefined;
+    if (!slot || !plan) return undefined;
+    const exists =
+      plan.schedule[slot] !== undefined || entriesForSlot(plan.entries, slot).length > 0;
+    return exists ? labelFor(slot) : undefined;
+  }, [draft?.daySlot, plan, labelFor]);
 
   const loggedSets = draft ? countLoggedSets(draft) : 0;
   /* Unsaved work is a comparison, not a hunch. */
@@ -794,15 +796,18 @@ export function SessionScreen({
         )}
 
         <Card title="Session details" className="mt-3">
-          <Label>Day</Label>
-          <div className="mt-1.5">
-            <SegmentedToggle
-              options={DAY_SLOTS}
-              labels={slotLabels}
-              value={(draft.daySlot as DaySlot) ?? 'A'}
-              onChange={(slot) => setDraft({ ...draft, daySlot: slot })}
-            />
-          </div>
+          {/* Read-only, and only when there is one. As a control it listed
+              all twelve workout ids including the ones that do not exist, to
+              change something you already chose when you started. As a line of
+              text it answers the one useful question: what is this being
+              logged against. A freestyle session is attributed to nothing and
+              says nothing. */}
+          {programmedName && (
+            <div className="mb-4 flex items-baseline justify-between gap-3">
+              <Label>Workout</Label>
+              <span className="truncate text-[14px] font-medium">{programmedName}</span>
+            </div>
+          )}
 
           <div className="mt-4 flex gap-3">
             <label className="flex-1">
