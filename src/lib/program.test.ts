@@ -96,6 +96,33 @@ describe('block schedule', () => {
     }
   });
 
+  it('keeps which draw a day is showing, so a re-roll survives a reload', () => {
+    expect(
+      normaliseSchedule({ b: { A: { weekday: 1, intensity: 'heavy', variant: 2 } } }).b?.A,
+    ).toMatchObject({ variant: 2 });
+    // Variant 0 is a real value — the strongest draw — not an absent one.
+    expect(
+      normaliseSchedule({ b: { A: { weekday: 1, intensity: 'heavy', variant: 0 } } }).b?.A,
+    ).toMatchObject({ variant: 0 });
+  });
+
+  it('drops a variant that is not a whole count', () => {
+    for (const variant of [-1, 1.5, 'two', null]) {
+      const parsed = normaliseSchedule({ b: { A: { weekday: 1, intensity: 'heavy', variant } } });
+      expect(parsed.b?.A, String(variant)).not.toHaveProperty('variant');
+    }
+  });
+
+  it('round-trips focus and variant through storage', async () => {
+    await writeSchedule('block_1', {
+      A: { weekday: 3, intensity: 'light', focus: 'upper', variant: 2 },
+    });
+    expect((await readSchedules()).block_1?.A).toMatchObject({
+      focus: 'upper',
+      variant: 2,
+    });
+  });
+
   it('resolves the slot programmed for a date', () => {
     const schedule = day(1, 4);
     expect(slotForDate(schedule, MON)).toBe('A');

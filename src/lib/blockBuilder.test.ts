@@ -145,3 +145,56 @@ describe('the week pass', () => {
     );
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/*  Why "Regenerate" has to advance the variant.                              */
+/*                                                                            */
+/*  Variant 0 is documented as always the strongest draw, and returning to it  */
+/*  returns exactly the day you first saw. That is a good property and it is   */
+/*  why the button was broken: it passed 0 every time, so pressing it on a day */
+/*  already showing variant 0 handed back an identical list, forever.          */
+/* -------------------------------------------------------------------------- */
+
+describe('variant rotation is what makes a day change', () => {
+  const day = (variant: number) =>
+    generateDay({
+      blockId: 'b',
+      exercises: EXERCISES,
+      focusMuscles: [],
+      template: templateDayFor({ slot: 'A', weekday: 3, intensity: 'light', focus: 'upper' }),
+      variant,
+      exclude: [],
+    }).exercises.map((entry) => entry.exerciseId);
+
+  it('gives an identical day for an unchanged variant', () => {
+    // Four presses of a button that passes 0 — the reported symptom.
+    const first = day(0);
+    for (let i = 0; i < 3; i += 1) expect(day(0)).toEqual(first);
+  });
+
+  it('gives a different day for the next variant along', () => {
+    expect(day(1)).not.toEqual(day(0));
+    expect(day(2)).not.toEqual(day(1));
+  });
+
+  it('rotates within a bounded band rather than walking downhill', () => {
+    // Bounded and repeatable: it comes back round to the strongest draw
+    // instead of degrading with every press.
+    expect(day(3)).toEqual(day(0));
+    expect(day(4)).toEqual(day(1));
+  });
+
+  it('still respects the focus at every variant', () => {
+    const legs = ['squat', 'hinge'];
+    for (const variant of [0, 1, 2]) {
+      const patterns = day(variant)
+        .map((id) => EXERCISES.find((e) => e.id === id)?.pattern)
+        .filter((pattern) => pattern !== undefined);
+      // An upper-body focus asks for pull/push/core; rotating the draw must not
+      // smuggle a squat or a hinge back in.
+      for (const pattern of patterns) {
+        expect(legs, `variant ${variant} produced ${pattern}`).not.toContain(pattern);
+      }
+    }
+  });
+});

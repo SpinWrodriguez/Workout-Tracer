@@ -77,7 +77,6 @@ export function ProgramScreen({
   const [focus, setFocus] = useState<MuscleId[]>([]);
   /* Which draw each day is showing. Its presence is also what says "this day
      came from the generator", which is what earns it a Shuffle button. */
-  const [variantBySlot, setVariantBySlot] = useState<Partial<Record<DaySlot, number>>>({});
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [thirdDay] = useState<number>(DEFAULT_THIRD_DAY);
   /* null means the app balances it; an empty array means every session light. */
@@ -364,7 +363,7 @@ export function ProgramScreen({
   };
 
   /** Replaces one slot's exercises and its place in the week. Nothing else. */
-  const writeDay = async (day: DayPlan) => {
+  const writeDay = async (day: DayPlan, variant: number) => {
     if (!block) return;
     await db.transaction('rw', [db.block, db.blockExercise], async () => {
       const stale = (await db.blockExercise.where('blockId').equals(block.id).toArray()).filter(
@@ -383,10 +382,17 @@ export function ProgramScreen({
     await writeSchedule(block.id, {
       ...stored,
       [day.slot]: {
+        /*
+         * Everything the WORKOUT owns is carried over — its focus above all.
+         * Rebuilding this object from the day alone dropped the focus on the
+         * first regenerate, which quietly undid the whole point of storing it.
+         */
+        ...stored[day.slot],
         weekday: day.weekday,
         intensity: day.intensity,
         effortCue: day.effortCue,
         generated: true,
+        variant,
         // Named from what was just built. A name the user typed is left alone:
         // renaming a day should survive re-rolling it.
         name:
@@ -433,9 +439,16 @@ export function ProgramScreen({
       .reduce((n, entry) => n + entry.targetSets, 0);
     if (template) balanceSets([day], [template], byId, training.weeklySetTarget, fixedSets);
 
-    await writeDay(day);
-    setVariantBySlot((prev) => ({ ...prev, [slot]: variant }));
+    await writeDay(day, variant);
   };
+
+  /**
+   * The next draw along. Rotation is bounded and repeatable, so asking for the
+   * same variant is asking for the same day — which is what made "Regenerate"
+   * look broken: it was wired to variant 0, documented as always the strongest
+   * draw, so pressing it returned exactly what was already on screen.
+   */
+  const nextVariant = (slot: DaySlot) => (schedule?.[slot]?.variant ?? 0) + 1;
 
   /** Carries out the change a problem described. */
   const applyFix = async (fix: Fix) => {
@@ -500,6 +513,7 @@ export function ProgramScreen({
       [slot]: {
         intensity,
         focus,
+        variant: 0,
         effortCue: template.effortCue,
         generated: true,
         name: describeDay(
@@ -510,7 +524,6 @@ export function ProgramScreen({
         ),
       },
     });
-    setVariantBySlot((prev) => ({ ...prev, [slot]: 0 }));
     setEditingSlot(slot);
   };
 
@@ -553,11 +566,7 @@ export function ProgramScreen({
       .filter((day): day is TemplateDay => day !== undefined);
     balanceSets(built, template, byId, training.weeklySetTarget, fixedSets);
 
-    for (const day of built) await writeDay(day);
-    setVariantBySlot((prev) => ({
-      ...prev,
-      ...Object.fromEntries(built.map((day) => [day.slot, 0])),
-    }));
+    for (const day of built) await writeDay(day, 0);
   };
 
   /*
@@ -871,7 +880,7 @@ export function ProgramScreen({
             }}
             onUpdate={(entry, patch) => void updateBlockExercise(entry, patch)}
             canGenerate={templateFor(slot) !== undefined}
-            generated={variantBySlot[slot] !== undefined || scheduled?.generated === true}
+            generated={scheduled?.generated === true}
             onGenerate={() => {
               // Only ever destructive with a yes: a day built by hand is not
               // something to overwrite because a button was nearby.
@@ -883,9 +892,11 @@ export function ProgramScreen({
               ) {
                 return;
               }
-              void generateSlot(slot, 0);
+              // An empty day has nothing to differ from, so it takes the
+              // strongest draw; a day with contents is being asked to change.
+              void generateSlot(slot, list.length === 0 ? 0 : nextVariant(slot));
             }}
-            onShuffle={() => void generateSlot(slot, (variantBySlot[slot] ?? 0) + 1)}
+            onShuffle={() => void generateSlot(slot, nextVariant(slot))}
             onClearDay={() => {
               if (block && window.confirm(`Delete ${labelFor(slot)} and everything in it?`)) {
                 void clearDaySlot(block.id, slot);

@@ -69,6 +69,13 @@ export interface ScheduledDay {
    * reshape a day the user is happy with.
    */
   focus?: WorkoutFocus;
+  /**
+   * Which draw of the generator this day is showing. Rotation is bounded and
+   * repeatable, so the only way to hand back a different day is to ask for a
+   * different variant — and that has to survive a reload, or the first press
+   * after restarting the app re-asks for one already on screen.
+   */
+  variant?: number;
 }
 
 export type BlockSchedule = Partial<Record<DaySlot, ScheduledDay>>;
@@ -136,6 +143,9 @@ export function normaliseSchedule(value: unknown): ScheduleByBlock {
         // falls back to inference rather than indexing into nothing.
         ...(WORKOUT_FOCUSES.includes(value.focus as WorkoutFocus)
           ? { focus: value.focus as WorkoutFocus }
+          : {}),
+        ...(Number.isInteger(value.variant) && Number(value.variant) >= 0
+          ? { variant: Number(value.variant) }
           : {}),
       };
     }
