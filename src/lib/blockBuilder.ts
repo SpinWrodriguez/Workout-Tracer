@@ -466,6 +466,12 @@ export function generateBlock(input: GenerateInput): GeneratedBlock {
       `Only ${template.length} of ${input.sessionsPerWeek} sessions could be placed — Fri and Sat are never training days, and your golf days take the rest.`,
     );
   }
+  if (resolved.days.length > 0 && resolved.days.every((day) => day.intensity === 'light')) {
+    warnings.push(
+      'Every session is light, so this week is a deload — it will not reach the weekly set target.',
+    );
+  }
+
   // Squeezed heavy days mean the weekly target is low for this many sessions.
   const squeezed = resolved.days.some(
     (day) =>
@@ -478,13 +484,13 @@ export function generateBlock(input: GenerateInput): GeneratedBlock {
     );
   }
 
-  const light = resolved.days.find((day) => day.intensity === 'light');
-  if (light) warnings.push(`${light.weekdayLabel} is the light session — ${light.effortCue}.`);
-  if (resolved.violations.length > 0) {
+  const lightDays = resolved.days.filter((day) => day.intensity === 'light');
+  const heavyDays = resolved.days.filter((day) => day.intensity === 'heavy');
+  if (lightDays.length > 0 && heavyDays.length > 0) {
+    const where = lightDays.map((day) => day.weekdayLabel).join(' and ');
     warnings.push(
-      `${resolved.violations.length} rule${resolved.violations.length === 1 ? '' : 's'} could not be satisfied after ${MAX_VALIDATION_ATTEMPTS} attempts.`,
+      `${where} ${lightDays.length === 1 ? 'is a light session' : 'are light sessions'} — ${lightDays[0]?.effortCue}.`,
     );
   }
-
   return { rationale, days: resolved.days, warnings, violations: resolved.violations };
 }

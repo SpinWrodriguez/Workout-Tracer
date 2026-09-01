@@ -101,6 +101,14 @@ describe('rule b — reps inside the exercise bounds (defect 2)', () => {
     });
   });
 
+  it('widens downward when the exercise ceiling is what pinned it', () => {
+    // Overhead press takes 5-10; a light day asking for 10-17 lands on its top.
+    const press = workingRepRange(find('bb_overhead_press'), { low: 10, high: 17 });
+    expect(press.high).toBe(10);
+    expect(press.low).toBeLessThan(press.high);
+    expect(press.low).toBeGreaterThanOrEqual(find('bb_overhead_press').repMin);
+  });
+
   it('never collapses to a single rep value', () => {
     // A kettlebell swing takes 10-20; a 6-10 target lands entirely on its floor.
     const swing = workingRepRange(find('kb_swing'), { low: 6, high: 10 });

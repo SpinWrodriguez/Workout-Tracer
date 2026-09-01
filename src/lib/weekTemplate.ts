@@ -98,8 +98,17 @@ const SHAPE_PATTERNS: Record<SessionShape, { a: MovementPattern[]; b: MovementPa
   },
 };
 
-/** The light day is full body whatever shape the heavy pair takes. */
-const SESSION_C_PATTERNS: MovementPattern[] = ['squat', 'push_h', 'pull_h', 'rotation'];
+/*
+ * Light days cycle through these. One light day in a normal week takes the
+ * first set and the heavy pair covers the hinge and core; a week with several
+ * light days — or nothing but light days — still reaches every pattern,
+ * because the sets complement each other rather than repeating.
+ */
+const LIGHT_PATTERN_SETS: MovementPattern[][] = [
+  ['squat', 'push_h', 'pull_h', 'rotation'],
+  ['hinge', 'push_v', 'pull_v', 'core'],
+  ['squat', 'rotation', 'core', 'carry'],
+];
 
 function heavyDay(
   slot: DaySlot,
@@ -125,13 +134,13 @@ function heavyDay(
   };
 }
 
-function lightDay(slot: DaySlot, weekday: Weekday): TemplateDay {
+function lightDay(slot: DaySlot, weekday: Weekday, index = 0): TemplateDay {
   return {
     slot,
     weekday,
     weekdayLabel: WEEKDAY_LABEL[weekday],
     intensity: 'light',
-    patterns: SESSION_C_PATTERNS,
+    patterns: LIGHT_PATTERN_SETS[index % LIGHT_PATTERN_SETS.length] as MovementPattern[],
     // Sub-maximal by construction: nothing that taxes grip or the spine.
     excludeGripHigh: true,
     excludeSpinalHigh: true,
@@ -151,8 +160,9 @@ export interface TemplateInput {
   /** Which weekday the optional third session lands on. */
   thirdDay?: Weekday;
   /**
-   * Weekdays to run at full effort. Empty or absent means the app balances it:
-   * the first two days are heavy and anything beyond them is light.
+   * Weekdays to run at full effort. Absent means the app balances it — the
+   * first two days are heavy and anything beyond them is light. An empty array
+   * is a decision, not an absence: it means every session is light.
    */
   heavyWeekdays?: Weekday[];
   /** Weekdays a round is typically played; Sunday is only free when not golf. */
@@ -207,20 +217,25 @@ export function templateWeek({
   const weekdays = templateWeekdays(sessionsPerWeek, golfWeekdays, thirdDay);
 
   /*
-   * Which days are full effort. Left to the app, it is the first two and
+   * Which days are full effort. Left to the app it is the first two, and
    * everything after them is light — four or five hard sessions a week is not
    * what a returning lifter with a weekend round recovers from. Chosen by
-   * hand, the choice stands: placement is still the template, only effort
-   * moves.
+   * hand the choice stands, including choosing none: no day is compulsorily
+   * heavy. Placement is still the template; only effort moves.
    */
-  const chosen = heavyWeekdays?.filter((weekday) => weekdays.includes(weekday)) ?? [];
+  const chosen = heavyWeekdays?.filter((weekday) => weekdays.includes(weekday));
   const isHeavy = (weekday: Weekday, index: number) =>
-    chosen.length > 0 ? chosen.includes(weekday) : index < 2;
+    chosen === undefined ? index < 2 : chosen.includes(weekday);
 
   let heavySoFar = 0;
+  let lightSoFar = 0;
   return weekdays.map((weekday, index) => {
     const slot = SLOTS[index] ?? 'Y';
-    if (!isHeavy(weekday, index)) return lightDay(slot, weekday);
+    if (!isHeavy(weekday, index)) {
+      const day = lightDay(slot, weekday, lightSoFar);
+      lightSoFar += 1;
+      return day;
+    }
     // Heavy days alternate through the shape, so a third heavy day repeats the
     // first rather than inventing a pattern set nobody asked for.
     const set = heavySoFar % 2 === 0 ? patterns.a : patterns.b;

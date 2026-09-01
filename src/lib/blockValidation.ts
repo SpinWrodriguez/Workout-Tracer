@@ -153,10 +153,13 @@ export function workingRepRange(
   if (low < high) return { low, high };
 
   // The desired range collapsed onto a single value at the edge of what the
-  // exercise takes — "3 x 10-10" is a prescription, not a range. Open the top
-  // back up, still inside the exercise bounds.
-  const widened = Math.min(exercise.repMax, low + Math.max(2, Math.round(low * 0.25)));
-  return { low, high: widened };
+  // exercise takes — "3 x 10-10" is a prescription, not a range. Open it back
+  // up, still inside the exercise bounds: upward if there is room above,
+  // downward when the exercise ceiling is what pinned it.
+  const room = Math.max(2, Math.round(low * 0.25));
+  const up = Math.min(exercise.repMax, low + room);
+  if (up > low) return { low, high: up };
+  return { low: Math.max(exercise.repMin, low - room), high: low };
 }
 
 /* --- the validator --------------------------------------------------------- */

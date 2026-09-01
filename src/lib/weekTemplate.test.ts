@@ -385,12 +385,73 @@ describe('choosing the heavy days by hand', () => {
     expect(heavy[2]?.patterns).toContain('pull_v');
   });
 
-  it('ignores a chosen day that is not in the week', () => {
+  it('treats an omitted choice as auto and an empty one as a decision', () => {
+    // Absent: the app balances it.
+    expect(
+      templateWeek({ sessionsPerWeek: 3, golfWeekdays: [6] }).map((d) => d.intensity),
+    ).toEqual(['heavy', 'heavy', 'light']);
+    // Empty: every session is light. No day is compulsorily heavy.
+    expect(
+      templateWeek({ sessionsPerWeek: 3, golfWeekdays: [6], heavyWeekdays: [] }).map(
+        (d) => d.intensity,
+      ),
+    ).toEqual(['light', 'light', 'light']);
+  });
+
+  it('drops a chosen day that is not in the week rather than falling back', () => {
+    // Sunday is not in a two-session week, so nothing is left heavy.
     const week = templateWeek({ sessionsPerWeek: 2, golfWeekdays: [6], heavyWeekdays: [7] });
-    expect(week.map((d) => d.intensity)).toEqual(['heavy', 'heavy']);
+    expect(week.map((d) => d.intensity)).toEqual(['light', 'light']);
+  });
+
+  it('lets Monday or Tuesday be light', () => {
+    const week = templateWeek({ sessionsPerWeek: 3, golfWeekdays: [6], heavyWeekdays: [3] });
+    expect(week.map((d) => [d.weekdayLabel, d.intensity])).toEqual([
+      ['Mon', 'light'],
+      ['Tue', 'light'],
+      ['Wed', 'heavy'],
+    ]);
+  });
+
+  it('still covers every pattern when the whole week is light', () => {
+    const block = build(3, { heavyWeekdays: [] });
+    expect(block.violations.map((v) => v.code)).not.toContain('pattern_coverage');
+    expect(block.warnings.join(' ')).toMatch(/deload/);
+    for (const day of block.days) {
+      expect(day.intensity).toBe('light');
+      for (const entry of day.exercises) expect(entry.targetSets).toBe(2);
+    }
   });
 
   it('generates a valid block with hand-picked heavy days', () => {
     expect(build(4, { heavyWeekdays: [1, 4] }).violations).toEqual([]);
+  });
+});
+
+describe('warnings match the week that was actually built', () => {
+  it('names every light day, not just the first', () => {
+    const warning = build(5).warnings.find((w) => w.includes('light session'));
+    expect(warning).toMatch(/Wed and Thu and Sun are light sessions/);
+  });
+
+  it('says deload instead of naming light days when they are all light', () => {
+    const warnings = build(3, { heavyWeekdays: [] }).warnings.join(' ');
+    expect(warnings).toMatch(/deload/);
+    expect(warnings).not.toMatch(/is a light session|are light sessions/);
+  });
+
+  it('never prescribes a single-value rep range anywhere in a week', () => {
+    for (const sessions of [2, 3, 4, 5]) {
+      for (const heavy of [undefined, [] as number[]]) {
+        for (const day of build(sessions, { heavyWeekdays: heavy }).days) {
+          for (const entry of day.exercises) {
+            expect(
+              entry.repRangeHigh,
+              `${entry.exerciseId} at ${sessions} sessions`,
+            ).toBeGreaterThan(entry.repRangeLow);
+          }
+        }
+      }
+    }
   });
 });

@@ -63,8 +63,8 @@ export function ProgramScreen({
   const [preview, setPreview] = useState<GeneratedBlock | null>(null);
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [thirdDay] = useState<number>(DEFAULT_THIRD_DAY);
-  /* Empty means the app balances it: first two heavy, the rest light. */
-  const [heavyWeekdays, setHeavyWeekdays] = useState<Weekday[]>([]);
+  /* null means the app balances it; an empty array means every session light. */
+  const [heavyWeekdays, setHeavyWeekdays] = useState<Weekday[] | null>(null);
   const [shape, setShape] = useState<SessionShape>('mixed');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [training, setTraining] = useState<TrainingPrefs>(DEFAULT_TRAINING);
@@ -131,8 +131,7 @@ export function ProgramScreen({
     [sessionsPerWeek, training.golfWeekdays, thirdDay],
   );
 
-  const effectiveHeavy =
-    heavyWeekdays.length > 0 ? heavyWeekdays : sessionWeekdays.slice(0, 2);
+  const effectiveHeavy = heavyWeekdays ?? sessionWeekdays.slice(0, 2);
   const heavyCount = effectiveHeavy.length;
   const heavyLabel = effectiveHeavy.map((day) => WEEKDAY_LABEL[day]).join(' and ');
 
@@ -186,7 +185,7 @@ export function ProgramScreen({
         golfWeekdays: training.golfWeekdays as never,
         shape,
         thirdDay: thirdDay as never,
-        heavyWeekdays,
+        heavyWeekdays: heavyWeekdays ?? undefined,
         minutesPerSession: Number(sessionMinutes),
         weeklySetTarget: training.weeklySetTarget,
         hasHistory: hasHistory ?? false,
@@ -300,36 +299,32 @@ export function ProgramScreen({
 
             <Label className="mt-4 block">Heavy days</Label>
             <div className="mt-1.5 flex gap-1.5">
-              {sessionWeekdays.map((weekday) => {
-                const auto = heavyWeekdays.length === 0;
-                const active = auto
-                  ? sessionWeekdays.indexOf(weekday) < 2
-                  : heavyWeekdays.includes(weekday);
-                return (
-                  <Chip
-                    key={weekday}
-                    active={active}
-                    onClick={() =>
-                      setHeavyWeekdays((prev) => {
-                        // First tap adopts what the app was already doing, so
-                        // toggling one day does not silently clear the others.
-                        const base = prev.length === 0 ? sessionWeekdays.slice(0, 2) : prev;
-                        return base.includes(weekday)
-                          ? base.filter((day) => day !== weekday)
-                          : [...base, weekday].sort((a, b) => a - b);
-                      })
-                    }
-                    tone="volume"
-                  >
-                    {WEEKDAY_LABEL[weekday]}
-                  </Chip>
-                );
-              })}
+              {sessionWeekdays.map((weekday) => (
+                <Chip
+                  key={weekday}
+                  active={effectiveHeavy.includes(weekday)}
+                  onClick={() =>
+                    setHeavyWeekdays((prev) => {
+                      // The first tap adopts whatever the app was already doing,
+                      // so toggling one day does not silently clear the others.
+                      const base = prev ?? sessionWeekdays.slice(0, 2);
+                      return base.includes(weekday)
+                        ? base.filter((day) => day !== weekday)
+                        : [...base, weekday].sort((a, b) => a - b);
+                    })
+                  }
+                  tone="volume"
+                >
+                  {WEEKDAY_LABEL[weekday]}
+                </Chip>
+              ))}
             </div>
             <Label className="mt-1.5 block">
-              {heavyWeekdays.length === 0
+              {heavyWeekdays === null
                 ? 'Balanced for you — the first two are heavy, the rest light.'
-                : `${heavyWeekdays.map((d) => WEEKDAY_LABEL[d]).join(' and ')} heavy, the rest light.`}
+                : heavyWeekdays.length === 0
+                  ? 'Every session light. A deload week — no day is compulsorily heavy.'
+                  : `${heavyLabel} heavy, the rest light.`}
             </Label>
 
             {Number(sessionsPerWeek) > maxSessionsFor(training.golfWeekdays as never) && (
@@ -339,16 +334,22 @@ export function ProgramScreen({
               </p>
             )}
 
-            <Label className="mt-4 block">Focus</Label>
-            <div className="mt-1.5">
-              <SegmentedToggle
-                options={SESSION_SHAPES}
-                value={shape}
-                onChange={setShape}
-                labels={SESSION_SHAPE_LABEL}
-              />
-            </div>
-            <Label className="mt-1.5 block">{SESSION_SHAPE_HINT[shape]}</Label>
+            {/* Focus shapes the heavy days, so with none of them it changes
+                nothing and has no business on the screen. */}
+            {heavyCount > 0 && (
+              <>
+                <Label className="mt-4 block">Focus</Label>
+                <div className="mt-1.5">
+                  <SegmentedToggle
+                    options={SESSION_SHAPES}
+                    value={shape}
+                    onChange={setShape}
+                    labels={SESSION_SHAPE_LABEL}
+                  />
+                </div>
+                <Label className="mt-1.5 block">{SESSION_SHAPE_HINT[shape]}</Label>
+              </>
+            )}
 
             <Label className="mt-4 block">Session length</Label>
             <div className="mt-1.5">
@@ -404,10 +405,11 @@ export function ProgramScreen({
             )}
 
             <p className="mt-4 text-[12px] font-medium text-text-dim">
-              {heavyLabel} {heavyCount === 1 ? 'is the heavy session' : 'are the heavy sessions'};
-              every other one is light and about 25 min.{' '}
+              {heavyCount === 0
+                ? 'Every session is light and about 25 min.'
+                : `${heavyLabel} ${heavyCount === 1 ? 'is the heavy session' : 'are the heavy sessions'}; every other one is light and about 25 min.`}{' '}
               {gripDays.length === 0
-                ? 'None of them is clear enough of your rounds to carry grip work.'
+                ? 'No session is both heavy and clear enough of your rounds to carry grip work.'
                 : `Grip work can only go on ${gripLabel}.`}{' '}
               Golf days and the weekly set target live in Settings.
             </p>
