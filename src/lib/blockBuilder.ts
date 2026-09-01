@@ -1,5 +1,6 @@
 import type { BlockExercise, DaySlot, Exercise, MovementPattern, MuscleId } from '../db/types';
 import { type Weekday } from './golf';
+import { isTimed } from './repUnit';
 import {
   COVERAGE_GROUPS,
   SET_DURATION_SECONDS,
@@ -66,6 +67,18 @@ export const DESIRED_REPS: Record<MovementPattern, { low: number; high: number }
   core: { low: 10, high: 15 },
   rotation: { low: 10, high: 15 },
 };
+
+/*
+ * A hold or a carry is not "10-15 reps of core". Its own pattern target would
+ * collapse against its bounds and hand back the entire range, so timed work
+ * gets a target in the units it is actually counted in.
+ */
+const DESIRED_SECONDS = { low: 30, high: 60 };
+
+export function desiredRange(exercise: Exercise): { low: number; high: number } {
+  if (isTimed(exercise)) return DESIRED_SECONDS;
+  return DESIRED_REPS[exercise.pattern] ?? { low: 8, high: 12 };
+}
 
 const COMPOUND_PATTERNS: MovementPattern[] = [
   'squat',
@@ -276,7 +289,7 @@ function fillDay(
     if (!force && seconds + cost > budgetSeconds && picked.length >= MIN_EXERCISES) return false;
 
     // A light day shifts the range up; the exercise own bounds still win.
-    const desired = DESIRED_REPS[choice.pattern];
+    const desired = desiredRange(choice);
     const range = workingRepRange(choice, {
       low: desired.low + template.repShift.low,
       high: desired.high + template.repShift.high,

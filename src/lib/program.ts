@@ -1,7 +1,8 @@
 import { db } from '../db/db';
 import type { Block, BlockExercise, DaySlot, Exercise } from '../db/types';
 import { weekdayOf, type Weekday } from './golf';
-import { DESIRED_REPS } from './blockBuilder';
+import { desiredRange } from './blockBuilder';
+import { maxPrescription } from './repUnit';
 import { workingRepRange } from './blockValidation';
 import { LIGHT_DAY_CUE, type Intensity } from './weekTemplate';
 import { todayIso } from './format';
@@ -281,9 +282,7 @@ export async function addBlockExercise(
   // The same range the generator would have given it: the hypertrophy target
   // for its pattern, clamped to what the movement actually takes.
   const exercise = await db.exercise.get(exerciseId);
-  const range = exercise
-    ? workingRepRange(exercise, DESIRED_REPS[exercise.pattern] ?? FALLBACK_REPS)
-    : FALLBACK_REPS;
+  const range = exercise ? workingRepRange(exercise, desiredRange(exercise)) : FALLBACK_REPS;
 
   await db.blockExercise.put({
     blockId,
@@ -310,14 +309,17 @@ export async function updateBlockExercise(
   patch: Partial<Pick<BlockExercise, 'targetSets' | 'repRangeLow' | 'repRangeHigh'>>,
 ): Promise<void> {
   const next = { ...entry, ...patch };
+  /* A flat cap of 50 is a rep count wearing the wrong hat: on a plank it read
+     as fifty seconds, and a two-minute hold could not be prescribed at all. */
+  const ceiling = maxPrescription(await db.exercise.get(entry.exerciseId));
   // A range that crosses over is meaningless; keep low at or below high.
   if (next.repRangeLow > next.repRangeHigh) {
     if (patch.repRangeLow !== undefined) next.repRangeHigh = next.repRangeLow;
     else next.repRangeLow = next.repRangeHigh;
   }
   next.targetSets = Math.max(1, Math.min(10, next.targetSets));
-  next.repRangeLow = Math.max(1, Math.min(50, next.repRangeLow));
-  next.repRangeHigh = Math.max(1, Math.min(50, next.repRangeHigh));
+  next.repRangeLow = Math.max(1, Math.min(ceiling, next.repRangeLow));
+  next.repRangeHigh = Math.max(1, Math.min(ceiling, next.repRangeHigh));
   await db.blockExercise.put(next);
 }
 

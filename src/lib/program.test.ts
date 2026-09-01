@@ -229,7 +229,8 @@ describe('hand-editing a block', () => {
    */
   it('gives a hand-added exercise a range it can actually take', async () => {
     for (const [id, low, high] of [
-      ['bw_plank', 20, 60],
+      // A hold gets a hold's target, not 'core reps' collapsed onto its bounds.
+      ['bw_plank', 30, 60],
       ['kb_turkish_get_up', 1, 5],
       ['cb_lateral_raise', 10, 12],
     ] as const) {
@@ -348,5 +349,25 @@ describe('reading the setup controls back out of the program', () => {
 
   it('has nothing to say about a program that does not exist yet', () => {
     expect(configFromSchedule({})).toBeUndefined();
+  });
+});
+
+describe('prescribing a hold', () => {
+  it('lets a plank run past a minute', async () => {
+    await addBlockExercise('block_1', 'A', 'bw_plank');
+    const row = (await db.blockExercise.toArray()).find((e) => e.exerciseId === 'bw_plank');
+    // A flat cap of 50 was a rep count wearing the wrong hat: on a plank it
+    // read as fifty seconds and a two-minute hold was unreachable.
+    await updateBlockExercise(row as BlockExercise, { repRangeHigh: 120 });
+    const after = (await db.blockExercise.toArray()).find((e) => e.exerciseId === 'bw_plank');
+    expect(after?.repRangeHigh).toBe(120);
+  });
+
+  it('still holds reps to a sane ceiling', async () => {
+    await addBlockExercise('block_1', 'A', 'bb_back_squat');
+    const row = (await db.blockExercise.toArray()).find((e) => e.exerciseId === 'bb_back_squat');
+    await updateBlockExercise(row as BlockExercise, { repRangeHigh: 400 });
+    const after = (await db.blockExercise.toArray()).find((e) => e.exerciseId === 'bb_back_squat');
+    expect(after?.repRangeHigh).toBe(50);
   });
 });

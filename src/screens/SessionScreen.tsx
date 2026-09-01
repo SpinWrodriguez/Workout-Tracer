@@ -43,7 +43,7 @@ import { RestTimerBar } from '../components/RestTimer';
 import { useRestTimer } from '../lib/restTimer';
 import { SetRow, type CellField } from '../components/SetRow';
 import { dayLabel } from '../lib/dayLabel';
-import { isTimed, repUnitWord } from '../lib/repUnit';
+import { isTimed, rangeLabel, repUnitWord, stepFor } from '../lib/repUnit';
 
 const DAY_SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
 
@@ -385,7 +385,7 @@ export function SessionScreen({
       kind: cell.field,
       unit: cell.field === 'weight' ? 'kg' : isTimed(exercise) ? 's' : 'reps',
       value: cell.field === 'weight' ? set.weightKg : set.reps,
-      step: cell.field === 'weight' ? FALLBACK_STEP : 1,
+      step: cell.field === 'weight' ? FALLBACK_STEP : stepFor(exercise),
       ladder: cell.field === 'weight' ? ladderFor(exercise, inventory) : undefined,
     };
   }, [cell, draft, exercisesById, inventory]);
@@ -716,7 +716,7 @@ export function SessionScreen({
                   ? `${prior.reps}`
                   : `${kg(prior.weightKg)}×${prior.reps}`
                 : target
-                  ? `${target.repRangeLow}-${target.repRangeHigh}${isTimed(activeExercise) ? ' s' : ''}`
+                  ? rangeLabel(activeExercise, target.repRangeLow, target.repRangeHigh)
                   : undefined;
               return (
                 <SetRow

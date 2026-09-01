@@ -3,7 +3,7 @@ import type { BlockExercise, Exercise } from '../db/types';
 import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
 
 import { Card, Empty, Label } from './Layout';
-import { prescription, repUnitWord } from '../lib/repUnit';
+import { formatDuration, isTimed, prescription, repUnitWord, stepFor } from '../lib/repUnit';
 
 /* -------------------------------------------------------------------------- */
 /*  One day of the block, readable or editable.                               */
@@ -17,27 +17,34 @@ function Stepper({
   onChange,
   label,
   min = 1,
+  step = 1,
+  format,
 }: {
   value: number;
   onChange: (next: number) => void;
   label: string;
   min?: number;
+  /** Seconds move in fives: a two-minute plank one tap at a time is not one. */
+  step?: number;
+  format?: (value: number) => string;
 }) {
   return (
     <span className="flex items-center gap-1">
       <button
         type="button"
-        onClick={() => onChange(value - 1)}
+        onClick={() => onChange(Math.max(min, value - step))}
         disabled={value <= min}
         aria-label={`One fewer ${label}`}
         className="size-7 rounded-lg bg-surface-2 text-[15px] font-semibold disabled:text-text-faint"
       >
         −
       </button>
-      <span className="w-6 text-center text-[13px] font-semibold">{value}</span>
+      <span className="min-w-6 px-0.5 text-center text-[13px] font-semibold tabular-nums">
+        {format ? format(value) : value}
+      </span>
       <button
         type="button"
-        onClick={() => onChange(value + 1)}
+        onClick={() => onChange(value + step)}
         aria-label={`One more ${label}`}
         className="size-7 rounded-lg bg-surface-2 text-[15px] font-semibold"
       >
@@ -217,12 +224,16 @@ export function DaySlotCard({
                   <Stepper
                     value={entry.repRangeLow}
                     label={`minimum ${repUnitWord(exercise)}`}
+                    step={stepFor(exercise)}
+                    format={isTimed(exercise) ? formatDuration : undefined}
                     onChange={(repRangeLow) => onUpdate(entry, { repRangeLow })}
                   />
                   <span className="text-[13px] font-medium text-text-dim">to</span>
                   <Stepper
                     value={entry.repRangeHigh}
                     label={`maximum ${repUnitWord(exercise)}`}
+                    step={stepFor(exercise)}
+                    format={isTimed(exercise) ? formatDuration : undefined}
                     onChange={(repRangeHigh) => onUpdate(entry, { repRangeHigh })}
                   />
                 </span>

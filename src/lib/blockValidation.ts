@@ -2,7 +2,7 @@ import type { BlockExercise, DaySlot, Exercise, MovementPattern, MuscleId } from
 import { GRIP_BUFFER_DAYS, WEEKDAY_LABEL, type Weekday } from './golf';
 
 import { weekdayAllowed, type TemplateDay } from './weekTemplate';
-import { repUnitWord } from './repUnit';
+import { isTimed, rangeLabel, repUnitWord } from './repUnit';
 
 /* -------------------------------------------------------------------------- */
 /*  Block validation.                                                         */
@@ -287,7 +287,13 @@ export function validateBlock(
           // "only takes" read as nonsense when the exercise's range is the
           // wider one — the point is that the prescription sits outside it,
           // in whichever direction.
-          message: `${nameOf(day)}: ${exercise.name} is set to ${entry.repRangeLow}-${entry.repRangeHigh}, outside its usual ${exercise.repMin}-${exercise.repMax} ${repUnitWord(exercise)}.`,
+          message: `${nameOf(day)}: ${exercise.name} is set to ${rangeLabel(
+            exercise,
+            entry.repRangeLow,
+            entry.repRangeHigh,
+          )}, outside its usual ${rangeLabel(exercise, exercise.repMin, exercise.repMax)}${
+            isTimed(exercise) ? '' : ` ${repUnitWord(exercise)}`
+          }.`,
         });
       }
 
