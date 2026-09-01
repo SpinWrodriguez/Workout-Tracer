@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readLastSync } from '../db/settings';
 import { friendlyDate, toIsoDate } from '../lib/format';
-import { syncNow } from '../lib/nutritionSync';
+import { syncNow, syncWorkoutNow } from '../lib/nutritionSync';
+import { lastPushedAt, type WorkoutSyncReport } from '../lib/workoutSync';
 import type { SyncReport } from '../lib/remoteSync';
 import {
   currentSession,
@@ -61,10 +62,13 @@ export function NutritionSync() {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<SyncReport | null>(null);
   const [lastSync, setLastSync] = useState<string | undefined>(undefined);
+  const [workout, setWorkout] = useState<WorkoutSyncReport | null>(null);
+  const [pushedAt, setPushedAt] = useState<string | undefined>(undefined);
 
   const refresh = useCallback(async () => {
     setSession(await currentSession());
     setLastSync(await readLastSync());
+    setPushedAt(lastPushedAt());
   }, []);
 
   useEffect(() => {
@@ -77,6 +81,7 @@ export function NutritionSync() {
       if (cancelled) return;
       setSession(next);
       setLastSync(at);
+      setPushedAt(lastPushedAt());
     })();
     return () => {
       cancelled = true;
@@ -85,7 +90,7 @@ export function NutritionSync() {
 
   if (!isSupabaseConfigured()) {
     return (
-      <Card title="Nutrition sync">
+      <Card title="Cloud sync">
         <p className="text-[13px] text-text-dim">
           No Supabase project is configured in this build. Copy{' '}
           <code className="text-text">.env.example</code> to{' '}
@@ -109,11 +114,12 @@ export function NutritionSync() {
   };
 
   return (
-    <Card title="Nutrition sync">
+    <Card title="Cloud sync">
       <p className="text-[13px] text-text-dim">
-        Reads the weigh-in history straight from the nutrition app rather than asking you to
-        export and import a file. Same account, same Supabase project — it runs on open and the
-        local copy keeps working offline.
+        Both directions, same account and same Supabase project as the nutrition app. Weigh-ins
+        come down from it; the training data is saved up to a row of its own, a couple of
+        seconds after every change. It runs on open, and everything keeps working offline from
+        the local copy.
       </p>
 
       {session.signedIn ? (
@@ -123,9 +129,15 @@ export function NutritionSync() {
             <span className="truncate text-[14px] font-medium">{session.email ?? 'account'}</span>
           </div>
           <div className="mt-1 flex items-baseline justify-between gap-3">
-            <Label>Last sync</Label>
+            <Label>Weigh-ins pulled</Label>
             <span className="text-[14px] font-medium">
               {lastSync ? friendlyDate(toIsoDate(new Date(lastSync))) : 'never'}
+            </span>
+          </div>
+          <div className="mt-1 flex items-baseline justify-between gap-3">
+            <Label>Training data saved</Label>
+            <span className="text-[14px] font-medium">
+              {pushedAt ? friendlyDate(toIsoDate(new Date(pushedAt))) : 'never'}
             </span>
           </div>
 
@@ -135,9 +147,14 @@ export function NutritionSync() {
               disabled={busy}
               onClick={() =>
                 void run(async () => {
-                  const next = await syncNow();
-                  setReport(next);
-                  return next.ok ? undefined : next.error;
+                  const [pulled, saved] = await Promise.all([syncNow(), syncWorkoutNow()]);
+                  setReport(pulled);
+                  setWorkout(saved);
+                  if (saved.outcome === 'no-table') {
+                    return 'The workout_data table is missing. Run supabase/workout_data.sql in the SQL editor once.';
+                  }
+                  if (saved.outcome === 'failed') return saved.error;
+                  return pulled.ok ? undefined : pulled.error;
                 })
               }
               className="h-11 flex-1 rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
@@ -158,6 +175,18 @@ export function NutritionSync() {
             <p className="mt-3 text-[12px] font-medium text-text-dim">
               {report.bodyWeight} weigh-ins, {report.activity} activity entries and {report.goals}{' '}
               goal rows merged.
+            </p>
+          )}
+
+          {workout && (
+            <p className="mt-1 text-[12px] font-medium text-text-dim">
+              {workout.outcome === 'pushed'
+                ? `Training data saved — ${workout.sessions} sessions, ${workout.setLogs} set logs.`
+                : workout.outcome === 'pulled'
+                  ? `Training data restored from the cloud — ${workout.sessions} sessions.`
+                  : workout.outcome === 'up-to-date'
+                    ? 'Training data already matches the cloud copy.'
+                    : ''}
             </p>
           )}
         </>

@@ -3,7 +3,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/db';
 import type { DaySlot } from './db/types';
 import { seedDatabase } from './db/seed';
-import { syncNow } from './lib/nutritionSync';
+import { syncNow, syncWorkoutNow } from './lib/nutritionSync';
+import { startWorkoutAutoSync } from './lib/workoutAutoSync';
 import { BottomNav, type Tab } from './components/BottomNav';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
@@ -30,6 +31,16 @@ export default function App() {
      * has patchy wifi and everything here works from the local copy.
      */
     void syncNow().catch(() => undefined);
+
+    /*
+     * Reconcile the training data too, then keep it pushed. Both are
+     * fire-and-forget: nothing here may delay first paint or fail the launch,
+     * because the app has to open on bad wifi and work from the local copy.
+     */
+    void syncWorkoutNow().catch(() => undefined);
+    startWorkoutAutoSync(() => {
+      void syncWorkoutNow().catch(() => undefined);
+    });
   }, []);
 
   if (!ready || exercises === undefined) {

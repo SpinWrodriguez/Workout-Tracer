@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NUTRITION_TABLE, type WeightSource } from './remoteSync';
 import { parseAuthInput, redirectTarget } from './authLink';
+import { WORKOUT_TABLE, type WorkoutSnapshot, type WorkoutStore } from './workoutSync';
 
 /* -------------------------------------------------------------------------- */
 /*  Supabase wiring.                                                          */
@@ -46,6 +47,36 @@ export function supabaseSource(client: SupabaseClient): WeightSource {
         .maybeSingle();
       if (error) throw new Error(error.message);
       return (data as { data?: unknown } | null)?.data;
+    },
+  };
+}
+
+/** The training data: one JSONB row per user, same shape as the nutrition one. */
+export function supabaseWorkoutStore(client: SupabaseClient): WorkoutStore {
+  return {
+    async userId() {
+      const { data } = await client.auth.getSession();
+      return data.session?.user.id;
+    },
+    async read(userId: string) {
+      const { data, error } = await client
+        .from(WORKOUT_TABLE)
+        .select('data,updated_at')
+        .eq('id', userId)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) return undefined;
+      const row = data as { data?: unknown; updated_at?: string };
+      return { data: row.data, updatedAt: row.updated_at };
+    },
+    async write(userId: string, snapshot: WorkoutSnapshot) {
+      const { data, error } = await client
+        .from(WORKOUT_TABLE)
+        .upsert({ id: userId, data: snapshot })
+        .select('updated_at')
+        .single();
+      if (error) throw new Error(error.message);
+      return (data as { updated_at?: string } | null)?.updated_at;
     },
   };
 }

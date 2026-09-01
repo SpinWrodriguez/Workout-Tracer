@@ -1,4 +1,5 @@
 import { db } from '../db';
+import { withSyncSuspended } from '../../lib/workoutSync';
 import type { Block } from '../types';
 import { EXERCISES } from './exercises';
 
@@ -34,8 +35,12 @@ function defaultBlock(): Block {
  * file reach an already-installed app, but never touches logged data.
  */
 export async function seedDatabase(): Promise<void> {
-  await db.exercise.bulkPut(EXERCISES);
-  if (!(await db.block.get(DEFAULT_BLOCK_ID))) {
-    await db.block.put(defaultBlock());
-  }
+  await withSyncSuspended(async () => {
+    await db.exercise.bulkPut(EXERCISES);
+    // The starter block is a write to a synced table, but it is the build
+    // speaking rather than the user — a fresh install must not look dirty.
+    if (!(await db.block.get(DEFAULT_BLOCK_ID))) {
+      await db.block.put(defaultBlock());
+    }
+  });
 }
