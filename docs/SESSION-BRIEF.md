@@ -3,12 +3,12 @@
 Paste the opener below into a fresh Claude Code session in this repo. Everything
 it needs is in this file and `docs/BACKLOG.md`.
 
-> Read `docs/SESSION-BRIEF.md` and `docs/BACKLOG.md`, then do **Task A** from
-> the brief. Follow the standing rules exactly. Commit each coherent step. Do
+> Read `docs/SESSION-BRIEF.md` and `docs/BACKLOG.md`, then do **item N** from
+> the backlog. Follow the standing rules exactly. Commit each coherent step. Do
 > not push. When you finish, write a short summary of what you did, what you
 > verified, and anything you decided that I should check.
 
-Change `Task A` to whichever task you want, and change `Do not push` to
+Change `item N` to whichever task you want, and change `Do not push` to
 `Push when the suite is green` if you want it deployed while you sleep — see
 **Committing and pushing** for why the default is not to.
 
@@ -34,6 +34,11 @@ build through twice. Also run `npm test` and `npx oxlint src`.
 driving real Chrome. Do not report a UI change as working on the strength of a
 passing typecheck.
 
+The six flows that kept breaking are now guarded by jsdom suites — see
+`src/test/dom.ts` and the `*.dom.test.tsx` files. Extend those for a flow they
+already touch; they are not a substitute for looking at a layout change, since
+jsdom has no layout at all.
+
 ```bash
 npm run build
 npx vite preview --port 4300 --strictPort &
@@ -50,9 +55,10 @@ so match case-insensitively or on body text rather than headings.
 
 **Scratch files** go in `.scratch/` (gitignored). Delete them before committing.
 
-**Line endings.** The working tree is CRLF. Editing files with Python needs
-`newline=''` on read and `newline='\r\n'` on write, or replacements silently
-no-op. There is a helper pattern in the git history.
+**Line endings.** Check before you edit — the working tree is CRLF when checked
+out on Windows and LF in a Linux container, and `head -1 | grep` will tell you
+which. Editing with Python needs `newline=''` on read and the matching value on
+write, or replacements silently no-op.
 
 ## Committing and pushing
 
@@ -104,45 +110,32 @@ add it to `docs/BACKLOG.md` if it is not.
 
 ---
 
-# Task A — automated UI tests
+# Task A — automated UI tests (done)
 
-**Why this one.** Every UI claim here has been verified by hand-driving Chrome
-from throwaway scripts. That caught real bugs — a keypad covering the RIR badge,
-setup controls silently resetting, a save button that never appeared — but
-nothing guards them afterwards. This is the highest-leverage task in the backlog
-and the only one that needs no decisions from the user.
+Kept as a worked example of what "done" looks like for one of these.
 
-**Set up.** There is no DOM test environment yet: vitest runs in `node` with
-`fake-indexeddb`. Add `jsdom`, `@testing-library/react`, `@testing-library/dom`
-and `@testing-library/user-event` as dev dependencies. Keep the existing
-node-environment tests working — use a per-file environment docblock
-(`// @vitest-environment jsdom`) rather than switching the global default, so
-the 348 existing tests are untouched.
+**What was built.** `src/test/dom.ts` is the harness: it loads `fake-indexeddb`
+before anything reaches for `db`, clears and reseeds between tests, stubs
+`scrollIntoView` (jsdom has no layout), and calls testing-library's `cleanup`
+explicitly — vitest runs without `globals`, so the automatic one never
+registers and renders otherwise stack up in one document.
 
-**Cover these flows.** Each has broken at least once:
+jsdom is per-file (`// @vitest-environment jsdom`) rather than the global
+default: it is far slower to stand up and the four hundred pure-logic tests
+have no use for it.
 
-1. **Log a set.** Start a programmed session, enter a weight and reps on the
-   custom keypad, mark the set done, save. Assert the `setLog` rows.
-2. **Save only when there is something to save.** No save button on a clean
-   session; it appears once a set is logged; it goes away after saving.
-3. **Create a workout.** New workout → a focus and an effort → it appears in
-   the list, is named from its contents, and is **not** placed in the week.
-4. **Move a session to another date.** Via the day editor, not drag — jsdom's
-   pointer support is too weak for the drag path, and `planDate` is already
-   unit-tested. Assert the other weeks are unaffected.
-5. **Rename a workout** and assert the name survives a remount.
-6. **Fix a rule violation.** Stack two heavy spinal lifts, assert the problem
-   appears with a fix, apply it, assert it clears.
+**Covered:** logging a set through the keypad; the save button appearing only
+when there is something to save and going away after; creating a workout and
+*not* placing it in the week; moving a session to one date without touching the
+standing weekday; renaming a workout across a remount; applying the fix on a
+spinal-stacking violation.
 
-**Watch out for.** `useLiveQuery` resolves asynchronously — use `findBy*` and
-`waitFor`, never a bare `getBy*` straight after an action. Seed the database
-directly through `db` rather than clicking through setup. Reset Dexie between
-tests the way `workoutSync.test.ts` does.
+**How it was verified.** Each behaviour was broken on purpose — a new workout
+given a weekday, `movePlanned` writing the pattern instead of the date, the fix
+button made a no-op, the name field's blur commit removed, the keypad made to
+buffer, the save button made unconditional — and the matching test was
+confirmed to fail. Do this for anything new here; a UI test that cannot fail is
+worse than no test, because it reads like cover.
 
-**Done when:** `npm test` covers those six flows in a real DOM, they fail when
-the behaviour breaks (prove it by breaking one on purpose and putting it back),
-and the existing suite still passes.
-
-**Do not:** refactor components to make them easier to test, add test ids
-throughout, or pull in a browser-mode runner. Query the way a user would — by
-role and text.
+**Queried by role and text**, never by test id, and the database is seeded
+through `db` rather than clicked through setup.

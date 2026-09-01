@@ -170,19 +170,30 @@ dropped in: find a CC0 front/back muscle map, map its path ids onto the
 
 ---
 
-## 9. Automated UI tests
+## 9. Automated UI tests — done, except sync
 
-Every UI claim in this project has been verified by hand-driving Chrome from a
-throwaway script. That works and has caught real bugs — the keypad covering the
-RIR badge, the stale setup controls — but nothing guards them afterwards.
+`src/test/dom.ts` is the jsdom harness; `*.dom.test.tsx` files opt in with a
+`// @vitest-environment jsdom` docblock so the node-environment suites are
+untouched. Six flows are covered: logging a set, the save button appearing and
+going away, creating a workout, moving a session to another date, renaming a
+workout, and applying a rule fix. Each was verified to fail when the behaviour
+is broken on purpose.
 
-A small browser-test suite over the three or four flows that keep breaking
-(log a set, generate a workout, move a session between days, sync) would make
-every future change cheaper and is probably the highest-leverage engineering
-task here.
+**What is left:** sync. It was in the original list and is the one flow still
+only checked at the unit level, because it needs a fake Supabase store driven
+through the UI rather than through `workoutSync` directly — `fakeStore` in
+`workoutSync.test.ts` is most of the way there.
 
-**Done when:** `npm test` covers those flows in a real DOM and fails when they
-break.
+Two things the harness records, both learned the hard way and worth knowing
+before writing another DOM test:
+
+- `readBlockPlan` takes the **latest** block by start date. A second seeded
+  block dated earlier is invisible to every screen, and the screen renders its
+  empty state rather than failing.
+- Waiting on the wrong write passes alone and fails under a parallel run.
+  Creating a workout writes the exercises and *then* the schedule entry; the
+  day editor is handed the slots the block defines. Wait for the thing you are
+  about to assert on, never for something adjacent to it.
 
 ---
 
