@@ -8,7 +8,7 @@ import { WEEKDAY_LABEL, buildWeek, weekdayOf, type Weekday } from '../lib/golf';
 import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import { balanceSets, generateDay, type DayPlan } from '../lib/blockBuilder';
-import { severityOf, validateBlock, type ValidationContext } from '../lib/blockValidation';
+import { severityOf, validateBlock, type Fix, type ValidationContext } from '../lib/blockValidation';
 import { dayLabel, describeDay } from '../lib/dayLabel';
 import {
   DEFAULT_THIRD_DAY,
@@ -423,6 +423,29 @@ export function ProgramScreen({
     setVariantBySlot((prev) => ({ ...prev, [slot]: variant }));
   };
 
+  /** Carries out the change a problem described. */
+  const applyFix = async (fix: Fix) => {
+    if (!block) return;
+    if (fix.kind === 'remove_exercise') {
+      await removeBlockExercise(block.id, fix.slot, fix.exerciseId);
+      return;
+    }
+    if (fix.kind === 'move_to_weekday') {
+      await writeSchedule(block.id, setUsualWeekday(schedule ?? {}, fix.slot, fix.weekday));
+      // A date entry pinning it to the old day would immediately undo this.
+      const current = (await readPlans())[block.id] ?? {};
+      await writePlan(
+        block.id,
+        Object.fromEntries(Object.entries(current).filter(([, value]) => value !== fix.slot)),
+      );
+      return;
+    }
+    const entry = (await db.blockExercise.where('blockId').equals(block.id).toArray()).find(
+      (row) => row.daySlot === fix.slot && row.exerciseId === fix.exerciseId,
+    );
+    if (entry) await db.blockExercise.put({ ...entry, startWeightKg: fix.kg });
+  };
+
   /** The next unused workout id, or nothing when the pool is full. */
   const freeSlot = (): DaySlot | undefined =>
     DAY_SLOTS.find(
@@ -561,9 +584,8 @@ export function ProgramScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schedule, slots, byId, training, sessionMinutes, hasHistory, inventory, shape]);
 
-  const problems = blockViolations.filter((violation) => severityOf(violation.code) === 'problem');
-  const suggestions = blockViolations.filter(
-    (violation) => severityOf(violation.code) === 'suggestion',
+  const problems = blockViolations.filter(
+    (violation) => severityOf(violation.code) === 'problem' && violation.fix !== undefined,
   );
 
   return (
@@ -775,34 +797,32 @@ export function ProgramScreen({
         )}
       </Card>
 
-      {/* Two headings, deliberately. Presenting "this session runs 7 minutes
-          long" as urgently as "this deadlift is two days before your round"
-          teaches you to skim past both. */}
+      {/* Only problems, and only ones that carry their own fix. Advice about
+          volume and time was noise: true, unactionable, and endless. */}
       {problems.length > 0 && (
         <Card title="Worth fixing" className="mt-3">
           {problems.map((violation) => (
-            <p
+            <div
               key={violation.code + (violation.exerciseId ?? '') + (violation.slot ?? '')}
-              className="mt-1.5 text-[12px] leading-snug font-medium first:mt-0"
-              style={{ color: 'var(--color-warn)' }}
+              className="border-t border-border pt-2.5 first:border-t-0 first:pt-0 [&+&]:mt-2.5"
             >
-              {violation.message}
-            </p>
+              <p
+                className="text-[12px] leading-snug font-medium"
+                style={{ color: 'var(--color-warn)' }}
+              >
+                {violation.message}
+              </p>
+              {violation.fix && (
+                <button
+                  type="button"
+                  onClick={() => void applyFix(violation.fix as Fix)}
+                  className="mt-2 rounded-full bg-surface-2 px-4 py-1.5 text-[12px] font-semibold"
+                >
+                  {violation.fix.label}
+                </button>
+              )}
+            </div>
           ))}
-        </Card>
-      )}
-
-      {suggestions.length > 0 && (
-        <Card title="Suggestions" className="mt-3">
-          {suggestions.map((violation) => (
-            <p
-              key={violation.code + (violation.exerciseId ?? '') + (violation.slot ?? '')}
-              className="mt-1.5 text-[12px] leading-snug font-medium text-text-dim first:mt-0"
-            >
-              {violation.message}
-            </p>
-          ))}
-
         </Card>
       )}
 

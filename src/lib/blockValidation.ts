@@ -1,5 +1,5 @@
 import type { BlockExercise, DaySlot, Exercise, MovementPattern, MuscleId } from '../db/types';
-import { GRIP_BUFFER_DAYS, WEEKDAY_LABEL, type Weekday } from './golf';
+import { GRIP_BUFFER_DAYS, WEEKDAY_LABEL, gripSafeWeekdays, type Weekday } from './golf';
 
 import { weekdayAllowed, type TemplateDay } from './weekTemplate';
 import { isTimed, rangeLabel, repUnitWord } from './repUnit';
@@ -68,11 +68,26 @@ export type ViolationCode =
   | 'forbidden_day'
   | 'light_day_violation';
 
+/* -------------------------------------------------------------------------- */
+/*  A problem you cannot act on is just bad news.                             */
+/*                                                                            */
+/*  Every problem carries the change that would resolve it, as data rather     */
+/*  than prose: the screen turns it into one button. If a rule cannot describe */
+/*  its own fix it has no business being reported as a problem.               */
+/* -------------------------------------------------------------------------- */
+
+export type Fix =
+  | { kind: 'move_to_weekday'; slot: DaySlot; weekday: Weekday; label: string }
+  | { kind: 'remove_exercise'; slot: DaySlot; exerciseId: string; label: string }
+  | { kind: 'snap_weight'; slot: DaySlot; exerciseId: string; kg: number; label: string };
+
 export interface Violation {
   code: ViolationCode;
   message: string;
   slot?: DaySlot;
   exerciseId?: string;
+  /** What to do about it. Always present on a problem. */
+  fix?: Fix;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -230,6 +245,17 @@ export function validateBlock(
   const templateBySlot = new Map((context.template ?? []).map((day) => [day.slot, day]));
 
   const nameOf = (day: ProposedDay) => dayNameIn(context, day.slot);
+  const taken = new Set(proposal.days.map((day) => day.weekday));
+
+  /** A day this workout could move to: allowed, free, and clear of a round. */
+  const freeWeekday = (needsGripClearance: boolean): Weekday | undefined => {
+    const usable = ([1, 2, 3, 4, 5, 6, 7] as Weekday[]).filter(
+      (weekday) =>
+        weekdayAllowed(weekday, golfWeekdays) &&
+        (!needsGripClearance || gripSafeWeekdays(golfWeekdays).includes(weekday)),
+    );
+    return usable.find((weekday) => !taken.has(weekday)) ?? usable[0];
+  };
 
   for (const day of proposal.days) {
     let spinalHigh = 0;
@@ -242,12 +268,14 @@ export function validateBlock(
         code: 'forbidden_day',
         slot: day.slot,
         message: `${nameOf(day)} is scheduled on ${WEEKDAY_LABEL[day.weekday]}, which is never a training day.`,
+        fix: moveFix(day.slot, freeWeekday(false)),
       });
     } else if (template && template.weekday !== day.weekday) {
       violations.push({
         code: 'forbidden_day',
         slot: day.slot,
         message: `${nameOf(day)} is on ${WEEKDAY_LABEL[day.weekday]} but the template puts it on ${template.weekdayLabel}.`,
+        fix: moveFix(day.slot, template.weekday),
       });
     }
 
@@ -268,7 +296,13 @@ export function validateBlock(
           code: 'unknown_exercise',
           slot: day.slot,
           exerciseId: entry.exerciseId,
-          message: `${nameOf(day)}: "${entry.exerciseId}" is not in the exercise table. Use only ids from the table provided.`,
+          message: `${nameOf(day)}: "${entry.exerciseId}" is not in the exercise table.`,
+          fix: {
+            kind: 'remove_exercise',
+            slot: day.slot,
+            exerciseId: entry.exerciseId,
+            label: 'Remove it',
+          },
         });
         continue;
       }
@@ -305,7 +339,18 @@ export function validateBlock(
             code: 'grip_conflict',
             slot: day.slot,
             exerciseId: exercise.id,
-            message: `${nameOf(day)} is ${WEEKDAY_LABEL[day.weekday]}, ${clear} day${clear === 1 ? '' : 's'} before the next round. ${exercise.name} is high grip load and needs more than ${GRIP_BUFFER_DAYS}. Move it to a day with more clearance.`,
+            message: `${nameOf(day)} is ${WEEKDAY_LABEL[day.weekday]}, ${clear} day${clear === 1 ? '' : 's'} before your next round, and ${exercise.name} is high grip load.`,
+            // Moving the whole day is the better fix where a clear day exists:
+            // the session is fine, its placement is not. Dropping the movement
+            // is the fallback when the calendar has no room.
+            fix:
+              moveFix(day.slot, freeWeekday(true)) ??
+              ({
+                kind: 'remove_exercise',
+                slot: day.slot,
+                exerciseId: exercise.id,
+                label: `Drop ${exercise.name}`,
+              } as Fix),
           });
         }
       }
@@ -360,22 +405,36 @@ export function validateBlock(
             code: 'unloadable_weight',
             slot: day.slot,
             exerciseId: exercise.id,
-            message: `${nameOf(day)}: ${exercise.name} start weight ${entry.startWeightKg} kg cannot be loaded. Nearest loadable values are ${nearestRungs(ladder, entry.startWeightKg).join(' or ')} kg.`,
+            message: `${nameOf(day)}: ${exercise.name} start weight ${entry.startWeightKg} kg cannot be loaded from your plates.`,
+            fix: nearestRung(ladder, entry.startWeightKg)
+              ? {
+                  kind: 'snap_weight',
+                  slot: day.slot,
+                  exerciseId: exercise.id,
+                  kg: nearestRung(ladder, entry.startWeightKg) as number,
+                  label: `Use ${nearestRung(ladder, entry.startWeightKg)} kg`,
+                }
+              : undefined,
           });
         }
       }
     }
 
     if (spinalHigh > 1) {
-      const names = day.exercises
+      const stacked = day.exercises
         .map((entry) => exercisesById.get(entry.exerciseId))
-        .filter((exercise) => exercise?.spinalLoad === 'high')
-        .map((exercise) => exercise?.name)
-        .join(' and ');
+        .filter((exercise): exercise is Exercise => exercise?.spinalLoad === 'high');
+      const names = stacked.map((exercise) => exercise.name).join(' and ');
+      // The later one goes: the first heavy spinal lift of a session is the
+      // one it was built around.
+      const drop = stacked[stacked.length - 1];
       violations.push({
         code: 'spinal_stacking',
         slot: day.slot,
-        message: `${nameOf(day)} stacks ${spinalHigh} heavy spinal-load lifts (${names}). Keep it to one per session.`,
+        message: `${nameOf(day)} stacks ${spinalHigh} heavy spinal-load lifts (${names}). Keep it to one.`,
+        fix: drop
+          ? { kind: 'remove_exercise', slot: day.slot, exerciseId: drop.id, label: `Drop ${drop.name}` }
+          : undefined,
       });
     }
 
@@ -413,11 +472,20 @@ export function validateBlock(
   return violations;
 }
 
-function nearestRungs(ladder: number[], value: number): number[] {
-  const below = [...ladder].reverse().find((rung) => rung < value);
-  const above = ladder.find((rung) => rung > value);
-  return [below, above].filter((rung): rung is number => rung !== undefined);
+/** A helper for the fixes: which single rung to snap to. */
+function nearestRung(ladder: number[], value: number): number | undefined {
+  if (ladder.length === 0) return undefined;
+  return ladder.reduce((best, rung) =>
+    Math.abs(rung - value) < Math.abs(best - value) ? rung : best,
+  );
 }
+
+/** Builds a move fix, or nothing when there is nowhere better to go. */
+function moveFix(slot: DaySlot, weekday: Weekday | undefined): Fix | undefined {
+  if (weekday === undefined) return undefined;
+  return { kind: 'move_to_weekday', slot, weekday, label: `Move to ${WEEKDAY_LABEL[weekday]}` };
+}
+
 
 /** Violations as a block of feedback to hand back to a model on retry. */
 export function formatViolationsForModel(violations: Violation[]): string {

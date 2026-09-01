@@ -113,3 +113,25 @@ describe('what to do next', () => {
     expect(plan?.next).toBe('B');
   });
 });
+
+describe('what belongs on the dashboard', () => {
+  it('leaves out workouts that are not in this week', async () => {
+    // A workout you own but have not placed is a thing you have, not a thing
+    // you are doing — listing it beside Monday says the week contains it.
+    await db.blockExercise.put(entry('D', 'bb_overhead_press'));
+    const before = await readWeekPlan();
+    expect(before?.days.map((day) => day.slot)).toEqual(['A', 'B', 'C']);
+    expect(before?.all.map((day) => day.slot)).toContain('D');
+  });
+
+  it('never points at an unplaced workout as what to do next', async () => {
+    await db.blockExercise.put(entry('D', 'bb_overhead_press'));
+    await db.session.bulkPut([
+      { id: 's1', blockId: BLOCK, daySlot: 'A', date: dateOf(1) },
+      { id: 's2', blockId: BLOCK, daySlot: 'B', date: TODAY },
+      { id: 's3', blockId: BLOCK, daySlot: 'C', date: dateOf(4) },
+    ]);
+    const plan = await readWeekPlan();
+    expect(plan?.next).toBeUndefined();
+  });
+});

@@ -54,7 +54,7 @@ export default function App() {
     const plan = await readWeekPlan();
     if (!plan) return [];
     const byId = new Map((exercises ?? []).map((e) => [e.id, e]));
-    return plan.days.map((day) => {
+    return plan.all.map((day) => {
       const picked = day.entries
         .map((entry) => byId.get(entry.exerciseId))
         .filter((exercise) => exercise !== undefined);

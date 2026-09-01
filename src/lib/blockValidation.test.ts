@@ -130,7 +130,10 @@ describe('rule c — grip clearance computed from the calendar (defect 1)', () =
   it('rejects high-grip work on a Thursday with golf on Saturday', () => {
     const p = proposal([{ slot: 'A', weekday: 4, ids: ['bb_bent_over_row'] }]);
     const found = validateBlock(p, CONTEXT).find((v) => v.code === 'grip_conflict');
-    expect(found?.message).toMatch(/Thu, 2 days before the next round/);
+    expect(found?.message).toMatch(/Thu, 2 days before your next round/);
+    // A problem has to carry the change that resolves it, or it is just bad
+    // news: here, the day the session should move to.
+    expect(found?.fix).toMatchObject({ kind: 'move_to_weekday' });
   });
 
   it('accepts the same work on Monday or Tuesday', () => {
@@ -204,11 +207,12 @@ describe('rule g — weekly set total (defect 5)', () => {
 });
 
 describe('rule h — start weights must be loadable', () => {
-  it('rejects 27 kg on the free bar and names the neighbours', () => {
+  it('rejects 27 kg on the free bar and offers a rung that exists', () => {
     const p = proposal([{ slot: 'A', weekday: 1, ids: ['bb_back_squat'] }]);
     p.days[0]!.exercises[0]!.startWeightKg = 27;
     const found = validateBlock(p, CONTEXT).find((v) => v.code === 'unloadable_weight');
-    expect(found?.message).toMatch(/27 kg cannot be loaded.*26 or 30 kg/);
+    expect(found?.message).toMatch(/27 kg cannot be loaded/);
+    expect(found?.fix).toMatchObject({ kind: 'snap_weight', kg: 26 });
   });
 
   it('accepts a real rung', () => {
@@ -402,5 +406,51 @@ describe('what counts as a rule', () => {
     // Eight is a long session, not a broken one.
     expect(complains(8)).toBe(false);
     expect(complains(12)).toBe(true);
+  });
+});
+
+describe('every problem carries its own fix', () => {
+  it('offers a way out of each one, or is not a problem at all', () => {
+    // A rule that cannot describe its own resolution has no business being
+    // reported as something to fix.
+    const stacked = proposal([
+      { slot: 'A', weekday: 1, ids: ['bb_back_squat', 'bb_bent_over_row'] },
+    ]);
+    const friday = proposal([{ slot: 'A', weekday: 5, ids: ['bb_back_squat'] }]);
+    // Built by hand: the helper resolves ids against the table, and this one
+    // deliberately is not in it.
+    const unknown: BlockProposal = {
+      days: [
+        {
+          slot: 'A',
+          weekday: 1,
+          exercises: [
+            {
+              blockId: 'block_1',
+              exerciseId: 'not_a_real_exercise',
+              daySlot: 'A',
+              targetSets: 3,
+              repRangeLow: 8,
+              repRangeHigh: 10,
+              order: 0,
+            },
+          ],
+        },
+      ],
+    };
+
+    for (const p of [stacked, friday, unknown]) {
+      for (const violation of validateBlock(p, CONTEXT)) {
+        if (severityOf(violation.code) !== 'problem') continue;
+        expect(violation.fix, violation.message).toBeDefined();
+        expect(violation.fix?.label, violation.message).toBeTruthy();
+      }
+    }
+  });
+
+  it('drops the later of two stacked spinal lifts, not the lift the day was built on', () => {
+    const p = proposal([{ slot: 'A', weekday: 1, ids: ['bb_back_squat', 'bb_deadlift'] }]);
+    const found = validateBlock(p, CONTEXT).find((v) => v.code === 'spinal_stacking');
+    expect(found?.fix).toMatchObject({ kind: 'remove_exercise', exerciseId: 'bb_deadlift' });
   });
 });

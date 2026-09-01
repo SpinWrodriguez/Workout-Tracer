@@ -28,7 +28,10 @@ export interface PlannedDay {
 
 export interface WeekPlan {
   blockId: string;
+  /** Only what is actually in this week. */
   days: PlannedDay[];
+  /** Every workout that exists, this week's or not — for the start sheet. */
+  all: PlannedDay[];
   /** The soonest unfinished session — the one Start should point at. */
   next?: DaySlot;
   today: string;
@@ -70,7 +73,7 @@ export async function readWeekPlan(): Promise<WeekPlan | undefined> {
     if (slot !== undefined && !dateOf.has(slot)) dateOf.set(slot, date);
   }
 
-  const days: PlannedDay[] = slots
+  const all: PlannedDay[] = slots
     .map((slot) => {
       const scheduled = plan.schedule[slot];
       const date = dateOf.get(slot);
@@ -89,6 +92,13 @@ export async function readWeekPlan(): Promise<WeekPlan | undefined> {
     .sort((a, b) => (a.weekday ?? 99) - (b.weekday ?? 99) || a.slot.localeCompare(b.slot));
 
   /*
+   * The dashboard is a view of THIS week. A workout with no day in it is a
+   * thing you own, not a thing you are doing — listing it beside Monday's
+   * session says the week contains something it does not.
+   */
+  const days = all.filter((day) => day.date !== undefined);
+
+  /*
    * The soonest unfinished session from today onward. Falling back to any
    * unfinished day keeps a week you have fallen behind on from offering
    * nothing at all, rather than silently pointing at next Monday.
@@ -99,6 +109,7 @@ export async function readWeekPlan(): Promise<WeekPlan | undefined> {
   return {
     blockId: plan.block.id,
     days,
+    all,
     next: (upcoming[0] ?? pending[0])?.slot,
     today,
     todaySlot: slotForDate(plan.schedule, today, plan.dates),
