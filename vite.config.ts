@@ -62,7 +62,12 @@ export default defineConfig(() => ({
     }),
   ],
   test: {
+    /*
+     * node by default. The DOM suites opt in per file with a
+     * `// @vitest-environment jsdom` docblock: jsdom is ~10x slower to set up
+     * and the several hundred pure-logic tests have no use for it.
+     */
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 }));

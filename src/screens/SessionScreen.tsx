@@ -871,7 +871,7 @@ export function SessionScreen({
             disabled={saving}
             className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
           >
-            {saving ? 'Saving…' : `Save · ${loggedSets} sets`}
+            {saving ? 'Saving…' : `Save · ${loggedSets} set${loggedSets === 1 ? '' : 's'}`}
           </button>
         )}
       </Screen>
