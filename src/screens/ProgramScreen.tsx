@@ -83,6 +83,8 @@ export function ProgramScreen({
   const [heavyWeekdays, setHeavyWeekdays] = useState<Weekday[] | null>(null);
   const [shape, setShape] = useState<SessionShape>('mixed');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  /* Collapsed: the starter week is a shortcut, not the way the screen works. */
+  const [showStarter, setShowStarter] = useState(false);
   const [training, setTraining] = useState<TrainingPrefs>(DEFAULT_TRAINING);
   /* What the schedule looked like when the controls last synced to it, so a
      choice being made right now is not stamped on mid-edit. */
@@ -677,6 +679,48 @@ export function ProgramScreen({
             <p className="text-[13px] font-medium text-text-dim">
               {longDate(block.startDate)} — {longDate(block.endDate)}
             </p>
+
+            <Label className="mt-4 block">Session length</Label>
+            <div className="mt-1.5">
+              <SegmentedToggle
+                options={SESSION_LENGTHS}
+                value={sessionMinutes}
+                onChange={(next) => {
+                  setSessionMinutes(next);
+                  const prefs = { ...training, sessionMinutes: Number(next) };
+                  setTraining(prefs);
+                  void writeTraining(prefs);
+                }}
+                labels={{ '30': '30 min', '40': '40 min', '60': '60 min' }}
+              />
+            </div>
+
+            {/* A shortcut, and labelled as one. It creates workouts AND places
+                them in the week in a single action, which is the one thing on
+                this screen that still conflates the two. Collapsed by default
+                so the screen reads as workouts and a calendar; kept because it
+                is the fastest path from an empty block to a full week, which is
+                what a first run needs. */}
+            <button
+              type="button"
+              onClick={() => setShowStarter((prev) => !prev)}
+              className="mt-4 flex w-full items-center justify-between gap-3 text-left"
+            >
+              <span className="text-[13px] font-medium text-text-dim">
+                Build a starter week
+              </span>
+              <span className="text-[12px] font-medium text-text-dim">
+                {showStarter ? 'Hide' : 'Show'}
+              </span>
+            </button>
+
+            {showStarter && (
+              <>
+                <Label className="mt-2 block">
+                  Fills the week in one go — it makes the workouts and puts them on
+                  days. Everything below can be changed afterwards, and a workout
+                  you make yourself is never placed for you.
+                </Label>
             <Label className="mt-4 block">Sessions per week</Label>
             <div className="mt-1.5">
               <SegmentedToggle
@@ -742,21 +786,24 @@ export function ProgramScreen({
                 <Label className="mt-1.5 block">{SESSION_SHAPE_HINT[shape]}</Label>
               </>
             )}
-
-            <Label className="mt-4 block">Session length</Label>
-            <div className="mt-1.5">
-              <SegmentedToggle
-                options={SESSION_LENGTHS}
-                value={sessionMinutes}
-                onChange={(next) => {
-                  setSessionMinutes(next);
-                  const prefs = { ...training, sessionMinutes: Number(next) };
-                  setTraining(prefs);
-                  void writeTraining(prefs);
-                }}
-                labels={{ '30': '30 min', '40': '40 min', '60': '60 min' }}
-              />
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => void setUpWeek()}
+                className="h-11 flex-1 rounded-full bg-surface-2 text-[13px] font-medium text-text-dim"
+              >
+                Set up the days
+              </button>
+              <button
+                type="button"
+                onClick={() => void fillEmptyDays()}
+                className="h-11 flex-[2] rounded-full bg-cta font-semibold text-bg"
+              >
+                Fill the empty days
+              </button>
             </div>
+              </>
+            )}
 
             {/* Everything else is fixed by the template or lives in Settings. */}
             <button
@@ -799,22 +846,7 @@ export function ProgramScreen({
               </>
             )}
 
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => void setUpWeek()}
-                className="h-11 flex-1 rounded-full bg-surface-2 text-[13px] font-medium text-text-dim"
-              >
-                Set up the days
-              </button>
-              <button
-                type="button"
-                onClick={() => void fillEmptyDays()}
-                className="h-11 flex-[2] rounded-full bg-cta font-semibold text-bg"
-              >
-                Fill the empty days
-              </button>
-            </div>
+
 
           </>
         ) : (
