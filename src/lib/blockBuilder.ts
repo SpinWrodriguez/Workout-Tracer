@@ -17,7 +17,12 @@ import {
   type ValidationContext,
   type Violation,
 } from './blockValidation';
-import { templateWeek, type Intensity, type TemplateDay } from './weekTemplate';
+import {
+  templateWeek,
+  type Intensity,
+  type SessionShape,
+  type TemplateDay,
+} from './weekTemplate';
 
 /* -------------------------------------------------------------------------- */
 /*  Block builder.                                                            */
@@ -143,10 +148,14 @@ export interface GenerateInput {
   exercises: Exercise[];
   focusMuscles: MuscleId[];
   sessionsPerWeek: number;
+  /** What the two heavy days train. Placement is unaffected. */
+  shape?: SessionShape;
   /** Weekdays a round is typically played. */
   golfWeekdays: Weekday[];
   /** Weekday for the optional third session. */
   thirdDay?: Weekday;
+  /** Weekdays to run at full effort. Empty means the app balances it. */
+  heavyWeekdays?: Weekday[];
   minutesPerSession?: number;
   weeklySetTarget?: number;
   hasHistory?: boolean;
@@ -158,6 +167,9 @@ export interface GenerateInput {
 const MIN_EXERCISES = 3;
 const MAX_SETS_COMPOUND = 5;
 const MAX_SETS_ACCESSORY = 3;
+/* One set of anything is a warm-up, not a prescription. Five sessions against a
+   33-set target used to trim down to singles trying to fit the band. */
+const MIN_SETS_PER_EXERCISE = 2;
 export const MAX_VALIDATION_ATTEMPTS = 3;
 
 /**
@@ -316,16 +328,18 @@ function balanceSets(
 
   guard = 200;
   while (total() > max && guard-- > 0) {
+    // Light days shed volume before heavy ones, and nothing goes below two.
     const chosen = days
-      .flatMap((day) => day.exercises)
-      .filter((entry) => entry.targetSets > 1)
+      .flatMap((day) => day.exercises.map((entry) => ({ day, entry })))
+      .filter(({ entry }) => entry.targetSets > MIN_SETS_PER_EXERCISE)
       .sort(
         (a, b) =>
-          priorityOf(byId.get(b.exerciseId) as Exercise) -
-          priorityOf(byId.get(a.exerciseId) as Exercise),
+          (a.day.intensity === 'light' ? 0 : 1) - (b.day.intensity === 'light' ? 0 : 1) ||
+          priorityOf(byId.get(b.entry.exerciseId) as Exercise) -
+            priorityOf(byId.get(a.entry.exerciseId) as Exercise),
       )[0];
     if (!chosen) break;
-    chosen.targetSets -= 1;
+    chosen.entry.targetSets -= 1;
   }
 }
 
@@ -361,7 +375,9 @@ function trimToBudget(days: DayPlan[], template: TemplateDay[], byId: Map<string
         )[0];
 
       if (!victim || day.exercises.length <= MIN_EXERCISES) {
-        const trimmable = day.exercises.find((entry) => entry.targetSets > 1);
+        const trimmable = day.exercises.find(
+          (entry) => entry.targetSets > MIN_SETS_PER_EXERCISE,
+        );
         if (!trimmable) break;
         trimmable.targetSets -= 1;
         continue;
@@ -388,7 +404,9 @@ export function generateBlock(input: GenerateInput): GeneratedBlock {
   // Steps 1 and 2: the week and its constraints, straight from the template.
   const template = templateWeek({
     sessionsPerWeek: input.sessionsPerWeek,
+    shape: input.shape,
     thirdDay: input.thirdDay,
+    heavyWeekdays: input.heavyWeekdays,
     golfWeekdays: input.golfWeekdays,
     minutesPerSession: input.minutesPerSession ?? 40,
   });
@@ -443,6 +461,23 @@ export function generateBlock(input: GenerateInput): GeneratedBlock {
   const rationale = [explanation, scheduleSentence(proposal, context)].filter(Boolean).join(' ');
 
   const warnings: string[] = [];
+  if (template.length < input.sessionsPerWeek) {
+    warnings.push(
+      `Only ${template.length} of ${input.sessionsPerWeek} sessions could be placed — Fri and Sat are never training days, and your golf days take the rest.`,
+    );
+  }
+  // Squeezed heavy days mean the weekly target is low for this many sessions.
+  const squeezed = resolved.days.some(
+    (day) =>
+      day.intensity === 'heavy' &&
+      day.exercises.some((entry) => entry.targetSets <= MIN_SETS_PER_EXERCISE),
+  );
+  if (squeezed) {
+    warnings.push(
+      `A ${target}-set week does not stretch to ${input.sessionsPerWeek} sessions — the heavy days are down to ${MIN_SETS_PER_EXERCISE} sets each. Raise the weekly set target in Settings or train less often.`,
+    );
+  }
+
   const light = resolved.days.find((day) => day.intensity === 'light');
   if (light) warnings.push(`${light.weekdayLabel} is the light session — ${light.effortCue}.`);
   if (resolved.violations.length > 0) {

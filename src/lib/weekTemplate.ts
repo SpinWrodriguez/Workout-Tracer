@@ -1,5 +1,5 @@
 import type { DaySlot, MovementPattern } from '../db/types';
-import { WEEKDAY_LABEL, type Weekday } from './golf';
+import { WEEKDAY_LABEL, gripSafeWeekdays, type Weekday } from './golf';
 
 /* -------------------------------------------------------------------------- */
 /*  The weekly template.                                                      */
@@ -27,9 +27,12 @@ export const TUESDAY: Weekday = 2;
 /** Days a session may never land on, whatever else is true. */
 export const FORBIDDEN_WEEKDAYS: Weekday[] = [5, 6]; // Fri, Sat
 
-/** Candidate weekdays for the optional third session, in preference order. */
-export const THIRD_DAY_OPTIONS: Weekday[] = [3, 4, 7]; // Wed, Thu, Sun
+/** Candidate weekdays for sessions beyond the heavy pair, in preference order. */
+export const EXTRA_DAY_OPTIONS: Weekday[] = [3, 4, 7]; // Wed, Thu, Sun
 export const DEFAULT_THIRD_DAY: Weekday = 3; // Wed
+
+/** Mon and Tue plus the three usable remaining days. */
+export const MAX_SESSIONS = 5;
 
 export interface TemplateDay {
   slot: DaySlot;
@@ -52,24 +55,68 @@ export interface TemplateDay {
 export const LIGHT_DAY_MINUTES = 25;
 export const LIGHT_DAY_CUE = 'Leave 3-4 reps in the tank';
 
-/*
- * Session A carries the hinge and both pulls. Those are the grip-heavy
- * movements, and Monday is the furthest point in the week from a weekend
- * round, so this is where they belong. Session B takes the squat and the
- * presses, which need no grip at all.
- */
-const SESSION_A_PATTERNS: MovementPattern[] = ['hinge', 'pull_h', 'pull_v', 'core'];
-const SESSION_B_PATTERNS: MovementPattern[] = ['squat', 'push_h', 'push_v', 'core'];
-const SESSION_C_PATTERNS: MovementPattern[] = ['rotation', 'squat', 'push_h', 'core'];
+/* -------------------------------------------------------------------------- */
+/*  Shape: what the two heavy days train.                                     */
+/*                                                                            */
+/*  The template still owns WHEN a session happens and HOW HARD it is. This    */
+/*  is the one thing left worth choosing — whether the heavy pair splits by    */
+/*  movement or by half of the body. Placement stays in code either way, so    */
+/*  no scheduling bug can come back through it.                               */
+/* -------------------------------------------------------------------------- */
 
-function heavyDay(slot: DaySlot, weekday: Weekday, patterns: MovementPattern[], minutes: number): TemplateDay {
+export type SessionShape = 'mixed' | 'upper_lower';
+
+export const SESSION_SHAPES: SessionShape[] = ['mixed', 'upper_lower'];
+
+export const SESSION_SHAPE_LABEL: Record<SessionShape, string> = {
+  mixed: 'Mixed',
+  upper_lower: 'Upper / Lower',
+};
+
+export const SESSION_SHAPE_HINT: Record<SessionShape, string> = {
+  mixed: 'Legs on both heavy days, upper work spread across the week.',
+  upper_lower: 'Mon is upper body, Tue is lower body.',
+};
+
+/*
+ * Mixed: session A carries the hinge and both pulls, session B the squat and
+ * the presses. The grip-heavy movements sit on Monday, the furthest point in
+ * the week from a weekend round.
+ *
+ * Upper / Lower: A is the whole upper body, B is the whole lower half. Both
+ * still land on Mon and Tue, which are the two grip-safe days, so the hinge
+ * moving to Tuesday costs nothing against the golf rule.
+ */
+const SHAPE_PATTERNS: Record<SessionShape, { a: MovementPattern[]; b: MovementPattern[] }> = {
+  mixed: {
+    a: ['hinge', 'pull_h', 'pull_v', 'core'],
+    b: ['squat', 'push_h', 'push_v', 'core'],
+  },
+  upper_lower: {
+    a: ['pull_h', 'pull_v', 'push_h', 'push_v', 'core'],
+    b: ['squat', 'hinge', 'squat', 'core'],
+  },
+};
+
+/** The light day is full body whatever shape the heavy pair takes. */
+const SESSION_C_PATTERNS: MovementPattern[] = ['squat', 'push_h', 'pull_h', 'rotation'];
+
+function heavyDay(
+  slot: DaySlot,
+  weekday: Weekday,
+  patterns: MovementPattern[],
+  minutes: number,
+  golfWeekdays: Weekday[],
+): TemplateDay {
   return {
     slot,
     weekday,
     weekdayLabel: WEEKDAY_LABEL[weekday],
     intensity: 'heavy',
     patterns,
-    excludeGripHigh: false,
+    // Derived, not assumed: any day inside the buffer loses grip work whatever
+    // its intensity. Mon and Tue are clear, so this changes nothing for them.
+    excludeGripHigh: !gripSafeWeekdays(golfWeekdays).includes(weekday),
     excludeSpinalHigh: false,
     setsPerExercise: 3,
     repShift: { low: 0, high: 0 },
@@ -78,9 +125,9 @@ function heavyDay(slot: DaySlot, weekday: Weekday, patterns: MovementPattern[], 
   };
 }
 
-function lightDay(weekday: Weekday): TemplateDay {
+function lightDay(slot: DaySlot, weekday: Weekday): TemplateDay {
   return {
-    slot: 'C',
+    slot,
     weekday,
     weekdayLabel: WEEKDAY_LABEL[weekday],
     intensity: 'light',
@@ -99,44 +146,87 @@ function lightDay(weekday: Weekday): TemplateDay {
 
 export interface TemplateInput {
   sessionsPerWeek: number;
+  /** What the two heavy days train. Placement is unaffected. */
+  shape?: SessionShape;
   /** Which weekday the optional third session lands on. */
   thirdDay?: Weekday;
+  /**
+   * Weekdays to run at full effort. Empty or absent means the app balances it:
+   * the first two days are heavy and anything beyond them is light.
+   */
+  heavyWeekdays?: Weekday[];
   /** Weekdays a round is typically played; Sunday is only free when not golf. */
   golfWeekdays?: Weekday[];
   minutesPerSession?: number;
 }
 
-/** Third-session weekdays that are actually available given the golf pattern. */
-export function availableThirdDays(golfWeekdays: Weekday[] = []): Weekday[] {
-  return THIRD_DAY_OPTIONS.filter(
+/** Weekdays beyond Mon and Tue that a session may actually use. */
+export function availableExtraDays(golfWeekdays: Weekday[] = []): Weekday[] {
+  return EXTRA_DAY_OPTIONS.filter(
     (weekday) => !FORBIDDEN_WEEKDAYS.includes(weekday) && !golfWeekdays.includes(weekday),
   );
+}
+
+/** The most sessions the calendar leaves room for. */
+export function maxSessionsFor(golfWeekdays: Weekday[] = []): number {
+  return 2 + availableExtraDays(golfWeekdays).length;
 }
 
 /**
  * The week, assigned from the template. Two sessions is Mon and Tue; a third
  * is the light day, on Wednesday unless another free day is chosen.
  */
+const SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
+
+/** The weekdays a given number of sessions lands on, in calendar order. */
+export function templateWeekdays(
+  sessionsPerWeek: number,
+  golfWeekdays: Weekday[] = [],
+  thirdDay?: Weekday,
+): Weekday[] {
+  const wanted = Math.max(1, Math.min(sessionsPerWeek, MAX_SESSIONS));
+  const anchors: Weekday[] = [MONDAY, TUESDAY];
+  if (wanted <= 2) return anchors.slice(0, wanted);
+
+  let extras = availableExtraDays(golfWeekdays);
+  if (thirdDay !== undefined && extras.includes(thirdDay)) {
+    extras = [thirdDay, ...extras.filter((weekday) => weekday !== thirdDay)];
+  }
+  return [...anchors, ...extras.slice(0, wanted - 2)].sort((a, b) => a - b);
+}
+
 export function templateWeek({
   sessionsPerWeek,
+  shape = 'mixed',
   thirdDay,
+  heavyWeekdays,
   golfWeekdays = [],
   minutesPerSession = 40,
 }: TemplateInput): TemplateDay[] {
-  const days: TemplateDay[] = [
-    heavyDay('A', MONDAY, SESSION_A_PATTERNS, minutesPerSession),
-    heavyDay('B', TUESDAY, SESSION_B_PATTERNS, minutesPerSession),
-  ];
+  const patterns = SHAPE_PATTERNS[shape];
+  const weekdays = templateWeekdays(sessionsPerWeek, golfWeekdays, thirdDay);
 
-  if (sessionsPerWeek <= 2) return days.slice(0, Math.max(1, sessionsPerWeek));
+  /*
+   * Which days are full effort. Left to the app, it is the first two and
+   * everything after them is light — four or five hard sessions a week is not
+   * what a returning lifter with a weekend round recovers from. Chosen by
+   * hand, the choice stands: placement is still the template, only effort
+   * moves.
+   */
+  const chosen = heavyWeekdays?.filter((weekday) => weekdays.includes(weekday)) ?? [];
+  const isHeavy = (weekday: Weekday, index: number) =>
+    chosen.length > 0 ? chosen.includes(weekday) : index < 2;
 
-  const options = availableThirdDays(golfWeekdays);
-  const chosen =
-    thirdDay !== undefined && options.includes(thirdDay)
-      ? thirdDay
-      : (options[0] ?? DEFAULT_THIRD_DAY);
-  days.push(lightDay(chosen));
-  return days;
+  let heavySoFar = 0;
+  return weekdays.map((weekday, index) => {
+    const slot = SLOTS[index] ?? 'Y';
+    if (!isHeavy(weekday, index)) return lightDay(slot, weekday);
+    // Heavy days alternate through the shape, so a third heavy day repeats the
+    // first rather than inventing a pattern set nobody asked for.
+    const set = heavySoFar % 2 === 0 ? patterns.a : patterns.b;
+    heavySoFar += 1;
+    return heavyDay(slot, weekday, set, minutesPerSession, golfWeekdays);
+  });
 }
 
 /** True when a session may be scheduled on this weekday at all. */

@@ -7,8 +7,10 @@ import {
   FORBIDDEN_WEEKDAYS,
   LIGHT_DAY_CUE,
   LIGHT_DAY_MINUTES,
-  availableThirdDays,
+  availableExtraDays,
+  maxSessionsFor,
   templateWeek,
+  templateWeekdays,
   weekdayAllowed,
 } from './weekTemplate';
 import { sessionMinutes } from './blockValidation';
@@ -53,15 +55,15 @@ describe('the week is a template, not a decision', () => {
     expect(FORBIDDEN_WEEKDAYS).toEqual([5, 6]);
     expect(weekdayAllowed(5)).toBe(false);
     expect(weekdayAllowed(6)).toBe(false);
-    expect(availableThirdDays()).not.toContain(5);
-    expect(availableThirdDays()).not.toContain(6);
+    expect(availableExtraDays()).not.toContain(5);
+    expect(availableExtraDays()).not.toContain(6);
     // A Friday asked for explicitly is refused, not honoured.
     expect(templateWeek({ sessionsPerWeek: 3, thirdDay: 5 })[2]?.weekdayLabel).toBe('Wed');
   });
 
   it('offers Sunday only when it is not a golf day', () => {
-    expect(availableThirdDays([6])).toContain(7);
-    expect(availableThirdDays([6, 7])).not.toContain(7);
+    expect(availableExtraDays([6])).toContain(7);
+    expect(availableExtraDays([6, 7])).not.toContain(7);
     expect(weekdayAllowed(7, [6, 7])).toBe(false);
   });
 
@@ -229,5 +231,166 @@ describe('explosive work leads the session', () => {
       'cb_pallof_rotation',
       'cb_punch',
     ]).toContain(rotation?.exerciseId);
+  });
+});
+
+describe('four and five sessions', () => {
+  it('fills Wed, Thu and Sun after the heavy pair', () => {
+    expect(templateWeek({ sessionsPerWeek: 4, golfWeekdays: [6] }).map((d) => d.weekdayLabel))
+      .toEqual(['Mon', 'Tue', 'Wed', 'Thu']);
+    expect(templateWeek({ sessionsPerWeek: 5, golfWeekdays: [6] }).map((d) => d.weekdayLabel))
+      .toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Sun']);
+  });
+
+  it('keeps only Mon and Tue heavy however many sessions are asked for', () => {
+    const week = templateWeek({ sessionsPerWeek: 5, golfWeekdays: [6] });
+    expect(week.filter((d) => d.intensity === 'heavy').map((d) => d.slot)).toEqual(['A', 'B']);
+    expect(week.filter((d) => d.intensity === 'light').map((d) => d.slot)).toEqual(['C', 'X', 'Y']);
+  });
+
+  it('caps at what the golf calendar leaves free', () => {
+    expect(maxSessionsFor([6])).toBe(5);
+    // Playing both weekend days costs the Sunday slot.
+    expect(maxSessionsFor([6, 7])).toBe(4);
+    expect(templateWeek({ sessionsPerWeek: 5, golfWeekdays: [6, 7] })).toHaveLength(4);
+  });
+
+  it('says so when it cannot place every session asked for', () => {
+    const block = build(5, { golfWeekdays: [6, 7] });
+    expect(block.days).toHaveLength(4);
+    expect(block.warnings.join(' ')).toMatch(/Only 4 of 5 sessions/);
+  });
+
+  it('still validates cleanly at four and five', () => {
+    expect(build(4).violations).toEqual([]);
+    expect(build(5).violations).toEqual([]);
+  });
+
+  it('strips grip work from any extra day inside the buffer', () => {
+    for (const day of build(5).days) {
+      for (const entry of day.exercises) {
+        if (byId.get(entry.exerciseId)?.gripLoad === 'high') {
+          expect([1, 2], `grip work on ${day.weekdayLabel}`).toContain(day.weekday);
+        }
+      }
+    }
+  });
+});
+
+describe('session shape', () => {
+  it('splits the heavy pair upper and lower on request', () => {
+    const week = templateWeek({ sessionsPerWeek: 3, shape: 'upper_lower' });
+    expect(week[0]?.patterns).toEqual(['pull_h', 'pull_v', 'push_h', 'push_v', 'core']);
+    expect(week[1]?.patterns).toEqual(['squat', 'hinge', 'squat', 'core']);
+    // The light day stays full body whatever the heavy pair does.
+    expect(week[2]?.patterns).toEqual(['squat', 'push_h', 'pull_h', 'rotation']);
+  });
+
+  it('builds an upper Monday and a lower Tuesday', () => {
+    const block = build(3, { shape: 'upper_lower' });
+    const LOWER = ['quads', 'hamstrings', 'glutes', 'adductors', 'calves'];
+    const isLower = (id: string) =>
+      byId.get(id)?.primaryMuscles.some((m) => LOWER.includes(m)) ?? false;
+
+    const upperDay = block.days.find((d) => d.slot === 'A')!;
+    const lowerDay = block.days.find((d) => d.slot === 'B')!;
+    expect(upperDay.exercises.every((e) => !isLower(e.exerciseId))).toBe(true);
+    expect(lowerDay.exercises.some((e) => isLower(e.exerciseId))).toBe(true);
+  });
+
+  it('leaves the week valid under either shape', () => {
+    expect(build(3, { shape: 'mixed' }).violations).toEqual([]);
+    expect(build(3, { shape: 'upper_lower' }).violations).toEqual([]);
+  });
+});
+
+describe('volume never collapses to single sets', () => {
+  it('keeps every exercise at two sets or more, even at five sessions', () => {
+    for (const sessions of [2, 3, 4, 5]) {
+      for (const day of build(sessions).days) {
+        for (const entry of day.exercises) {
+          expect(entry.targetSets, `${sessions} sessions, ${entry.exerciseId}`).toBeGreaterThanOrEqual(2);
+        }
+      }
+    }
+  });
+
+  it('says plainly when the weekly target will not stretch that far', () => {
+    expect(build(5).warnings.join(' ')).toMatch(/does not stretch to 5 sessions/);
+    expect(build(2).warnings.join(' ')).not.toMatch(/does not stretch/);
+  });
+
+  it('takes sets off the light days before the heavy ones', () => {
+    const block = build(5, { weeklySetTarget: 40 });
+    const heavy = block.days.filter((d) => d.intensity === 'heavy');
+    const light = block.days.filter((d) => d.intensity === 'light');
+    const mean = (days: typeof heavy) =>
+      days.reduce((n, d) => n + d.exercises.reduce((m, e) => m + e.targetSets, 0), 0) /
+      days.reduce((n, d) => n + d.exercises.length, 0);
+    expect(mean(heavy)).toBeGreaterThanOrEqual(mean(light));
+  });
+});
+
+describe('choosing the heavy days by hand', () => {
+  it('lists the weekdays a session count lands on', () => {
+    expect(templateWeekdays(2, [6])).toEqual([1, 2]);
+    expect(templateWeekdays(4, [6])).toEqual([1, 2, 3, 4]);
+    expect(templateWeekdays(5, [6])).toEqual([1, 2, 3, 4, 7]);
+  });
+
+  it('balances it when nothing is chosen', () => {
+    const week = templateWeek({ sessionsPerWeek: 4, golfWeekdays: [6] });
+    expect(week.map((d) => d.intensity)).toEqual(['heavy', 'heavy', 'light', 'light']);
+  });
+
+  it('honours the chosen days instead', () => {
+    const week = templateWeek({
+      sessionsPerWeek: 4,
+      golfWeekdays: [6],
+      heavyWeekdays: [1, 4],
+    });
+    expect(week.map((d) => [d.weekdayLabel, d.intensity])).toEqual([
+      ['Mon', 'heavy'],
+      ['Tue', 'light'],
+      ['Wed', 'light'],
+      ['Thu', 'heavy'],
+    ]);
+  });
+
+  it('keeps slots in calendar order whatever the intensities', () => {
+    const week = templateWeek({ sessionsPerWeek: 5, golfWeekdays: [6], heavyWeekdays: [7] });
+    expect(week.map((d) => d.slot)).toEqual(['A', 'B', 'C', 'X', 'Y']);
+    expect(week.find((d) => d.slot === 'Y')?.intensity).toBe('heavy');
+  });
+
+  it('still strips grip work from a heavy day inside the buffer', () => {
+    // Thursday is two days from a Saturday round, so it loses grip work even
+    // when the user calls it heavy.
+    const week = templateWeek({ sessionsPerWeek: 4, golfWeekdays: [6], heavyWeekdays: [4] });
+    const thursday = week.find((d) => d.weekdayLabel === 'Thu');
+    expect(thursday?.intensity).toBe('heavy');
+    expect(thursday?.excludeGripHigh).toBe(true);
+  });
+
+  it('alternates the shape across heavy days rather than repeating one', () => {
+    const week = templateWeek({
+      sessionsPerWeek: 4,
+      shape: 'upper_lower',
+      golfWeekdays: [6],
+      heavyWeekdays: [1, 2, 3],
+    });
+    const heavy = week.filter((d) => d.intensity === 'heavy');
+    expect(heavy[0]?.patterns).toContain('pull_v');
+    expect(heavy[1]?.patterns).toContain('squat');
+    expect(heavy[2]?.patterns).toContain('pull_v');
+  });
+
+  it('ignores a chosen day that is not in the week', () => {
+    const week = templateWeek({ sessionsPerWeek: 2, golfWeekdays: [6], heavyWeekdays: [7] });
+    expect(week.map((d) => d.intensity)).toEqual(['heavy', 'heavy']);
+  });
+
+  it('generates a valid block with hand-picked heavy days', () => {
+    expect(build(4, { heavyWeekdays: [1, 4] }).violations).toEqual([]);
   });
 });

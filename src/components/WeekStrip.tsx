@@ -132,7 +132,7 @@ export function WeekStrip({
                 </div>
               ) : (
                 <div className="mt-1.5 py-1 text-center text-[10px] font-medium text-text-faint">
-                  {done ? 'log' : '·'}
+                  {done ? 'Log' : 'Rest'}
                 </div>
               )}
             </div>
