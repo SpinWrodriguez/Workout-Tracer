@@ -1,5 +1,6 @@
 import type { BlockExercise, DaySlot, Exercise, MovementPattern, MuscleId } from '../db/types';
 import { GRIP_BUFFER_DAYS, WEEKDAY_LABEL, type Weekday } from './golf';
+import { weekdayAllowed, type TemplateDay } from './weekTemplate';
 
 /* -------------------------------------------------------------------------- */
 /*  Block validation.                                                         */
@@ -42,6 +43,8 @@ export interface ValidationContext {
   hasHistory: boolean;
   /** Loadable rungs for an exercise, from the real plate inventory. */
   laddersFor: (exercise: Exercise) => number[];
+  /** The fixed week. Placement and per-day limits are checked against it. */
+  template?: TemplateDay[];
 }
 
 export type ViolationCode =
@@ -53,7 +56,9 @@ export type ViolationCode =
   | 'pattern_coverage'
   | 'weekly_set_total'
   | 'unloadable_weight'
-  | 'over_time_budget';
+  | 'over_time_budget'
+  | 'forbidden_day'
+  | 'light_day_violation';
 
 export interface Violation {
   code: ViolationCode;
@@ -145,7 +150,13 @@ export function workingRepRange(
   const low = Math.max(exercise.repMin, desired.low);
   const high = Math.min(exercise.repMax, desired.high);
   if (low > high) return { low: exercise.repMin, high: exercise.repMax };
-  return { low, high };
+  if (low < high) return { low, high };
+
+  // The desired range collapsed onto a single value at the edge of what the
+  // exercise takes — "3 x 10-10" is a prescription, not a range. Open the top
+  // back up, still inside the exercise bounds.
+  const widened = Math.min(exercise.repMax, low + Math.max(2, Math.round(low * 0.25)));
+  return { low, high: widened };
 }
 
 /* --- the validator --------------------------------------------------------- */
@@ -160,8 +171,35 @@ export function validateBlock(
   let weeklySets = 0;
   const covered = new Set<CoverageGroup>();
 
+  const templateBySlot = new Map((context.template ?? []).map((day) => [day.slot, day]));
+
   for (const day of proposal.days) {
     let spinalHigh = 0;
+    const template = templateBySlot.get(day.slot);
+
+    // Placement is owned by the template, so a day that has drifted off it is a
+    // bug in whatever produced the proposal, not a judgement call.
+    if (!weekdayAllowed(day.weekday, golfWeekdays)) {
+      violations.push({
+        code: 'forbidden_day',
+        slot: day.slot,
+        message: `Day ${day.slot} is scheduled on ${WEEKDAY_LABEL[day.weekday]}, which is never a training day.`,
+      });
+    } else if (template && template.weekday !== day.weekday) {
+      violations.push({
+        code: 'forbidden_day',
+        slot: day.slot,
+        message: `Day ${day.slot} is on ${WEEKDAY_LABEL[day.weekday]} but the template puts it on ${template.weekdayLabel}.`,
+      });
+    }
+
+    if (template && day.exercises.length > template.maxExercises) {
+      violations.push({
+        code: 'light_day_violation',
+        slot: day.slot,
+        message: `Day ${day.slot} has ${day.exercises.length} exercises; the template allows ${template.maxExercises}.`,
+      });
+    }
 
     for (const entry of day.exercises) {
       const exercise = exercisesById.get(entry.exerciseId);
@@ -208,6 +246,34 @@ export function validateBlock(
       // (d) one heavy axial lift per session
       if (exercise.spinalLoad === 'high') spinalHigh += 1;
 
+      // A light day is defined by what it excludes, so those are hard rules.
+      if (template?.intensity === 'light') {
+        if (template.excludeGripHigh && exercise.gripLoad === 'high') {
+          violations.push({
+            code: 'light_day_violation',
+            slot: day.slot,
+            exerciseId: exercise.id,
+            message: `Day ${day.slot} is the light session: ${exercise.name} is high grip load and does not belong on it.`,
+          });
+        }
+        if (template.excludeSpinalHigh && exercise.spinalLoad === 'high') {
+          violations.push({
+            code: 'light_day_violation',
+            slot: day.slot,
+            exerciseId: exercise.id,
+            message: `Day ${day.slot} is the light session: ${exercise.name} is a heavy spinal-load lift and does not belong on it.`,
+          });
+        }
+        if (entry.targetSets > template.setsPerExercise) {
+          violations.push({
+            code: 'light_day_violation',
+            slot: day.slot,
+            exerciseId: exercise.id,
+            message: `Day ${day.slot} is the light session: ${exercise.name} is prescribed ${entry.targetSets} sets, and light days cap at ${template.setsPerExercise}.`,
+          });
+        }
+      }
+
       // (e) no advanced work in a first block
       if (!context.hasHistory && exercise.skillLevel === 'advanced') {
         violations.push({
@@ -247,12 +313,13 @@ export function validateBlock(
     }
 
     // time budget, computed from real rest periods
+    const budget = template?.minutesBudget ?? context.sessionBudgetMinutes;
     const minutes = sessionMinutes(day.exercises, exercisesById);
-    if (minutes > context.sessionBudgetMinutes) {
+    if (minutes > budget) {
       violations.push({
         code: 'over_time_budget',
         slot: day.slot,
-        message: `Day ${day.slot} needs ${minutes} min including rest, over the ${context.sessionBudgetMinutes} min budget. Drop an accessory or cut a set.`,
+        message: `Day ${day.slot} needs ${minutes} min including rest, over the ${budget} min budget. Drop an accessory or cut a set.`,
       });
     }
   }

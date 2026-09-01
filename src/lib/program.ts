@@ -1,6 +1,7 @@
 import { db } from '../db/db';
 import type { Block, BlockExercise, DaySlot, Exercise } from '../db/types';
 import { weekdayOf, type Weekday } from './golf';
+import { LIGHT_DAY_CUE, type Intensity } from './weekTemplate';
 import { todayIso } from './format';
 import { emptySet, newSessionId, type SessionDraft } from './sessions';
 
@@ -17,8 +18,15 @@ import { emptySet, newSessionId, type SessionDraft } from './sessions';
 
 export const BLOCK_SCHEDULE_KEY = 'blockSchedule';
 
-/** slot → ISO weekday, per block. */
-export type BlockSchedule = Partial<Record<DaySlot, Weekday>>;
+/** What a slot is: which weekday it lands on and how hard it is meant to be. */
+export interface ScheduledDay {
+  weekday: Weekday;
+  intensity: Intensity;
+  /** Shown while logging, e.g. "Leave 3-4 reps in the tank". */
+  effortCue?: string;
+}
+
+export type BlockSchedule = Partial<Record<DaySlot, ScheduledDay>>;
 export type ScheduleByBlock = Record<string, BlockSchedule>;
 
 const SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
@@ -34,10 +42,17 @@ export function normaliseSchedule(value: unknown): ScheduleByBlock {
     if (!isRecord(slots)) continue;
     const map: BlockSchedule = {};
     for (const slot of SLOTS) {
-      const weekday = Number(slots[slot]);
-      if (Number.isInteger(weekday) && weekday >= 1 && weekday <= 7) {
-        map[slot] = weekday as Weekday;
-      }
+      const raw = slots[slot];
+      // Schedules written before intensity existed are a bare weekday number.
+      const value = isRecord(raw) ? raw : { weekday: raw, intensity: 'heavy' };
+      const weekday = Number(value.weekday);
+      if (!Number.isInteger(weekday) || weekday < 1 || weekday > 7) continue;
+      const intensity: Intensity = value.intensity === 'light' ? 'light' : 'heavy';
+      map[slot] = {
+        weekday: weekday as Weekday,
+        intensity,
+        effortCue: intensity === 'light' ? LIGHT_DAY_CUE : undefined,
+      };
     }
     if (Object.keys(map).length > 0) out[blockId] = map;
   }
@@ -60,15 +75,15 @@ export async function writeSchedule(blockId: string, schedule: BlockSchedule): P
 /** The day slot programmed for a given date, if any. */
 export function slotForDate(schedule: BlockSchedule, dateIso: string): DaySlot | undefined {
   const weekday = weekdayOf(dateIso);
-  return SLOTS.find((slot) => schedule[slot] === weekday);
+  return SLOTS.find((slot) => schedule[slot]?.weekday === weekday);
 }
 
 /** The inverse map: which slot, if any, is trained on each weekday. */
 export function slotsByWeekday(schedule: BlockSchedule): Partial<Record<Weekday, DaySlot>> {
   const out: Partial<Record<Weekday, DaySlot>> = {};
   for (const slot of SLOTS) {
-    const weekday = schedule[slot];
-    if (weekday !== undefined) out[weekday] = slot;
+    const day = schedule[slot];
+    if (day !== undefined) out[day.weekday] = slot;
   }
   return out;
 }
@@ -87,13 +102,13 @@ export function assignSlot(
   // Two sessions cannot share a weekday, so the occupant swaps into the slot's
   // old day if it had one, and is otherwise unscheduled.
   const displaced = (Object.keys(next) as DaySlot[]).find(
-    (other) => other !== slot && next[other] === weekday,
+    (other) => other !== slot && next[other]?.weekday === weekday,
   );
   const previous = next[slot];
-  next[slot] = weekday;
+  next[slot] = { ...(previous ?? { intensity: 'heavy' as Intensity }), weekday };
   if (displaced) {
     if (previous === undefined) delete next[displaced];
-    else next[displaced] = previous;
+    else next[displaced] = { ...(next[displaced] as ScheduledDay), weekday: previous.weekday };
   }
   return next;
 }
@@ -101,7 +116,7 @@ export function assignSlot(
 /** Slots in the order they are trained, for "what's next" style prompts. */
 export function orderedSlots(schedule: BlockSchedule): { slot: DaySlot; weekday: Weekday }[] {
   return SLOTS.filter((slot) => schedule[slot] !== undefined)
-    .map((slot) => ({ slot, weekday: schedule[slot] as Weekday }))
+    .map((slot) => ({ slot, weekday: (schedule[slot] as ScheduledDay).weekday }))
     .sort((a, b) => a.weekday - b.weekday);
 }
 

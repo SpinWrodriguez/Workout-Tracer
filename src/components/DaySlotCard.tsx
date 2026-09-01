@@ -47,6 +47,7 @@ function Stepper({
 export function DaySlotCard({
   slot,
   weekday,
+  intensity = 'heavy',
   entries,
   exercisesById,
   editing,
@@ -61,6 +62,7 @@ export function DaySlotCard({
 }: {
   slot: DaySlot;
   weekday?: Weekday;
+  intensity?: 'heavy' | 'light';
   entries: BlockExercise[];
   exercisesById: Map<string, Exercise>;
   editing: boolean;
@@ -82,6 +84,7 @@ export function DaySlotCard({
           {weekday !== undefined && (
             <Label className={isToday ? 'text-text!' : ''}>
               {isToday ? 'today' : WEEKDAY_LABEL[weekday]}
+              {intensity === 'light' ? ' · light' : ''}
             </Label>
           )}
           <button

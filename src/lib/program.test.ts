@@ -26,6 +26,12 @@ import {
 
 const byId = new Map(EXERCISES.map((e) => [e.id, e]));
 
+/** Schedules carry an intensity now, so build them rather than inline them. */
+const day = (a: number, b?: number) => ({
+  A: { weekday: a as 1, intensity: 'heavy' as const },
+  ...(b === undefined ? {} : { B: { weekday: b as 1, intensity: 'heavy' as const } }),
+});
+
 /* Aug/Sep 2026: Mon 31 Aug, Tue 1, Wed 2, Thu 3, Fri 4, Sat 5, Sun 6. */
 const MON = '2026-08-31';
 const TUE = '2026-09-01';
@@ -40,34 +46,42 @@ beforeEach(async () => {
 
 describe('block schedule', () => {
   it('round-trips the slot to weekday map', async () => {
-    await writeSchedule('block_1', { A: 1, B: 4 });
-    expect((await readSchedules()).block_1).toEqual({ A: 1, B: 4 });
+    await writeSchedule('block_1', { A: { weekday: 1, intensity: 'heavy' }, B: { weekday: 4, intensity: 'heavy' } });
+    expect((await readSchedules()).block_1).toEqual({ A: { weekday: 1, intensity: 'heavy' }, B: { weekday: 4, intensity: 'heavy' } });
   });
 
   it('keeps schedules for other blocks when one is rewritten', async () => {
-    await writeSchedule('block_1', { A: 1 });
-    await writeSchedule('block_2', { A: 3 });
-    await writeSchedule('block_1', { A: 2, B: 5 });
+    await writeSchedule('block_1', { A: { weekday: 1, intensity: 'heavy' } });
+    await writeSchedule('block_2', { A: { weekday: 3, intensity: 'heavy' } });
+    await writeSchedule('block_1', { A: { weekday: 2, intensity: 'heavy' }, B: { weekday: 5, intensity: 'heavy' } });
     const all = await readSchedules();
-    expect(all.block_1).toEqual({ A: 2, B: 5 });
-    expect(all.block_2).toEqual({ A: 3 });
+    expect(all.block_1).toEqual({ A: { weekday: 2, intensity: 'heavy' }, B: { weekday: 5, intensity: 'heavy' } });
+    expect(all.block_2).toEqual({ A: { weekday: 3, intensity: 'heavy' } });
+  });
+
+  it('reads a pre-intensity schedule as a heavy day', () => {
+    expect(normaliseSchedule({ b: { A: 1 } })).toEqual({
+      b: { A: { weekday: 1, intensity: 'heavy', effortCue: undefined } },
+    });
   });
 
   it('discards junk rather than trusting a hand-edited row', () => {
-    expect(normaliseSchedule({ b: { A: 9, B: 'x', C: 3 } })).toEqual({ b: { C: 3 } });
+    expect(normaliseSchedule({ b: { A: 9, B: 'x', C: 3 } })).toEqual({
+      b: { C: { weekday: 3, intensity: 'heavy', effortCue: undefined } },
+    });
     expect(normaliseSchedule('nope')).toEqual({});
     expect(normaliseSchedule({ b: {} })).toEqual({});
   });
 
   it('resolves the slot programmed for a date', () => {
-    const schedule = { A: 1 as const, B: 4 as const };
+    const schedule = day(1, 4);
     expect(slotForDate(schedule, MON)).toBe('A');
     expect(slotForDate(schedule, THU)).toBe('B');
     expect(slotForDate(schedule, TUE)).toBeUndefined();
   });
 
   it('names the soonest slot when today has none', () => {
-    const schedule = { A: 1 as const, B: 4 as const };
+    const schedule = day(1, 4);
     expect(nextSlot(schedule, TUE)).toMatchObject({ slot: 'B', inDays: 2 });
     // On a programmed day the soonest is today itself.
     expect(nextSlot(schedule, MON)).toMatchObject({ slot: 'A', inDays: 0 });
@@ -95,13 +109,16 @@ describe('a generated block survives the round trip to a session', () => {
     await db.blockExercise.bulkPut(generated.days.flatMap((d) => d.exercises));
     await writeSchedule(
       'block_1',
-      Object.fromEntries(generated.days.map((d) => [d.slot, d.weekday])),
+      Object.fromEntries(
+        generated.days.map((d) => [d.slot, { weekday: d.weekday, intensity: d.intensity }]),
+      ),
     );
 
     const plan = await readBlockPlan();
     expect(plan).toBeDefined();
     for (const day of generated.days) {
-      expect(plan?.schedule[day.slot]).toBe(day.weekday);
+      expect(plan?.schedule[day.slot]?.weekday).toBe(day.weekday);
+      expect(plan?.schedule[day.slot]?.intensity).toBe(day.intensity);
     }
 
     // The whole point: a date now resolves to the day the builder placed.
@@ -120,7 +137,7 @@ describe('a generated block survives the round trip to a session', () => {
       { blockId: 'block_1', exerciseId: 'bb_back_squat', daySlot: 'B', targetSets: 3, repRangeLow: 8, repRangeHigh: 10, order: 0 },
     ];
     await db.blockExercise.bulkPut(entries);
-    await writeSchedule('block_1', { A: 1, B: 4 });
+    await writeSchedule('block_1', { A: { weekday: 1, intensity: 'heavy' }, B: { weekday: 4, intensity: 'heavy' } });
 
     const plan = await readBlockPlan();
     const draft = draftFromPlan({ plan: plan!, slot: 'A', exercisesById: byId, date: MON });
@@ -158,29 +175,29 @@ describe('a generated block survives the round trip to a session', () => {
 
 describe('editing the week by hand', () => {
   it('inverts the schedule to weekday → slot', () => {
-    expect(slotsByWeekday({ A: 1, B: 4 })).toEqual({ 1: 'A', 4: 'B' });
+    expect(slotsByWeekday({ A: { weekday: 1, intensity: 'heavy' }, B: { weekday: 4, intensity: 'heavy' } })).toEqual({ 1: 'A', 4: 'B' });
     expect(slotsByWeekday({})).toEqual({});
   });
 
   it('moves a slot to a free weekday', () => {
-    expect(assignSlot({ A: 1, B: 4 }, 'B', 5)).toEqual({ A: 1, B: 5 });
+    expect(assignSlot({ A: { weekday: 1, intensity: 'heavy' }, B: { weekday: 4, intensity: 'heavy' } }, 'B', 5)).toEqual({ A: { weekday: 1, intensity: 'heavy' }, B: { weekday: 5, intensity: 'heavy' } });
   });
 
   it('swaps when the target weekday is already taken', () => {
     // Dropping A onto Thursday must not leave two sessions on one day.
-    expect(assignSlot({ A: 1, B: 4 }, 'A', 4)).toEqual({ A: 4, B: 1 });
+    expect(assignSlot({ A: { weekday: 1, intensity: 'heavy' }, B: { weekday: 4, intensity: 'heavy' } }, 'A', 4)).toEqual({ A: { weekday: 4, intensity: 'heavy' }, B: { weekday: 1, intensity: 'heavy' } });
   });
 
   it('unschedules the displaced slot when the mover had no day', () => {
-    expect(assignSlot({ B: 4 }, 'A', 4)).toEqual({ A: 4 });
+    expect(assignSlot({ B: { weekday: 4, intensity: 'heavy' } }, 'A', 4)).toEqual({ A: { weekday: 4, intensity: 'heavy' } });
   });
 
   it('clears a slot without touching the others', () => {
-    expect(assignSlot({ A: 1, B: 4 }, 'A', undefined)).toEqual({ B: 4 });
+    expect(assignSlot({ A: { weekday: 1, intensity: 'heavy' }, B: { weekday: 4, intensity: 'heavy' } }, 'A', undefined)).toEqual({ B: { weekday: 4, intensity: 'heavy' } });
   });
 
   it('is a no-op when a slot is dropped back on its own day', () => {
-    expect(assignSlot({ A: 1, B: 4 }, 'A', 1)).toEqual({ A: 1, B: 4 });
+    expect(assignSlot({ A: { weekday: 1, intensity: 'heavy' }, B: { weekday: 4, intensity: 'heavy' } }, 'A', 1)).toEqual({ A: { weekday: 1, intensity: 'heavy' }, B: { weekday: 4, intensity: 'heavy' } });
   });
 });
 
@@ -254,10 +271,10 @@ describe('hand-editing a block', () => {
 
   it('deleting a day clears its exercises and its place in the week', async () => {
     await db.blockExercise.bulkPut([base('A', 'bb_back_squat', 0), base('B', 'bb_bench_press', 0)]);
-    await writeSchedule('block_1', { A: 1, B: 4 });
+    await writeSchedule('block_1', { A: { weekday: 1, intensity: 'heavy' }, B: { weekday: 4, intensity: 'heavy' } });
     await clearDaySlot('block_1', 'A');
     expect(entriesForSlot(await db.blockExercise.toArray(), 'A')).toEqual([]);
     expect(entriesForSlot(await db.blockExercise.toArray(), 'B')).toHaveLength(1);
-    expect((await readSchedules()).block_1).toEqual({ B: 4 });
+    expect((await readSchedules()).block_1).toEqual({ B: { weekday: 4, intensity: 'heavy' } });
   });
 });

@@ -475,6 +475,9 @@ export function SessionScreen({
       ).filter((w) => !dismissed.includes(`${w.exerciseId}:${w.title}`))
     : [];
 
+  /* A light day carries its own instruction, set by the template. */
+  const effortCue = draft ? plan?.schedule[draft.daySlot as DaySlot]?.effortCue : undefined;
+
   const previous = activeId ? history[activeId] : undefined;
   const target = activeId ? targets[activeId] : undefined;
   const repLow = target?.repRangeLow ?? DEFAULT_REP_RANGE.low;
@@ -501,6 +504,12 @@ export function SessionScreen({
         }
         header={
           <>
+            {effortCue && (
+              <div className="mt-3 rounded-2xl bg-surface px-4 py-2.5">
+                <span className="label">This session</span>
+                <p className="mt-0.5 text-[14px] font-medium">{effortCue}</p>
+              </div>
+            )}
             <RestTimerBar timer={timer} onPresetChange={timer.setDuration} />
             <ExerciseStrip
               exercises={stripExercises}

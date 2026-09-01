@@ -100,6 +100,14 @@ describe('rule b — reps inside the exercise bounds (defect 2)', () => {
       high: 8,
     });
   });
+
+  it('never collapses to a single rep value', () => {
+    // A kettlebell swing takes 10-20; a 6-10 target lands entirely on its floor.
+    const swing = workingRepRange(find('kb_swing'), { low: 6, high: 10 });
+    expect(swing.low).toBe(10);
+    expect(swing.high).toBeGreaterThan(swing.low);
+    expect(swing.high).toBeLessThanOrEqual(find('kb_swing').repMax);
+  });
 });
 
 describe('rule c — grip clearance computed from the calendar (defect 1)', () => {
@@ -276,7 +284,6 @@ describe('the generated block passes its own validator', () => {
     focusMuscles: [],
     sessionsPerWeek: 2,
     golfWeekdays: [6],
-    split: 'full_body',
     minutesPerSession: 40,
     hasHistory: false,
     laddersFor: (exercise) => ladderFor(exercise, DEFAULT_INVENTORY),

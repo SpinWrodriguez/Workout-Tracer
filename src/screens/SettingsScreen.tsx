@@ -5,6 +5,7 @@ import { downloadBackup, importBackup, type ImportReport } from '../lib/backup';
 import { Card, Label, Screen } from '../components/Layout';
 import { InventoryEditor } from '../components/InventoryEditor';
 import { ThemePicker } from '../components/ThemePicker';
+import { TrainingPrefsEditor } from '../components/TrainingPrefsEditor';
 import { clearFreeDb, fetchAndStoreFreeDb, mappedIds, type EnrichReport } from '../lib/freeDb';
 import { EXERCISES } from '../db/seed/exercises';
 
@@ -217,6 +218,10 @@ export function SettingsScreen() {
           </>
         )}
       </Card>
+
+      <div className="mt-3">
+        <TrainingPrefsEditor />
+      </div>
 
       <div className="mt-3">
         <InventoryEditor />

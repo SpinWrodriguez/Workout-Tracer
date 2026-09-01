@@ -48,3 +48,53 @@ export async function writeInventory(inventory: Inventory): Promise<void> {
   // entry can never outlive an edit.
   clearLadderCache();
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Training preferences: set once, rarely changed, so they live in Settings   */
+/*  rather than on the block screen. Anything whose answer is always the same  */
+/*  is a setting, not a choice.                                               */
+/* -------------------------------------------------------------------------- */
+
+export const TRAINING_KEY = 'training';
+
+export interface TrainingPrefs {
+  /** ISO weekdays a round is typically played. Sat is 6, Sun is 7. */
+  golfWeekdays: number[];
+  weeklySetTarget: number;
+  sessionMinutes: number;
+}
+
+export const DEFAULT_TRAINING: TrainingPrefs = {
+  golfWeekdays: [6],
+  weeklySetTarget: 33,
+  sessionMinutes: 40,
+};
+
+export function mergeTraining(value: unknown): TrainingPrefs {
+  if (!isRecord(value)) return DEFAULT_TRAINING;
+  const golfWeekdays = Array.isArray(value.golfWeekdays)
+    ? value.golfWeekdays
+        .map(Number)
+        .filter((day) => Number.isInteger(day) && day >= 1 && day <= 7)
+    : DEFAULT_TRAINING.golfWeekdays;
+  const target = Number(value.weeklySetTarget);
+  const minutes = Number(value.sessionMinutes);
+  return {
+    golfWeekdays,
+    weeklySetTarget:
+      Number.isFinite(target) && target > 0 ? Math.round(target) : DEFAULT_TRAINING.weeklySetTarget,
+    sessionMinutes:
+      Number.isFinite(minutes) && minutes > 0
+        ? Math.round(minutes)
+        : DEFAULT_TRAINING.sessionMinutes,
+  };
+}
+
+export async function readTraining(): Promise<TrainingPrefs> {
+  const row = await db.settings.get(TRAINING_KEY);
+  return mergeTraining(row?.value);
+}
+
+export async function writeTraining(prefs: TrainingPrefs): Promise<void> {
+  await db.settings.put({ key: TRAINING_KEY, value: prefs });
+}

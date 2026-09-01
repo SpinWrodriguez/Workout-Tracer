@@ -4,25 +4,12 @@ import { db } from '../db/db';
 import type { DaySlot, Exercise, GolfDay, Muscle, MuscleId } from '../db/types';
 import { MUSCLES } from '../db/seed/muscles';
 import { friendlyDate, longDate, todayIso } from '../lib/format';
-import {
-  GRIP_BUFFER_DAYS,
-  WEEKDAY_LABEL,
-  buildWeek,
-  golfWeekdaysFrom,
-  weekdayOf,
-} from '../lib/golf';
+import { WEEKDAY_LABEL, buildWeek, weekdayOf } from '../lib/golf';
 import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
-import {
-  DAY_TYPES,
-  DAY_TYPE_LABEL,
-  SPLIT_LABEL,
-  generateBlock,
-  splitFits,
-  type DayType,
-  type GeneratedBlock,
-  type SplitId,
-} from '../lib/blockBuilder';
+import { generateBlock, type GeneratedBlock } from '../lib/blockBuilder';
+import { availableThirdDays, DEFAULT_THIRD_DAY } from '../lib/weekTemplate';
+import { readTraining, DEFAULT_TRAINING, type TrainingPrefs } from '../db/settings';
 import {
   addBlockExercise,
   assignSlot,
@@ -44,33 +31,15 @@ import { WeekStrip, type WeekStripDay } from '../components/WeekStrip';
 import { shiftIso, weekStart } from '../lib/format';
 
 const DAY_SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
-const SESSION_COUNTS = ['1', '2', '3'] as const;
-const SPLITS: SplitId[] = ['full_body', 'upper_lower', 'push_pull_legs', 'custom'];
-const FOCUS_MODES = ['upper', 'lower', 'custom'] as const;
-type FocusMode = (typeof FOCUS_MODES)[number];
-
-const FOCUS_LABEL: Record<FocusMode, string> = {
-  upper: 'Upper body',
-  lower: 'Lower body',
-  custom: 'Custom',
-};
+const SESSION_COUNTS = ['2', '3'] as const;
+const SESSION_LENGTHS = ['30', '40', '60'] as const;
+type SessionLength = (typeof SESSION_LENGTHS)[number];
 
 const REGION_LABEL: Record<Muscle['region'], string> = {
   upper: 'Upper',
   lower: 'Lower',
   core: 'Core',
 };
-
-/* Presets fold the trunk in with the half it actually works alongside, so
-   picking "Lower body" does not silently drop the core. */
-const PRESET: Record<'upper' | 'lower', MuscleId[]> = {
-  upper: MUSCLES.filter((m) => m.region === 'upper').map((m) => m.id),
-  lower: MUSCLES.filter((m) => m.region !== 'upper').map((m) => m.id),
-};
-
-function sameSet(a: MuscleId[], b: MuscleId[]): boolean {
-  return a.length === b.length && a.every((id) => b.includes(id));
-}
 
 export function ProgramScreen({
   exercises,
@@ -81,15 +50,13 @@ export function ProgramScreen({
 }) {
   const [anchor, setAnchor] = useState(() => todayIso());
   const [sessionsPerWeek, setSessionsPerWeek] = useState<(typeof SESSION_COUNTS)[number]>('2');
+  const [sessionMinutes, setSessionMinutes] = useState<SessionLength>('40');
   const [focus, setFocus] = useState<MuscleId[]>([]);
-  const [focusMode, setFocusMode] = useState<FocusMode | null>(null);
-  /* The per-muscle grid stays folded away until asked for — eighteen chips is
-     the mess this replaced. */
-  const [editingMuscles, setEditingMuscles] = useState(false);
   const [preview, setPreview] = useState<GeneratedBlock | null>(null);
   const [editingDate, setEditingDate] = useState<string | null>(null);
-  const [split, setSplit] = useState<SplitId>('full_body');
-  const [customDayTypes, setCustomDayTypes] = useState<DayType[]>(['upper', 'lower', 'full']);
+  const [thirdDay, setThirdDay] = useState<number>(DEFAULT_THIRD_DAY);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [training, setTraining] = useState<TrainingPrefs>(DEFAULT_TRAINING);
   const [editingSlot, setEditingSlot] = useState<DaySlot | null>(null);
   const [addingTo, setAddingTo] = useState<DaySlot | null>(null);
   const [inventory, setInventory] = useState<Inventory>(DEFAULT_INVENTORY);
@@ -98,6 +65,12 @@ export function ProgramScreen({
     let cancelled = false;
     void readInventory().then((next) => {
       if (!cancelled) setInventory(next);
+    });
+    void readTraining().then((next) => {
+      if (!cancelled) {
+        setTraining(next);
+        setSessionMinutes(String(next.sessionMinutes) as SessionLength);
+      }
     });
     return () => {
       cancelled = true;
@@ -156,21 +129,9 @@ export function ProgramScreen({
     if (block) await writeSchedule(block.id, next);
   };
 
-  const golfWeekdays = useMemo(() => golfWeekdaysFrom(golfDays ?? []), [golfDays]);
   const violations = week.filter((day) => day.violation);
 
   const focusOrDefault = focus.length > 0 ? focus : (block?.focusMuscles ?? []);
-
-  /* The mode is derived from the selection, so hand-picking the whole upper
-     body still reads as "Upper body" rather than stale Custom. */
-  const resolvedFocusMode: FocusMode =
-    focusMode === 'custom'
-      ? 'custom'
-      : sameSet(focusOrDefault, PRESET.upper)
-        ? 'upper'
-        : sameSet(focusOrDefault, PRESET.lower)
-          ? 'lower'
-          : (focusMode ?? 'custom');
 
   const setGolf = async (date: string, status: GolfDay['status'] | undefined) => {
     if (status === undefined) await db.golfDay.delete(date);
@@ -188,9 +149,10 @@ export function ProgramScreen({
         exercises,
         focusMuscles: focusOrDefault,
         sessionsPerWeek: Number(sessionsPerWeek),
-        golfWeekdays,
-        split,
-        customDayTypes,
+        golfWeekdays: training.golfWeekdays as never,
+        thirdDay: thirdDay as never,
+        minutesPerSession: Number(sessionMinutes),
+        weeklySetTarget: training.weeklySetTarget,
         hasHistory: hasHistory ?? false,
         laddersFor: (exercise) => ladderFor(exercise, inventory),
       }),
@@ -209,7 +171,12 @@ export function ProgramScreen({
     // beside the block — without it nothing can answer "what am I doing today".
     await writeSchedule(
       block.id,
-      Object.fromEntries(preview.days.map((day) => [day.slot, day.weekday])),
+      Object.fromEntries(
+        preview.days.map((day) => [
+          day.slot,
+          { weekday: day.weekday, intensity: day.intensity, effortCue: day.effortCue },
+        ]),
+      ),
     );
     setPreview(null);
   };
@@ -286,112 +253,6 @@ export function ProgramScreen({
             <p className="text-[13px] font-medium text-text-dim">
               {longDate(block.startDate)} — {longDate(block.endDate)}
             </p>
-            <Label className="mt-4 block">Focus</Label>
-            <div className="mt-1.5">
-              <SegmentedToggle
-                options={FOCUS_MODES}
-                value={resolvedFocusMode}
-                onChange={(mode) => {
-                  setFocusMode(mode);
-                  setEditingMuscles(mode === 'custom');
-                  if (mode !== 'custom') setFocus(PRESET[mode]);
-                }}
-                labels={FOCUS_LABEL}
-              />
-            </div>
-
-            {resolvedFocusMode === 'custom' && !editingMuscles && (
-              <button
-                type="button"
-                onClick={() => setEditingMuscles(true)}
-                className="mt-2 flex w-full items-center justify-between gap-3 text-left"
-              >
-                <span className="min-w-0 text-[13px] font-medium text-text-dim">
-                  {focusOrDefault.length === 0
-                    ? 'No muscles picked — the builder will favour compounds'
-                    : `${focusOrDefault.length} muscles picked`}
-                </span>
-                <span className="shrink-0 text-[12px] font-medium text-text-dim">Choose</span>
-              </button>
-            )}
-
-            {resolvedFocusMode === 'custom' && editingMuscles ? (
-              (['upper', 'lower', 'core'] as const).map((region) => (
-                <div key={region} className="mt-3">
-                  <Label className="mb-1.5 block">{REGION_LABEL[region]}</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {MUSCLES.filter((muscle) => muscle.region === region).map((muscle) => (
-                      <Chip
-                        key={muscle.id}
-                        active={focusOrDefault.includes(muscle.id)}
-                        onClick={() =>
-                          setFocus((prev) => {
-                            const base = prev.length > 0 ? prev : (block.focusMuscles ?? []);
-                            return base.includes(muscle.id)
-                              ? base.filter((m) => m !== muscle.id)
-                              : [...base, muscle.id];
-                          })
-                        }
-                      >
-                        {muscle.name}
-                      </Chip>
-                    ))}
-                  </div>
-                </div>
-              ))
-            ) : resolvedFocusMode !== 'custom' ? (
-              <p className="mt-2 text-[12px] font-medium text-text-dim">
-                {focusOrDefault.length} muscles — switch to Custom to pick them individually.
-              </p>
-            ) : null}
-
-            <Label className="mt-4 block">Split</Label>
-            <div className="no-scrollbar -mx-1 mt-1.5 flex gap-1.5 overflow-x-auto px-1">
-              {SPLITS.map((option) => (
-                <Chip
-                  key={option}
-                  active={split === option}
-                  onClick={() => setSplit(option)}
-                  tone="plain"
-                >
-                  {SPLIT_LABEL[option]}
-                </Chip>
-              ))}
-            </div>
-            {!splitFits(split, Number(sessionsPerWeek)) && (
-              <p className="mt-2 text-[12px] font-medium" style={{ color: 'var(--color-warn)' }}>
-                {SPLIT_LABEL[split]} wants more sessions than you have — part of it will not be
-                trained.
-              </p>
-            )}
-
-            {split === 'custom' && (
-              <div className="mt-3">
-                {Array.from({ length: Number(sessionsPerWeek) }, (_, i) => (
-                  <div key={i} className="mt-2 first:mt-0">
-                    <Label className="mb-1 block">Day {DAY_SLOTS[i]}</Label>
-                    <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
-                      {DAY_TYPES.map((type) => (
-                        <Chip
-                          key={type}
-                          active={(customDayTypes[i] ?? 'full') === type}
-                          onClick={() =>
-                            setCustomDayTypes((prev) => {
-                              const next = [...prev];
-                              next[i] = type;
-                              return next;
-                            })
-                          }
-                        >
-                          {DAY_TYPE_LABEL[type]}
-                        </Chip>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
             <Label className="mt-4 block">Sessions per week</Label>
             <div className="mt-1.5">
               <SegmentedToggle
@@ -401,12 +262,83 @@ export function ProgramScreen({
               />
             </div>
 
+            {sessionsPerWeek === '3' && (
+              <>
+                <Label className="mt-4 block">Third session</Label>
+                <div className="mt-1.5 flex gap-1.5">
+                  {availableThirdDays(training.golfWeekdays as never).map((weekday) => (
+                    <Chip
+                      key={weekday}
+                      active={thirdDay === weekday}
+                      onClick={() => setThirdDay(weekday)}
+                      tone="plain"
+                    >
+                      {WEEKDAY_LABEL[weekday]}
+                    </Chip>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <Label className="mt-4 block">Session length</Label>
+            <div className="mt-1.5">
+              <SegmentedToggle
+                options={SESSION_LENGTHS}
+                value={sessionMinutes}
+                onChange={setSessionMinutes}
+                labels={{ '30': '30 min', '40': '40 min', '60': '60 min' }}
+              />
+            </div>
+
+            {/* Everything else is fixed by the template or lives in Settings. */}
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((prev) => !prev)}
+              className="mt-4 flex w-full items-center justify-between gap-3 text-left"
+            >
+              <span className="text-[13px] font-medium text-text-dim">Advanced</span>
+              <span className="text-[12px] font-medium text-text-dim">
+                {showAdvanced ? 'Hide' : 'Show'}
+              </span>
+            </button>
+
+            {showAdvanced && (
+              <>
+                <Label className="mt-3 block">
+                  Emphasise these muscles (balanced if none are picked)
+                </Label>
+                {(['upper', 'lower', 'core'] as const).map((region) => (
+                  <div key={region} className="mt-2">
+                    <Label className="mb-1.5 block">{REGION_LABEL[region]}</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {MUSCLES.filter((muscle) => muscle.region === region).map((muscle) => (
+                        <Chip
+                          key={muscle.id}
+                          active={focusOrDefault.includes(muscle.id)}
+                          onClick={() =>
+                            setFocus((prev) => {
+                              const base = prev.length > 0 ? prev : (block.focusMuscles ?? []);
+                              return base.includes(muscle.id)
+                                ? base.filter((m) => m !== muscle.id)
+                                : [...base, muscle.id];
+                            })
+                          }
+                        >
+                          {muscle.name}
+                        </Chip>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
             <p className="mt-4 text-[12px] font-medium text-text-dim">
-              {golfWeekdays.length === 0
-                ? 'No round marked yet — tap a day above to add one.'
-                : `Golf on ${golfWeekdays
-                    .map((d) => WEEKDAY_LABEL[d])
-                    .join(' and ')}. Grip work is kept at least ${GRIP_BUFFER_DAYS} days clear.`}
+              Mon and Tue are the heavy sessions and carry all the grip work.
+              {sessionsPerWeek === '3'
+                ? ` ${WEEKDAY_LABEL[thirdDay as never]} is a light ~25 min session.`
+                : ''}{' '}
+              Golf days and the weekly set target live in Settings.
             </p>
 
             <button
@@ -458,7 +390,7 @@ export function ProgramScreen({
                 <span className="card-title">
                   Day {day.slot}
                   <span className="ml-2 text-[12px] font-medium text-text-dim">
-                    {day.weekdayLabel} · {DAY_TYPE_LABEL[day.type].toLowerCase()}
+                    {day.weekdayLabel} · {day.intensity}
                   </span>
                 </span>
                 <Label>~{day.estimatedMinutes} min</Label>
@@ -506,7 +438,8 @@ export function ProgramScreen({
         const list = entriesForSlot(slots ?? [], slot);
         const isEditing = editingSlot === slot;
         if (list.length === 0 && !isEditing) return null;
-        const weekday = schedule?.[slot];
+        const scheduled = schedule?.[slot];
+        const weekday = scheduled?.weekday;
         return (
           <DaySlotCard
             key={slot}
@@ -516,6 +449,7 @@ export function ProgramScreen({
             exercisesById={byId}
             editing={isEditing}
             isToday={weekday !== undefined && weekday === weekdayOf(todayIso())}
+            intensity={scheduled?.intensity ?? 'heavy'}
             onToggleEdit={() => setEditingSlot(isEditing ? null : slot)}
             onStart={() => onStartDay(slot)}
             onAdd={() => setAddingTo(slot)}

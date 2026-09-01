@@ -1,0 +1,113 @@
+import { useEffect, useState } from 'react';
+import {
+  DEFAULT_TRAINING,
+  readTraining,
+  writeTraining,
+  type TrainingPrefs,
+} from '../db/settings';
+import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
+import { Card, Chip, Label } from './Layout';
+
+/* -------------------------------------------------------------------------- */
+/*  Training preferences: set once, rarely changed.                           */
+/*                                                                            */
+/*  These used to sit on the block screen, where they were re-answered every   */
+/*  time even though the answer never changed. Anything whose answer is always */
+/*  the same is a setting, not a choice.                                      */
+/* -------------------------------------------------------------------------- */
+
+const WEEKEND: Weekday[] = [6, 7];
+
+export function TrainingPrefsEditor() {
+  const [prefs, setPrefs] = useState<TrainingPrefs | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    void readTraining().then(setPrefs);
+  }, []);
+
+  if (!prefs) {
+    return (
+      <Card title="Training">
+        <Label>--</Label>
+      </Card>
+    );
+  }
+
+  const patch = (next: Partial<TrainingPrefs>) => {
+    setPrefs({ ...prefs, ...next });
+    setSaved(false);
+  };
+
+  const toggleGolf = (weekday: Weekday) =>
+    patch({
+      golfWeekdays: prefs.golfWeekdays.includes(weekday)
+        ? prefs.golfWeekdays.filter((day) => day !== weekday)
+        : [...prefs.golfWeekdays, weekday].sort((a, b) => a - b),
+    });
+
+  return (
+    <Card title="Training">
+      <Label>Golf days</Label>
+      <p className="mt-1 text-[13px] text-text-dim">
+        Which weekend days you typically play. Grip work is kept clear of these, and a session is
+        never scheduled on one.
+      </p>
+      <div className="mt-2 flex gap-1.5">
+        {WEEKEND.map((weekday) => (
+          <Chip
+            key={weekday}
+            active={prefs.golfWeekdays.includes(weekday)}
+            onClick={() => toggleGolf(weekday)}
+          >
+            {WEEKDAY_LABEL[weekday]}
+          </Chip>
+        ))}
+      </div>
+
+      <Label className="mt-4 block">Weekly set target</Label>
+      <div className="mt-1.5 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => patch({ weeklySetTarget: Math.max(6, prefs.weeklySetTarget - 3) })}
+          aria-label="Fewer sets"
+          className="size-9 rounded-xl bg-surface-2 text-lg font-semibold"
+        >
+          −
+        </button>
+        <span className="w-12 text-center text-[17px] font-semibold">{prefs.weeklySetTarget}</span>
+        <button
+          type="button"
+          onClick={() => patch({ weeklySetTarget: Math.min(90, prefs.weeklySetTarget + 3) })}
+          aria-label="More sets"
+          className="size-9 rounded-xl bg-surface-2 text-lg font-semibold"
+        >
+          +
+        </button>
+        <span className="ml-1 text-[12px] font-medium text-text-dim">
+          sets a week across all muscles
+        </span>
+      </div>
+
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          onClick={() => patch(DEFAULT_TRAINING)}
+          className="h-11 flex-1 rounded-full bg-surface-2 font-medium text-text-dim"
+        >
+          Reset
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            void writeTraining(prefs);
+            setSaved(true);
+          }}
+          className="h-11 flex-1 rounded-full bg-cta font-semibold text-bg"
+        >
+          {saved ? 'Saved' : 'Save training'}
+        </button>
+      </div>
+    </Card>
+  );
+}

@@ -52,7 +52,8 @@ export function DashboardScreen({
     const days = [...new Set(plan.entries.map((entry) => entry.daySlot))]
       .map((slot) => ({
         slot,
-        weekday: plan.schedule[slot],
+        weekday: plan.schedule[slot]?.weekday,
+        intensity: plan.schedule[slot]?.intensity ?? 'heavy',
         entries: entriesForSlot(plan.entries, slot),
         doneThisWeek: loggedSlots.has(slot),
       }))
@@ -158,6 +159,7 @@ export function DashboardScreen({
                     <span className="card-title">Day {day.slot}</span>
                     <Label className={isToday ? 'text-text!' : ''}>
                       {isToday ? 'today' : day.weekday ? WEEKDAY_LABEL[day.weekday] : 'unscheduled'}
+                      {day.intensity === 'light' ? ' · light' : ''}
                       {day.doneThisWeek ? ' · done' : ''}
                     </Label>
                   </span>
