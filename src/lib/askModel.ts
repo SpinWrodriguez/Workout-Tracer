@@ -40,6 +40,20 @@ export const API_KEY_STORAGE_KEY = 'workout-model-key';
 
 export type Transport = 'edge' | 'device-key' | 'none';
 
+/*
+ * Whether the Edge Function has been found not to answer THIS session.
+ *
+ * Configuring Supabase is not the same as deploying the relay, and there is no
+ * way to tell them apart without calling it — which must not happen on open.
+ * So the app assumes the relay is there, and remembers when it is not: the AI
+ * buttons then disappear and Settings says generation is off, instead of
+ * offering a feature nothing can serve.
+ *
+ * In memory rather than storage on purpose. A reload retries, so deploying the
+ * function is picked up by reopening the app and never needs clearing by hand.
+ */
+let edgeDown = false;
+
 export interface AskOptions {
   /** Stable, cached prefix: the rules and the exercise library. */
   system: string;
@@ -75,6 +89,9 @@ export function writeApiKey(key: string | undefined): void {
   } catch {
     // Blocked storage. The caller finds out from availableTransport().
   }
+  // Changing the key is a reason to try the relay again: whatever was wrong
+  // with it may have been fixed in the meantime.
+  resetTransportProbe();
 }
 
 /**
@@ -83,9 +100,19 @@ export function writeApiKey(key: string | undefined): void {
  * calling it, and a failed call falls through to the device key anyway.
  */
 export function availableTransport(): Transport {
-  if (isSupabaseConfigured()) return 'edge';
+  if (isSupabaseConfigured() && !edgeDown) return 'edge';
   if (readApiKey()) return 'device-key';
   return 'none';
+}
+
+/** True when Supabase is configured but its relay did not answer. */
+export function edgeUnavailable(): boolean {
+  return edgeDown;
+}
+
+/** Test seam, and what saving a key calls to give the relay another chance. */
+export function resetTransportProbe(): void {
+  edgeDown = false;
 }
 
 export function isModelAvailable(): boolean {
@@ -183,6 +210,12 @@ async function viaDeviceKey(
   return text ? { text, transport: 'device-key' } : { transport: 'device-key', error: 'Empty reply.' };
 }
 
+/** Joins an upstream message to our own advice without running the two together. */
+function withStop(text: string): string {
+  const trimmed = text.trim();
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
 /**
  * Asks the model, preferring the Edge Function and falling back to a pasted
  * key. Never throws: a caller that cannot get an answer carries on without one.
@@ -194,15 +227,29 @@ export async function askModel(
   const body = buildRequest(options);
   const key = readApiKey();
 
-  if (isSupabaseConfigured()) {
+  if (isSupabaseConfigured() && !edgeDown) {
     try {
       const result = await viaEdge(body, options.signal);
       if (result.text) return result;
-      // The function may simply not be deployed yet; a device key still works.
-      if (!key) return result;
-    } catch (cause) {
+      /*
+       * Configured but not answering — most likely never deployed. Remembered
+       * so the UI stops offering AI it cannot deliver, and so the next
+       * generation does not pay for the same round trip again.
+       */
+      edgeDown = true;
       if (!key) {
-        return { transport: 'edge', error: cause instanceof Error ? cause.message : String(cause) };
+        return {
+          ...result,
+          error: `${withStop(result.error ?? 'The ask-model function did not answer')} Deploy it, or paste a key in Settings.`,
+        };
+      }
+    } catch (cause) {
+      edgeDown = true;
+      if (!key) {
+        return {
+          transport: 'edge',
+          error: `${withStop(cause instanceof Error ? cause.message : String(cause))} Deploy ask-model, or paste a key in Settings.`,
+        };
       }
     }
   }

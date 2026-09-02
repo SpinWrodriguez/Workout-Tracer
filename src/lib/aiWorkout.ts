@@ -117,6 +117,10 @@ Rules:
 - Where \`standingInstructions\` and the goal disagree, the goal wins — it is about today, the instructions are about the months around it.
 - Order the exercises the way they should be performed. Explosive work first, then hinges while the position still holds, then everything else. A hinge late in a fatigued session is a form risk.
 - Two exercises with \`spinalLoad: "high"\` in one workout is a mistake.
+- \`name\` is what the lifter sees on the workout card. Name it after what it
+  trains, in two or three words, title case — "Upper Push", "Lower Body + Core",
+  "Back and Biceps". No day names, no week numbers, no emoji, no effort words:
+  the app already shows the day and the effort beside it.
 
 Say nothing about the calendar. You are not told which day this workout falls on, how far it is from a round, or what else is scheduled that week, and any statement you make about spacing, rest days, recovery or being clear of anything will be wrong and will be discarded. The \`why\` field is for why these exercises suit this goal — nothing else.
 

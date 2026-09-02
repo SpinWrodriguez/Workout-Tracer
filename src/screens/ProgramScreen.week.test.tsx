@@ -261,14 +261,20 @@ describe('building a week with a model', () => {
     await planDays(ui, [0]);
     await ui.click(screen.getByRole('button', { name: 'Build 1 workout' }));
 
+    /*
+     * Wait on the PLAN, not the schedule. askOneWorkout writes the exercises,
+     * then the schedule entry, then the placement — so waiting on the schedule
+     * reads the plan mid-write, and the assertion below saw the old slot still
+     * on Monday about one run in five.
+     */
     await waitFor(
-      async () => expect(Object.keys((await readSchedules())[BLOCK_ID] ?? {}).length).toBe(1),
+      async () => expect((await readPlans())[BLOCK_ID]?.[dayOfThisWeek(0)]).not.toBe('A'),
       { timeout: 8000 },
     );
 
     const plan = (await readPlans())[BLOCK_ID] ?? {};
     const monday = plan[dayOfThisWeek(0)];
-    expect(monday).not.toBe('A');
+    expect(monday).toBeTruthy();
     // The old workout keeps its exercises; it just has no day any more.
     const kept = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
     expect(kept.some((row) => row.daySlot === 'A')).toBe(true);

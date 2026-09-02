@@ -16,7 +16,13 @@ Every item states what "done" means so a session can finish it without asking.
 
 ---
 
-## 1. Decide how the app gets an API key
+## 1. Decide how the app gets an API key — done
+
+Both, with the Edge Function preferred and a pasted key as the fallback. See
+`docs/EDGE-FUNCTION.md` for the reasoning and how to deploy it. Original
+options kept below for the record.
+
+### Original notes
 
 **Blocks items 2 and 3 — do this first.**
 

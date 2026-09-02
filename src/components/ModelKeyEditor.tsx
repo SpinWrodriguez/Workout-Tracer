@@ -3,6 +3,7 @@ import {
   API_KEY_STORAGE_KEY,
   MODEL,
   availableTransport,
+  edgeUnavailable,
   readApiKey,
   writeApiKey,
 } from '../lib/askModel';
@@ -94,6 +95,7 @@ export function ModelKeyEditor() {
   const [saved, setSaved] = useState(false);
   const transport = availableTransport();
   const edge = isSupabaseConfigured();
+  const edgeFailed = edgeUnavailable();
 
   const save = () => {
     writeApiKey(key);
@@ -119,12 +121,18 @@ export function ModelKeyEditor() {
         </span>
       </div>
 
-      {edge ? (
+      {edge && edgeFailed ? (
+        <p className="mt-3 text-[12px] font-medium" style={{ color: 'var(--color-warn)' }}>
+          The <code>ask-model</code> function did not answer, so it is probably not deployed —
+          see <code>docs/EDGE-FUNCTION.md</code>. Reopening the app tries it again. A key below
+          works right now either way.
+        </p>
+      ) : edge ? (
         <p className="mt-3 text-[12px] font-medium text-text-dim">
           Supabase is configured, so the app calls the <code>ask-model</code> Edge Function and
           the key never reaches this device. Deploy it from{' '}
-          <code>supabase/functions/ask-model</code>. A key below is a fallback for when that
-          does not answer.
+          <code>supabase/functions/ask-model</code> — not yet confirmed from here, since
+          checking means calling it. A key below is the fallback.
         </p>
       ) : (
         <p className="mt-3 text-[12px] font-medium text-text-dim">
