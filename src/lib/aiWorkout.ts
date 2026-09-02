@@ -181,8 +181,11 @@ export const WORKOUT_SCHEMA = {
   required: ['name', 'focus', 'intensity', 'why', 'exercises'],
   properties: {
     name: { type: 'string' },
-    focus: { enum: WORKOUT_FOCUSES },
-    intensity: { enum: ['heavy', 'light'] },
+    /* `type` alongside `enum`, which every documented example pairs. Bare
+       `enum` is probably fine, but this schema has already been refused once
+       and a round trip to find out costs a day. */
+    focus: { type: 'string', enum: WORKOUT_FOCUSES },
+    intensity: { type: 'string', enum: ['heavy', 'light'] },
     why: { type: 'string' },
     exercises: {
       type: 'array',
