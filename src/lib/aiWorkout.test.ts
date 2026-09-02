@@ -23,7 +23,6 @@ const reply = (over: Record<string, unknown> = {}) =>
     name: 'Easy Upper',
     focus: 'upper',
     intensity: 'light',
-    why: 'Light pulling and pressing, nothing that taxes the back.',
     exercises: [
       { exerciseId: 'bb_overhead_press', sets: 2, repLow: 10, repHigh: 12 },
       { exerciseId: 'bw_chin_up', sets: 2, repLow: 5, repHigh: 8 },
@@ -104,7 +103,6 @@ describe('the schema the API will actually accept', () => {
       name: 'A name far longer than the forty characters a card can show',
       focus: 'lower',
       intensity: 'heavy',
-      why: 'because',
       exercises: [{ exerciseId: 'bb_back_squat', sets: 99, repLow: 1, repHigh: 900 }],
     });
 

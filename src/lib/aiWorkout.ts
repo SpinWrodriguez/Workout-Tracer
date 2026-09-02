@@ -40,7 +40,6 @@ export interface AiWorkout {
   name?: string;
   focus: WorkoutFocus;
   intensity: Intensity;
-  why?: string;
   exercises: BlockExercise[];
 }
 
@@ -122,7 +121,7 @@ Rules:
   "Back and Biceps". No day names, no week numbers, no emoji, no effort words:
   the app already shows the day and the effort beside it.
 
-Say nothing about the calendar. You are not told which day this workout falls on, how far it is from a round, or what else is scheduled that week, and any statement you make about spacing, rest days, recovery or being clear of anything will be wrong and will be discarded. The \`why\` field is for why these exercises suit this goal — nothing else.
+Say nothing about the calendar. You are not told which day this workout falls on, how far it is from a round, or what else is scheduled that week, and any statement you make about spacing, rest days, recovery or being clear of anything will be wrong and will be discarded.
 
 Your answer is a proposal. Every id, rep range, set count and weight is recomputed against the real inventory and the real calendar before anything is shown. If a rule is broken you will be given the specific violations and asked to return the whole workout again.`;
 
@@ -178,7 +177,7 @@ export function buildUser(goal: string, existing: ExistingWorkout[]): string {
 export const WORKOUT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['name', 'focus', 'intensity', 'why', 'exercises'],
+  required: ['name', 'focus', 'intensity', 'exercises'],
   properties: {
     name: { type: 'string' },
     /* `type` alongside `enum`, which every documented example pairs. Bare
@@ -186,7 +185,6 @@ export const WORKOUT_SCHEMA = {
        and a round trip to find out costs a day. */
     focus: { type: 'string', enum: WORKOUT_FOCUSES },
     intensity: { type: 'string', enum: ['heavy', 'light'] },
-    why: { type: 'string' },
     exercises: {
       type: 'array',
       items: {
@@ -306,8 +304,7 @@ export function parseWorkout(
      cap is a fact about the card it appears on, not about the model. */
   const trimmedName = typeof payload.name === 'string' ? payload.name.trim() : '';
   const name = trimmedName ? trimmedName.slice(0, NAME_MAX) : undefined;
-  const why = typeof payload.why === 'string' && payload.why.trim() ? payload.why.trim() : undefined;
-  return { ok: true, workout: { name, focus, intensity, why, exercises } };
+  return { ok: true, workout: { name, focus, intensity, exercises } };
 }
 
 /** The retry text for a reply that could not even be read. */
