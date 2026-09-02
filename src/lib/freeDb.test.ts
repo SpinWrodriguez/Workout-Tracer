@@ -4,7 +4,7 @@ import { db } from '../db/db';
 import { seedDatabase } from '../db/seed';
 import { EXERCISES } from '../db/seed/exercises';
 import { FREE_DB_IDS } from '../db/seed/freeDbIds';
-import { CUES } from '../db/seed/cues';
+import { CUES, STEPS } from '../db/seed/cues';
 import {
   FREE_DB_IMAGE_BASE,
   fetchAndStoreFreeDb,
@@ -40,18 +40,48 @@ describe('hand-mapped freeDbId values (spec §9)', () => {
   it('leaves a minority deliberately unmapped, and every one of those has a cue', () => {
     const unmapped = EXERCISES.filter((e) => !e.freeDbId);
     expect(unmapped.length).toBeGreaterThan(0);
-    // Most of the table still resolves to a photo; the rest are movements with
-    // no upstream equivalent at the right implement.
+    // Most of the table resolves to a photo; the rest are movements with no
+    // upstream record at all, checked one by one against all 876 of them.
     expect(unmapped.length).toBeLessThan(EXERCISES.length / 2);
     for (const exercise of unmapped) {
       expect(CUES[exercise.id], `${exercise.id} has no cue`).toBeTruthy();
     }
   });
 
-  it('never maps an exercise to an upstream record for a different implement', () => {
-    // A cable kickback photographed with a dumbbell, or a landmine press
-    // photographed as a jammer, is worse than no photo at all.
-    for (const id of ['cb_kickback', 'lm_press', 'lm_scoop', 'kb_bulgarian_split']) {
+  it('refuses a record for a DIFFERENT MOVEMENT, however well the name matches', () => {
+    /*
+     * The rule this replaced said no record from a different implement, and it
+     * cost photos it did not need to: the detail sheet labels that block
+     * "Reference", prints the upstream name beside it and says the cue wins
+     * where the two disagree — so a dumbbell photo of a kickback still shows
+     * the arm action, and the sheet is not pretending otherwise.
+     *
+     * What is still refused is a photo of something else. Upstream has a cable
+     * kickback — same implement as ours, wrong exercise: a GLUTE kickback,
+     * where ours is triceps. The name is the trap, not the equipment.
+     */
+    const kickback = EXERCISES.find((e) => e.id === 'cb_kickback');
+    expect(kickback?.freeDbId).not.toBe('One-Legged_Cable_Kickback');
+    expect(kickback?.freeDbId).toBe('Tricep_Dumbbell_Kickback');
+  });
+
+  it('writes out the ones nothing upstream describes, since no photo is coming', () => {
+    /*
+     * These have no upstream record worth showing and no licensable photo
+     * anywhere — Commons carries generic squat and hip images under
+     * share-alike terms and nothing for any of them. A one-line cue is not
+     * enough to learn a scoop toss from, so they carry their own steps.
+     */
+    for (const exercise of EXERCISES.filter((e) => !e.freeDbId)) {
+      const steps = STEPS[exercise.id];
+      expect(steps, `${exercise.id} has no steps`).toBeTruthy();
+      expect(steps?.length, `${exercise.id} has too few steps`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('does not write out the ones that have a reference, which would go stale', () => {
+    // Steps fill the gap; they are not a second description of every exercise.
+    for (const id of Object.keys(STEPS)) {
       expect(EXERCISES.find((e) => e.id === id)?.freeDbId, id).toBeUndefined();
     }
   });

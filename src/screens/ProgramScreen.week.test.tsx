@@ -19,6 +19,19 @@ import { readPlans, readSchedules } from '../lib/program';
 import { patternsForFocus, type WorkoutFocus } from '../lib/weekTemplate';
 import { ProgramScreen } from './ProgramScreen';
 
+/*
+ * The device key is the transport under test, so the relay is mocked away.
+ * Without this the suite counts one call per week ON CI and two on a machine
+ * with a real .env.local: the app tries the Edge Function first, the stub
+ * answers in a shape supabase-js does not return, and the fallback to the
+ * pasted key is a second fetch. A test that depends on whether the developer
+ * has credentials on disk is a test that reports the wrong thing.
+ */
+vi.mock('../lib/supabaseSource', () => ({
+  isSupabaseConfigured: () => false,
+  getSupabase: async () => undefined,
+}));
+
 const dayOfThisWeek = (offset: number) => shiftIso(weekStart(todayIso()), offset);
 
 /**

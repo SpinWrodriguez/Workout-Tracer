@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Exercise } from '../db/types';
 import { STATION_LABEL } from '../db/seed/exercises';
 import { muscleName } from '../db/seed/muscles';
-import { cueFor } from '../db/seed/cues';
+import { cueFor, stepsFor } from '../db/seed/cues';
 import { getRecord, loadImageBlob, type FreeDbRecord } from '../lib/freeDb';
 import { hasLoadTranslation } from '../lib/load';
 import { Chip, Label } from './Layout';
@@ -66,6 +66,7 @@ export function ExerciseDetail({
   }, [exercise.freeDbId]);
 
   const cue = cueFor(exercise.id);
+  const steps = stepsFor(exercise.id);
 
   return (
     <Sheet title={exercise.name} onClose={onClose}>
@@ -151,7 +152,26 @@ export function ExerciseDetail({
         </div>
       )}
 
-      {record === null && (
+      {/* Written out here because nothing upstream describes this movement.
+          Seven exercises are in that position and a photo of a near-enough
+          one would teach the wrong thing, so they carry their own steps. */}
+      {steps && (
+        <div className="mt-3 rounded-2xl bg-surface p-4">
+          <Label>How it is performed</Label>
+          <ol className="mt-2">
+            {steps.map((step, i) => (
+              <li key={step} className="flex gap-2.5 py-1">
+                <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[10px] font-bold text-text-dim">
+                  {i + 1}
+                </span>
+                <span className="text-[14px] leading-snug">{step}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {record === null && !steps && (
         <div className="mt-3 rounded-2xl bg-surface p-4">
           <Label>Reference</Label>
           <p className="mt-1.5 text-[13px] text-text-dim">

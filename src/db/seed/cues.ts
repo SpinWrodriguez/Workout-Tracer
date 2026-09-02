@@ -96,3 +96,96 @@ export const CUES: Record<string, string> = {
 export function cueFor(exerciseId: string): string | undefined {
   return CUES[exerciseId];
 }
+
+/* -------------------------------------------------------------------------- */
+/*  How it is performed, for the movements nothing upstream describes.        */
+/*                                                                           */
+/*  Seven exercises have no usable record in free-exercise-db: the landmine   */
+/*  scoop toss, the cable row with rotation, the standing cable punch, the    */
+/*  Bulgarian split squat, the overhead carry and the two mobility drills.    */
+/*  An audit of all 876 upstream records found either nothing at all or a     */
+/*  different movement wearing a similar name.                                */
+/*                                                                           */
+/*  Nor is there a photo to borrow. Wikimedia Commons has generic squat and   */
+/*  hip images under share-alike licences and nothing for any of these seven, */
+/*  and a picture of the wrong movement teaches the wrong movement. So these  */
+/*  are written out instead — our own words, about this rack, needing no      */
+/*  network and no licence.                                                   */
+/*                                                                           */
+/*  Ordered as you would do them: set up, move, and the part people get       */
+/*  wrong. Short enough to read between sets.                                 */
+/* -------------------------------------------------------------------------- */
+
+export const STEPS: Record<string, string[]> = {
+  lm_squat_to_press: [
+    'Bar end in the landmine, far sleeve held at the shoulder in both hands, feet under the hips.',
+    'Squat to depth with the chest tall and the bar close.',
+    'Stand hard, and let the press start as the legs finish — one movement, not two.',
+    'If the press needs a second effort after standing, the bell is too heavy for this version.',
+  ],
+  lm_rotational_press: [
+    'Bar end in the landmine, far sleeve in one hand at the shoulder, feet in a square athletic stance.',
+    'Drive from the back hip, turn through the ribs, and press across the body as you turn.',
+    'The bar finishes over the opposite shoulder with the hips square to it.',
+    'Turn the feet with the hips. A knee that stays planted while the hips turn is how this one hurts.',
+  ],
+  bw_side_plank_reach: [
+    'Elbow under the shoulder, feet stacked or staggered, hips lifted in one line.',
+    'Top arm to the ceiling to start.',
+    'Thread that arm under the ribs, turning the chest toward the floor, then open all the way back.',
+    'The hips stay up throughout — when they drop, the set is over.',
+  ],
+  bw_neutral_pull_up: [
+    'Neutral handles on the multi-grip bar, palms facing each other.',
+    'Start from a dead hang with the shoulders pulled down away from the ears.',
+    'Lead with the elbows into the ribs, chest to the bar, and lower under control.',
+    'The kindest angle for a cranky shoulder — if it still pinches, narrow the grip rather than swinging.',
+  ],
+  lm_scoop: [
+    'Bar end in the landmine, hands stacked on the far sleeve, held low by one hip.',
+    'Athletic stance, weight into the back hip, chest tall.',
+    'Push the floor away and turn — hips first, then ribs, then arms — driving the bar up and across to the opposite shoulder.',
+    'Catch it and reset between reps. Speed is the point, so stop the set the moment the bar slows down.',
+  ],
+  cb_rotational_row: [
+    'Single handle at chest height. Stand side-on in a split stance, arm long, chest turned toward the pulley.',
+    'Row the elbow past the ribs and turn the chest away from the pulley in the same movement.',
+    'Finish with the chest open to the handle side and the shoulder blade back.',
+    'Unwind in reverse — turn back first, then let the arm out. The lower back does not twist; the ribs do.',
+  ],
+  cb_punch: [
+    'Pulley at chest height, cable in the hand furthest from the stack, split stance facing away.',
+    'Drive the back heel into the floor, turn the hips, then the ribs — the arm goes last.',
+    'Finish long, hips square to the front, shoulder relaxed away from the ear.',
+    'Do not step or lunge into it. The distance comes from the turn.',
+  ],
+  kb_bulgarian_split: [
+    'Back foot on the bench laces down, front foot far enough forward that the shin stays near vertical.',
+    'Bell in the front rack or one in each hand, ribs down.',
+    'Drop straight down until the back knee is just off the floor, then drive through the front heel.',
+    'If the front knee dives inward or the shin runs past the toes, step the front foot further out.',
+  ],
+  kb_overhead_carry: [
+    'Press one bell overhead. Wrist over elbow over shoulder, biceps by the ear.',
+    'Ribs down, same-side glute squeezed, eyes forward.',
+    'Walk in short steps for the time on the card, then switch sides.',
+    'Ends the moment the ribs flare, the arm drifts forward or you start leaning away from the bell.',
+  ],
+  mb_open_book: [
+    'Lie on your side, knees stacked and bent to 90, a towel under the head.',
+    'Arms straight out in front, palms together.',
+    'Slide the top hand over the bottom one, then open that arm to the floor behind you, following it with your eyes.',
+    'The knees stay stacked and glued together — if they come apart, the turn has left the ribs and gone to the lower back.',
+  ],
+  mb_90_90: [
+    'Sit with both knees bent to 90: one leg in front, one out to the side, feet wide.',
+    'Sit tall, hands light on the floor for balance only.',
+    'Turn both knees to the other side without pushing off the hands, and settle before turning back.',
+    'Slow, and no rocking — the range comes from the hips, not from momentum.',
+  ],
+};
+
+/** The written-out how-to, for the exercises with no upstream record. */
+export function stepsFor(exerciseId: string): string[] | undefined {
+  return STEPS[exerciseId];
+}

@@ -17,9 +17,29 @@ import type { Exercise } from '../types';
 /*                                                                            */
 /*  §9 predicts nothing upstream matches "Smith machine squat with an 18 kg    */
 /*  bar". The data says otherwise: there is a full Smith_Machine_* family, so  */
-/*  the Smith station is mapped after all. The genuinely unmatched ones are    */
-/*  the cable low-to-high lift, the landmine squat-to-press and the band       */
-/*  lateral walk; those fall back to the cue text in cues.ts and no photo.     */
+/*  the Smith station is mapped after all.                                     */
+/*                                                                            */
+/*  An audit of all 876 upstream records settled the rest. Three were only     */
+/*  ever a naming difference — the low-to-high lift is Standing_Cable_Lift,    */
+/*  the band lateral walk is Monster_Walk, the dip-station knee raise is       */
+/*  Knee_Hip_Raise_On_Parallel_Bars.                                          */
+/*                                                                            */
+/*  Two more take a record of the same movement on a different implement —     */
+/*  the triceps kickback and the landmine press. That is allowed because the   */
+/*  detail sheet labels the block "Reference", prints the upstream name and    */
+/*  says the cue wins where they disagree, so a dumbbell photo of a kickback   */
+/*  still shows the arm action without claiming to be this rack.               */
+/*                                                                            */
+/*  Two things are refused. A record for a different MOVEMENT, however well    */
+/*  the name fits: upstream's cable kickback is a glute exercise and ours is   */
+/*  triceps, so ours takes the dumbbell record instead. And a record already   */
+/*  spoken for — four near-matches were dropped for this, because sharing      */
+/*  Pullups between the pull-up and the neutral-grip pull-up puts one photo    */
+/*  and one name on two exercises that exist precisely because they differ.    */
+/*                                                                            */
+/*  The eleven left have no upstream record worth showing, and no licensable   */
+/*  photo exists for them anywhere. They carry STEPS in cues.ts instead —      */
+/*  our own words, about this rack, needing no network.                        */
 /* -------------------------------------------------------------------------- */
 
 /** Cable ratios, spec §2. The single most important numbers in the app. */
@@ -357,6 +377,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_lift',
+    freeDbId: 'Standing_Cable_Lift',
     name: 'Lift (low→high)',
     station: 'cable',
     attachment: 'single_arm',
@@ -502,6 +523,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_kickback',
+    freeDbId: 'Tricep_Dumbbell_Kickback',
     name: 'Cable kickback',
     station: 'cable',
     attachment: 'single_arm',
@@ -614,6 +636,7 @@ export const EXERCISES: Exercise[] = [
      looking odd next to the free-bar lifts. */
   {
     id: 'lm_press',
+    freeDbId: 'Landmine_Linear_Jammer',
     name: 'Landmine press',
     station: 'landmine',
     attachment: 'landmine_handle',
@@ -1047,6 +1070,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'bd_lateral_walk',
+    freeDbId: 'Monster_Walk',
     name: 'Band lateral walk',
     station: 'band',
     primaryMuscles: ['glutes'],
@@ -1482,6 +1506,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'bw_captains_knee_raise',
+    freeDbId: 'Knee_Hip_Raise_On_Parallel_Bars',
     name: 'Knee raise (dip station)',
     station: 'bodyweight',
     primaryMuscles: ['abs'],
