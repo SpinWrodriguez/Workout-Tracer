@@ -171,11 +171,48 @@ export interface AskResult {
   error?: string;
 }
 
+/**
+ * What the relay actually said.
+ *
+ * supabase-js reports every failed status as "Edge Function returned a non-2xx
+ * status code" and puts the real response on `error.context`. That message is
+ * useless for the five distinct things that can be wrong — no key on the
+ * function, not signed in, a model the relay does not allow, too many tokens,
+ * or Anthropic itself refusing — and the relay is deliberately a pass-through
+ * so that the real reason is available. Reading it is the difference between a
+ * one-minute fix and an afternoon.
+ */
+async function edgeFailure(error: { message: string; context?: unknown }): Promise<string> {
+  const context = error.context;
+  if (!(context instanceof Response)) return error.message;
+  const status = `${context.status}${context.statusText ? ` ${context.statusText}` : ''}`;
+  let detail = '';
+  try {
+    const body = await context.clone().text();
+    if (body) {
+      // The relay answers {"error": "..."}; Anthropic nests its own message.
+      try {
+        const parsed = JSON.parse(body) as { error?: unknown };
+        const inner =
+          typeof parsed.error === 'string'
+            ? parsed.error
+            : (parsed.error as { message?: string } | undefined)?.message;
+        detail = inner ?? body;
+      } catch {
+        detail = body;
+      }
+    }
+  } catch {
+    // A body that cannot be read is not worth failing over.
+  }
+  return `ask-model ${status}${detail ? ` — ${detail.slice(0, 300)}` : ''}`;
+}
+
 async function viaEdge(body: Record<string, unknown>, signal?: AbortSignal): Promise<AskResult> {
   const client = await getSupabase();
   if (!client) return { transport: 'edge', error: 'Supabase is not configured.' };
   const { data, error } = await client.functions.invoke(EDGE_FUNCTION, { body });
-  if (error) return { transport: 'edge', error: error.message };
+  if (error) return { transport: 'edge', error: await edgeFailure(error) };
   if (signal?.aborted) return { transport: 'edge', error: 'Cancelled.' };
   const text = textOf(data);
   return text ? { text, transport: 'edge' } : { transport: 'edge', error: 'Empty reply.' };

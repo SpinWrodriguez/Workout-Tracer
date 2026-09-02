@@ -7,9 +7,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * at all — without it these tests silently pass by never taking the branch.
  */
 const supabase = { configured: false };
+/* What functions.invoke returns. Undefined means "no client at all", which is
+   how an unconfigured project behaves. */
+let invokeResult: { data: unknown; error: unknown } | undefined;
 vi.mock('./supabaseSource', () => ({
   isSupabaseConfigured: () => supabase.configured,
-  getSupabase: async () => undefined,
+  getSupabase: async () =>
+    invokeResult === undefined
+      ? undefined
+      : { functions: { invoke: async () => invokeResult } },
 }));
 import {
   ANTHROPIC_VERSION,
@@ -78,6 +84,7 @@ describe('what the app offers when the relay is not there', () => {
     resetTransportProbe();
     localStorage.clear();
     supabase.configured = true;
+    invokeResult = undefined;
   });
 
   it('offers nothing once the relay has failed and no key is set', async () => {
@@ -120,6 +127,53 @@ describe('what the app offers when the relay is not there', () => {
     // Second goes straight to the key.
     const second = await askModel(options, okFetch('two'));
     expect(second.text).toBe('two');
+  });
+});
+
+describe('what the relay said when it refused', () => {
+  /*
+   * supabase-js reports every non-2xx as one generic sentence and hides the
+   * response on error.context. Five different things can be wrong with the
+   * relay and that sentence distinguishes none of them.
+   */
+  beforeEach(() => {
+    resetTransportProbe();
+    localStorage.clear();
+    supabase.configured = true;
+  });
+
+  const refuse = (status: number, body: string) => {
+    invokeResult = {
+      data: null,
+      error: Object.assign(new Error('Edge Function returned a non-2xx status code'), {
+        context: new Response(body, { status, statusText: '' }),
+      }),
+    };
+  };
+
+  it('reports the status and the relay\'s own reason', async () => {
+    refuse(400, JSON.stringify({ error: 'model must be one of claude-opus-5' }));
+    const result = await askModel(options, failingFetch());
+    expect(result.error).toContain('ask-model 400');
+    expect(result.error).toContain('model must be one of claude-opus-5');
+  });
+
+  it('unwraps a message nested the way Anthropic nests one', async () => {
+    refuse(401, JSON.stringify({ error: { type: 'authentication_error', message: 'invalid x-api-key' } }));
+    const result = await askModel(options, failingFetch());
+    expect(result.error).toContain('invalid x-api-key');
+  });
+
+  it('passes a non-JSON body through rather than swallowing it', async () => {
+    refuse(500, 'ANTHROPIC_API_KEY is not set on the function');
+    const result = await askModel(options, failingFetch());
+    expect(result.error).toContain('ANTHROPIC_API_KEY is not set');
+  });
+
+  it('falls back to the generic message when there is no response to read', async () => {
+    invokeResult = { data: null, error: new Error('Failed to fetch') };
+    const result = await askModel(options, failingFetch());
+    expect(result.error).toContain('Failed to fetch');
   });
 });
 
