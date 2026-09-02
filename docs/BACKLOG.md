@@ -219,10 +219,16 @@ second entry point, `askConversation`, for the tool shape.
 What is sent instead is ~400 tokens of context on a full week plus 2,100
 characters of rules. Three rounds of lookups, then it answers with what it has.
 
-**What is left:** streaming. The reply arrives all at once, so a two-lookup
-answer is a spinner for its whole length. The relay does
-`await upstream.text()`, so passing a stream through means editing
-`supabase/functions/ask-model/index.ts` and redeploying it.
+**Streamed**, so a two-lookup answer is readable from its first sentence
+instead of being a spinner for its whole length. `src/lib/sse.ts` reads the
+events, `streamConversation` in `askModel.ts` reassembles the turn — thinking
+signatures and tool arguments included, both of which arrive in pieces — and
+the relay pipes the upstream body through instead of buffering it, which needs
+a redeploy. See `docs/EDGE-FUNCTION.md`.
+
+**What is left:** nothing planned. Worth considering only if it gets used
+enough to want it: remembering conversations across app opens, and a way to ask
+about a specific session from the History screen rather than describing it.
 
 ### Original notes
 

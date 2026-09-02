@@ -21,6 +21,7 @@
 /* -------------------------------------------------------------------------- */
 
 import { getSupabase, isSupabaseConfigured } from './supabaseSource';
+import { sseEvents } from './sse';
 
 /*
  * Sonnet 5. Structured outputs and adaptive thinking both need a current
@@ -306,12 +307,13 @@ async function edgeFailure(error: { message: string; context?: unknown }): Promi
 }
 
 /*
- * The raw reply, before anyone decides what shape of answer they wanted. Both
- * transports return this and both entry points read it, so the fallback logic
- * below is written once rather than once per kind of request.
+ * One attempt at one transport, before anyone decides what shape of answer
+ * they wanted. `value` is a whole reply for a normal call and a body to read
+ * for a streamed one; making it generic is what keeps the fallback rules below
+ * written once instead of once per kind of request.
  */
-interface RawResult {
-  payload?: unknown;
+interface Attempt<T> {
+  value?: T;
   transport: Transport;
   error?: string;
   ms?: number;
@@ -326,7 +328,10 @@ function hasContent(payload: unknown): boolean {
   );
 }
 
-async function viaEdge(body: Record<string, unknown>, signal?: AbortSignal): Promise<RawResult> {
+async function viaEdge(
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<Attempt<unknown>> {
   const client = await getSupabase();
   if (!client) return { transport: 'edge', error: 'Supabase is not configured.' };
   const started = Date.now();
@@ -335,7 +340,7 @@ async function viaEdge(body: Record<string, unknown>, signal?: AbortSignal): Pro
   if (error) return { transport: 'edge', error: await edgeFailure(error), ms };
   if (signal?.aborted) return { transport: 'edge', error: 'Cancelled.', ms };
   return hasContent(data)
-    ? { payload: data, transport: 'edge', ms }
+    ? { value: data, transport: 'edge', ms }
     : { transport: 'edge', error: 'Empty reply.', ms };
 }
 
@@ -344,7 +349,7 @@ async function viaDeviceKey(
   key: string,
   signal?: AbortSignal,
   fetchImpl: typeof fetch = fetch,
-): Promise<RawResult> {
+): Promise<Attempt<unknown>> {
   const started = Date.now();
   const response = await fetchImpl(ANTHROPIC_URL, {
     method: 'POST',
@@ -369,7 +374,7 @@ async function viaDeviceKey(
   const payload: unknown = await response.json();
   const ms = Date.now() - started;
   return hasContent(payload)
-    ? { payload, transport: 'device-key', ms }
+    ? { value: payload, transport: 'device-key', ms }
     : { transport: 'device-key', error: 'Empty reply.', ms };
 }
 
@@ -382,18 +387,21 @@ function withStop(text: string): string {
 /*
  * The Edge Function first, a pasted key second. Never throws: a caller that
  * cannot get an answer carries on without one.
+ *
+ * Generic over what an attempt returns so the streamed and unstreamed paths
+ * cannot disagree about when the relay is considered down — the rule that the
+ * AI buttons appear or disappear on.
  */
-async function dispatch(
-  body: Record<string, unknown>,
-  signal: AbortSignal | undefined,
-  fetchImpl: typeof fetch,
-): Promise<RawResult> {
+async function dispatch<T>(
+  edge: () => Promise<Attempt<T>>,
+  device: (key: string) => Promise<Attempt<T>>,
+): Promise<Attempt<T>> {
   const key = readApiKey();
 
   if (isSupabaseConfigured() && !edgeDown) {
     try {
-      const result = await viaEdge(body, signal);
-      if (result.payload) return result;
+      const result = await edge();
+      if (result.value) return result;
       /*
        * Configured but not answering — most likely never deployed. Remembered
        * so the UI stops offering AI it cannot deliver, and so the next
@@ -420,7 +428,7 @@ async function dispatch(
   if (!key) return { transport: 'none', error: 'No model key set.' };
 
   try {
-    return await viaDeviceKey(body, key, signal, fetchImpl);
+    return await device(key);
   } catch (cause) {
     return {
       transport: 'device-key',
@@ -437,11 +445,15 @@ export async function askModel(
   options: AskOptions,
   fetchImpl: typeof fetch = fetch,
 ): Promise<AskResult> {
-  const raw = await dispatch(buildRequest(options), options.signal, fetchImpl);
-  if (!raw.payload) return { transport: raw.transport, error: raw.error, ms: raw.ms };
-  const text = textOf(raw.payload);
+  const body = buildRequest(options);
+  const raw = await dispatch<unknown>(
+    () => viaEdge(body, options.signal),
+    (key) => viaDeviceKey(body, key, options.signal, fetchImpl),
+  );
+  if (!raw.value) return { transport: raw.transport, error: raw.error, ms: raw.ms };
+  const text = textOf(raw.value);
   return text
-    ? { text, transport: raw.transport, usage: usageOf(raw.payload), ms: raw.ms }
+    ? { text, transport: raw.transport, usage: usageOf(raw.value), ms: raw.ms }
     : { transport: raw.transport, error: 'Empty reply.', ms: raw.ms };
 }
 
@@ -492,19 +504,252 @@ export async function askConversation(
   options: ConversationOptions,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ConversationResult> {
-  const raw = await dispatch(buildConversationRequest(options), options.signal, fetchImpl);
-  if (!raw.payload) {
+  const body = buildConversationRequest(options);
+  const raw = await dispatch<unknown>(
+    () => viaEdge(body, options.signal),
+    (key) => viaDeviceKey(body, key, options.signal, fetchImpl),
+  );
+  if (!raw.value) {
     return { toolCalls: [], transport: raw.transport, error: raw.error, ms: raw.ms };
   }
-  const content = (raw.payload as { content?: unknown[] }).content ?? [];
-  const stop = (raw.payload as { stop_reason?: unknown }).stop_reason;
+  const content = (raw.value as { content?: unknown[] }).content ?? [];
+  const stop = (raw.value as { stop_reason?: unknown }).stop_reason;
   return {
     content,
-    text: textOf(raw.payload),
+    text: textOf(raw.value),
     toolCalls: toolCallsOf(content),
     stopReason: typeof stop === 'string' ? stop : undefined,
     transport: raw.transport,
-    usage: usageOf(raw.payload),
+    usage: usageOf(raw.value),
     ms: raw.ms,
   };
+}
+
+/* --- streaming ------------------------------------------------------------ */
+
+/*
+ * Why the chat streams and the generators do not.
+ *
+ * A generated workout is JSON nothing can use until it is complete and
+ * validated, so streaming it would only animate a wait. An answer to a
+ * question is prose, and prose is readable from its first line — which matters
+ * here because a question needing a lookup is two or three serial round trips,
+ * and the difference between watching a spinner for all of it and reading the
+ * first sentence while the rest arrives is the difference between the feature
+ * feeling slow and feeling immediate.
+ */
+
+async function viaEdgeStream(
+  body: Record<string, unknown>,
+): Promise<Attempt<ReadableStream<Uint8Array>>> {
+  const client = await getSupabase();
+  if (!client) return { transport: 'edge', error: 'Supabase is not configured.' };
+  const { data, error } = await client.functions.invoke(EDGE_FUNCTION, { body });
+  if (error) return { transport: 'edge', error: await edgeFailure(error) };
+  /*
+   * supabase-js hands back the Response itself for text/event-stream, and
+   * parses anything else. So a non-stream here means the relay answered with
+   * something that is not a stream — an older deploy that reads the whole
+   * upstream reply — and the caller should fall through rather than guess.
+   */
+  if (!(data instanceof Response) || !data.body) {
+    return {
+      transport: 'edge',
+      error: 'ask-model did not stream. Redeploy it from supabase/functions/ask-model.',
+    };
+  }
+  return { value: data.body, transport: 'edge' };
+}
+
+async function viaDeviceKeyStream(
+  body: Record<string, unknown>,
+  key: string,
+  signal?: AbortSignal,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Attempt<ReadableStream<Uint8Array>>> {
+  const response = await fetchImpl(ANTHROPIC_URL, {
+    method: 'POST',
+    signal,
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': ANTHROPIC_VERSION,
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    return {
+      transport: 'device-key',
+      error: `${response.status} ${response.statusText}${detail ? ` — ${detail.slice(0, 200)}` : ''}`,
+    };
+  }
+  if (!response.body) return { transport: 'device-key', error: 'Empty reply.' };
+  return { value: response.body, transport: 'device-key' };
+}
+
+/** A block being assembled out of deltas. */
+interface Building {
+  block: Record<string, unknown>;
+  /** Tool input arrives as JSON in pieces, and is only parseable once. */
+  json?: string;
+}
+
+function numberAt(source: unknown, key: string): number | undefined {
+  if (typeof source !== 'object' || source === null) return undefined;
+  const value = (source as Record<string, unknown>)[key];
+  return typeof value === 'number' ? value : undefined;
+}
+
+/**
+ * Reads a stream into the same turn a normal call would have returned, calling
+ * `onText` with each piece of prose as it arrives.
+ *
+ * The assembled `content` is what gets replayed as the next request's
+ * assistant message, so it has to be faithful rather than merely readable:
+ * a thinking block's signature arrives in its own deltas and is carried
+ * through, because a turn replayed without it is not the turn that happened.
+ */
+async function readStream(
+  body: ReadableStream<Uint8Array>,
+  onText: ((delta: string) => void) | undefined,
+): Promise<{ content: unknown[]; stopReason?: string; usage: AskUsage; error?: string }> {
+  const building = new Map<number, Building>();
+  const order: number[] = [];
+  let stopReason: string | undefined;
+  const usage: AskUsage = {};
+  let error: string | undefined;
+
+  for await (const event of sseEvents(body)) {
+    if (typeof event !== 'object' || event === null) continue;
+    const row = event as Record<string, unknown>;
+
+    switch (row.type) {
+      case 'message_start': {
+        const message = row.message as { usage?: unknown } | undefined;
+        usage.inputTokens = numberAt(message?.usage, 'input_tokens');
+        usage.cacheReadTokens = numberAt(message?.usage, 'cache_read_input_tokens');
+        usage.cacheWriteTokens = numberAt(message?.usage, 'cache_creation_input_tokens');
+        usage.outputTokens = numberAt(message?.usage, 'output_tokens');
+        break;
+      }
+      case 'content_block_start': {
+        const index = numberAt(row, 'index') ?? order.length;
+        const block = { ...((row.content_block as Record<string, unknown>) ?? {}) };
+        building.set(index, { block, json: block.type === 'tool_use' ? '' : undefined });
+        order.push(index);
+        break;
+      }
+      case 'content_block_delta': {
+        const index = numberAt(row, 'index');
+        const current = index === undefined ? undefined : building.get(index);
+        const delta = row.delta as Record<string, unknown> | undefined;
+        if (!current || !delta) break;
+        if (delta.type === 'text_delta' && typeof delta.text === 'string') {
+          current.block.text = `${String(current.block.text ?? '')}${delta.text}`;
+          onText?.(delta.text);
+        } else if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+          current.block.thinking = `${String(current.block.thinking ?? '')}${delta.thinking}`;
+        } else if (delta.type === 'signature_delta' && typeof delta.signature === 'string') {
+          current.block.signature = `${String(current.block.signature ?? '')}${delta.signature}`;
+        } else if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
+          current.json = `${current.json ?? ''}${delta.partial_json}`;
+        }
+        break;
+      }
+      case 'content_block_stop': {
+        const index = numberAt(row, 'index');
+        const current = index === undefined ? undefined : building.get(index);
+        if (!current || current.json === undefined) break;
+        try {
+          current.block.input = current.json === '' ? {} : JSON.parse(current.json);
+        } catch {
+          /* Tool arguments that do not parse are not usable, and calling the
+             tool with half of them would be worse than not calling it. */
+          error = 'The model sent tool arguments that were not valid JSON.';
+        }
+        break;
+      }
+      case 'message_delta': {
+        const delta = row.delta as { stop_reason?: unknown } | undefined;
+        if (typeof delta?.stop_reason === 'string') stopReason = delta.stop_reason;
+        // The final count, which supersedes the one message_start carried.
+        usage.outputTokens = numberAt(row.usage, 'output_tokens') ?? usage.outputTokens;
+        break;
+      }
+      case 'error': {
+        const inner = row.error as { message?: unknown } | undefined;
+        error = typeof inner?.message === 'string' ? inner.message : 'The stream failed.';
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return {
+    content: order.map((index) => building.get(index)?.block).filter((block) => block !== undefined),
+    stopReason,
+    usage,
+    error,
+  };
+}
+
+/**
+ * One streamed turn of a tool-using conversation. Same result as
+ * `askConversation`, assembled as it arrives.
+ */
+export async function streamConversation(
+  options: ConversationOptions,
+  onText?: (delta: string) => void,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ConversationResult> {
+  const body = { ...buildConversationRequest(options), stream: true };
+  const started = Date.now();
+  const raw = await dispatch<ReadableStream<Uint8Array>>(
+    () => viaEdgeStream(body),
+    (key) => viaDeviceKeyStream(body, key, options.signal, fetchImpl),
+  );
+  if (!raw.value) {
+    return {
+      toolCalls: [],
+      transport: raw.transport,
+      error: raw.error,
+      ms: Date.now() - started,
+    };
+  }
+
+  try {
+    const read = await readStream(raw.value, onText);
+    const ms = Date.now() - started;
+    if (read.error) {
+      return { toolCalls: [], transport: raw.transport, error: read.error, usage: read.usage, ms };
+    }
+    return {
+      content: read.content,
+      text: read.content
+        .map((block) =>
+          typeof block === 'object' && block !== null && (block as { type?: unknown }).type === 'text'
+            ? String((block as { text?: unknown }).text ?? '')
+            : '',
+        )
+        .join('')
+        .trim() || undefined,
+      toolCalls: toolCallsOf(read.content),
+      stopReason: read.stopReason,
+      transport: raw.transport,
+      usage: read.usage,
+      ms,
+    };
+  } catch (cause) {
+    /* A dropped connection mid-answer. Whatever arrived is not a turn that
+       can be replayed, so it is reported rather than half-kept. */
+    return {
+      toolCalls: [],
+      transport: raw.transport,
+      error: cause instanceof Error ? cause.message : String(cause),
+      ms: Date.now() - started,
+    };
+  }
 }

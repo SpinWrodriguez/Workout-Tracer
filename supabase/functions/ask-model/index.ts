@@ -14,6 +14,10 @@
  * It is a relay on purpose. The request body is built by src/lib/askModel.ts so
  * the two transports cannot drift; this only checks the caller, enforces the
  * model and a token ceiling, and forwards.
+ *
+ * Redeploy after changing this. The app tells you when it is running an older
+ * copy: a streamed request that comes back as one buffered reply is reported
+ * as "ask-model did not stream", rather than silently losing the streaming.
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -31,6 +35,9 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-client-info',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+const isEventStream = (response: Response): boolean =>
+  (response.headers.get('content-type') ?? '').includes('text/event-stream');
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -81,6 +88,33 @@ Deno.serve(async (request) => {
     },
     body: JSON.stringify(body),
   });
+
+  /*
+   * A streamed reply is handed straight back, body and all.
+   *
+   * Buffering it with `await upstream.text()` — which this did — turns a
+   * stream into a single late response: correct, and it throws away the only
+   * thing streaming is for, because the client then waits for the last token
+   * before it can show the first. The body is piped instead, and the
+   * content-type comes from upstream so the client can tell a stream from an
+   * error object without guessing.
+   *
+   * Only on a 2xx. An upstream error is JSON even when a stream was asked
+   * for, and passing that through as text/event-stream would leave the client
+   * parsing an error as events.
+   */
+  if (upstream.ok && upstream.body && isEventStream(upstream)) {
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: {
+        ...CORS,
+        'content-type': upstream.headers.get('content-type') ?? 'text/event-stream',
+        // Nothing in between may buffer it either.
+        'cache-control': 'no-cache',
+        'x-accel-buffering': 'no',
+      },
+    });
+  }
 
   const text = await upstream.text();
   // Passed through unchanged: the client already knows how to read a Messages

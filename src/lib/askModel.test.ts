@@ -21,6 +21,7 @@ import {
   ANTHROPIC_VERSION,
   MODEL,
   askModel,
+  streamConversation,
   availableTransport,
   buildRequest,
   edgeUnavailable,
@@ -209,5 +210,170 @@ describe('the model the app asks for', () => {
     const ceiling = Number(EDGE_SOURCE.match(/MAX_TOKENS_CEILING = (\d+)/)?.[1]);
     expect(Number.isFinite(ceiling)).toBe(true);
     expect(Number(buildRequest(options).max_tokens)).toBeLessThanOrEqual(ceiling);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Streaming                                                                */
+/*                                                                           */
+/*  The assembler is the only place in the app that has to reconstruct a      */
+/*  message out of pieces, and everything it gets wrong is invisible: a       */
+/*  dropped signature or a half-parsed tool argument produces a turn that     */
+/*  looks fine and is rejected, or worse, silently changes what was asked.    */
+/* -------------------------------------------------------------------------- */
+
+/** A body that delivers these events as SSE records. */
+const sseFetch = (events: unknown[]) =>
+  (async () =>
+    ({
+      ok: true,
+      status: 200,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encoder = new TextEncoder();
+          for (const event of events) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          }
+          controller.close();
+        },
+      }),
+      text: async () => '',
+    }) as unknown as Response) as unknown as typeof fetch;
+
+const conversation = { system: 'rules', messages: [], tools: [] };
+
+describe('a streamed turn', () => {
+  beforeEach(() => {
+    supabase.configured = false;
+    resetTransportProbe();
+    writeApiKey('sk-ant-test');
+  });
+
+  it('asks for a stream', async () => {
+    let body: Record<string, unknown> = {};
+    const capture = (async (_url: string, init: { body: string }) => {
+      body = JSON.parse(init.body);
+      return {
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          start: (controller) => controller.close(),
+        }),
+        text: async () => '',
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    await streamConversation(conversation, undefined, capture);
+    expect(body.stream).toBe(true);
+  });
+
+  it('puts the text back together and reports it as it goes', async () => {
+    const deltas: string[] = [];
+    const result = await streamConversation(
+      conversation,
+      (delta) => deltas.push(delta),
+      sseFetch([
+        { type: 'message_start', message: { usage: { input_tokens: 900, cache_read_input_tokens: 800 } } },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Up ' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '5kg.' } },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 42 } },
+        { type: 'message_stop' },
+      ]),
+    );
+
+    expect(deltas).toEqual(['Up ', '5kg.']);
+    expect(result.text).toBe('Up 5kg.');
+    expect(result.stopReason).toBe('end_turn');
+    // Input from the opening event, output from the closing one.
+    expect(result.usage).toMatchObject({ inputTokens: 900, cacheReadTokens: 800, outputTokens: 42 });
+  });
+
+  it('keeps a thinking block and its signature, so the turn can be replayed', async () => {
+    const result = await streamConversation(
+      conversation,
+      undefined,
+      sseFetch([
+        { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'hm' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'signature_delta', signature: 'sig' } },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'message_delta', delta: { stop_reason: 'end_turn' } },
+      ]),
+    );
+    /* Replayed verbatim on the next request. A signature assembled out of its
+       deltas and then dropped is a turn the API will not accept back. */
+    expect(result.content).toEqual([{ type: 'thinking', thinking: 'hm', signature: 'sig' }]);
+  });
+
+  it('assembles tool arguments that arrive in pieces', async () => {
+    const result = await streamConversation(
+      conversation,
+      undefined,
+      sseFetch([
+        {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'tu_1', name: 'exercise_history', input: {} },
+        },
+        { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"exerc' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: 'iseId":"bb_back_squat"}' } },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'message_delta', delta: { stop_reason: 'tool_use' } },
+      ]),
+    );
+    expect(result.toolCalls).toEqual([
+      { id: 'tu_1', name: 'exercise_history', input: { exerciseId: 'bb_back_squat' } },
+    ]);
+  });
+
+  it('refuses tool arguments that never became valid JSON', async () => {
+    const result = await streamConversation(
+      conversation,
+      undefined,
+      sseFetch([
+        {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'tu_1', name: 'exercise_history', input: {} },
+        },
+        { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"exerc' } },
+        { type: 'content_block_stop', index: 0 },
+      ]),
+    );
+    /* Calling a tool with half its arguments is worse than not calling it:
+       the answer would be about an exercise nobody asked about. */
+    expect(result.error).toMatch(/not valid JSON/);
+    expect(result.toolCalls).toEqual([]);
+  });
+
+  it('reports an error the stream itself carried', async () => {
+    const result = await streamConversation(
+      conversation,
+      undefined,
+      sseFetch([
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Up' } },
+        { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } },
+      ]),
+    );
+    expect(result.error).toBe('Overloaded');
+    // Not half a turn: what arrived cannot be replayed as one.
+    expect(result.content).toBeUndefined();
+  });
+
+  it('says the relay needs redeploying when it answers without a stream', async () => {
+    /* An older ask-model buffers the reply with `await upstream.text()`, so
+       supabase-js parses it as JSON instead of handing back a body. Silently
+       losing the streaming would be the easy thing to do here. */
+    supabase.configured = true;
+    invokeResult = { data: { content: [{ type: 'text', text: 'hi' }] }, error: null };
+    writeApiKey(undefined);
+
+    const result = await streamConversation(conversation, undefined, okFetch('unused'));
+    expect(result.error).toMatch(/did not stream/);
+    expect(result.error).toMatch(/Redeploy/);
+    expect(edgeUnavailable()).toBe(true);
   });
 });

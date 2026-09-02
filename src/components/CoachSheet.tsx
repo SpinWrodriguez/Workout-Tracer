@@ -52,6 +52,9 @@ export function CoachSheet({
   const [turns, setTurns] = useState<CoachTurn[]>([]);
   const [question, setQuestion] = useState('');
   const [pending, setPending] = useState<string | undefined>(undefined);
+  /* The answer as it arrives. Held apart from `turns` because it is not a turn
+     yet: nothing may replay a half-finished reply back to the model. */
+  const [streaming, setStreaming] = useState('');
   const [error, setError] = useState<string | undefined>(undefined);
   const [notes, setNotes] = useState<Record<number, { tools: string[]; ms: number; tokens?: number }>>({});
   const foot = useRef<HTMLDivElement | null>(null);
@@ -59,7 +62,7 @@ export function CoachSheet({
   // Keep the newest turn in view, the way any message list behaves.
   useEffect(() => {
     foot.current?.scrollIntoView({ block: 'end' });
-  }, [turns, pending]);
+  }, [turns, pending, streaming]);
 
   const ask = async (text: string) => {
     const asked = text.trim();
@@ -67,12 +70,20 @@ export function CoachSheet({
     setQuestion('');
     setError(undefined);
     setPending(asked);
+    setStreaming('');
 
     /* Rebuilt per question rather than once when the sheet opens: a set logged
        two minutes ago is exactly the thing you would ask about. */
     const context = await buildCoachContext(exercises);
-    const answer = await askCoach({ question: asked, turns, exercises, context });
+    const answer = await askCoach({
+      question: asked,
+      turns,
+      exercises,
+      context,
+      onText: (delta) => setStreaming((sofar) => sofar + delta),
+    });
     setPending(undefined);
+    setStreaming('');
     if (answer.error) {
       setError(answer.error);
       return;
@@ -151,9 +162,17 @@ export function CoachSheet({
             <p className="mt-4 ml-auto max-w-[85%] rounded-2xl bg-cta px-3.5 py-2.5 text-[14px] font-medium text-bg">
               {pending}
             </p>
-            <p className="mt-3 text-[13px] text-text-dim" role="status">
-              Reading your training…
-            </p>
+            {/* The answer as it lands, or a word about what it is doing
+                while it is still deciding to look something up. */}
+            {streaming ? (
+              <p className="mt-3 max-w-[92%] rounded-2xl bg-surface px-3.5 py-2.5 text-[14px] whitespace-pre-wrap">
+                {streaming}
+              </p>
+            ) : (
+              <p className="mt-3 text-[13px] text-text-dim" role="status">
+                Reading your training…
+              </p>
+            )}
           </>
         )}
 

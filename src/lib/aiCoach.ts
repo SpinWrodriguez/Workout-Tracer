@@ -21,7 +21,7 @@ import { db } from '../db/db';
 import { MUSCLE_BY_ID } from '../db/seed/muscles';
 import type { Exercise, MuscleId, SetLog } from '../db/types';
 import { readAiInstructions, readTraining } from '../db/settings';
-import { askConversation, type AskUsage } from './askModel';
+import { streamConversation, type AskUsage } from './askModel';
 import { COACH_TOOLS, runCoachTool } from './coachTools';
 import { shiftIso, todayIso, weekStart } from './format';
 import { WEEKDAY_LABEL, weekdayOf } from './golf';
@@ -223,6 +223,7 @@ export async function askCoach({
   turns,
   exercises,
   context,
+  onText,
   signal,
   fetchImpl,
 }: {
@@ -230,6 +231,13 @@ export async function askCoach({
   turns: CoachTurn[];
   exercises: Exercise[];
   context: CoachContext;
+  /**
+   * Each piece of the answer as it arrives. The whole reason the reply is
+   * streamed: a question that needs a lookup is two or three serial round
+   * trips, and reading the first sentence while the rest lands is the
+   * difference between that feeling slow and feeling immediate.
+   */
+  onText?: (delta: string) => void;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
 }): Promise<CoachAnswer> {
@@ -240,8 +248,9 @@ export async function askCoach({
   const toolCalls: string[] = [];
 
   for (let round = 1; round <= MAX_TOOL_ROUNDS + 1; round += 1) {
-    const result = await askConversation(
+    const result = await streamConversation(
       { system, messages, tools: COACH_TOOLS, signal },
+      onText,
       fetchImpl ?? fetch,
     );
     usage = addUsage(usage, result.usage);

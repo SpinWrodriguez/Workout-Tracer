@@ -82,6 +82,26 @@ Reopening the app retries the relay, so deploying it later needs nothing else.
 
 ---
 
+## Streaming, and why a redeploy matters
+
+The Ask button streams its answer: the reply renders from its first sentence
+rather than after the last token. That only works if the deployed relay pipes
+the upstream body through. An older copy did `await upstream.text()`, which
+buffers the whole stream and hands it back as one late reply — correct, and it
+throws away the only thing streaming is for.
+
+So the app checks rather than assumes. `supabase-js` returns the raw `Response`
+for `text/event-stream` and parses anything else, so a buffered reply is
+recognisable: the sheet says **"ask-model did not stream. Redeploy it from
+supabase/functions/ask-model."** That is the one error here that means the code
+is fine and the deploy is old.
+
+Generation is not streamed and does not care: a workout is JSON that nothing can
+use until it is complete and validated, so streaming it would only animate a
+wait.
+
+---
+
 ## When you change the model
 
 `MODEL` in `src/lib/askModel.ts` and `ALLOWED_MODELS` in the function are two

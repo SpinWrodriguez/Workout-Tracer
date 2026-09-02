@@ -40,8 +40,74 @@ interface Body {
   output_config: Record<string, unknown>;
 }
 
+/*
+ * A reply as the wire actually delivers it. The coach streams, so a plain JSON
+ * body would test a path production does not take — and writing the fixtures
+ * as whole messages and encoding them here is what proves the assembler puts
+ * back exactly the turn that was sent, tool arguments split across deltas and
+ * all.
+ */
+function sseBody(reply: {
+  content?: Record<string, unknown>[];
+  stop_reason?: string;
+  usage?: { input_tokens?: number; output_tokens?: number };
+}): ReadableStream<Uint8Array> {
+  const events: unknown[] = [
+    { type: 'message_start', message: { usage: { input_tokens: reply.usage?.input_tokens } } },
+  ];
+  (reply.content ?? []).forEach((block, index) => {
+    if (block.type === 'tool_use') {
+      events.push({
+        type: 'content_block_start',
+        index,
+        content_block: { type: 'tool_use', id: block.id, name: block.name, input: {} },
+      });
+      // Split, because that is how arguments arrive: JSON in pieces.
+      const json = JSON.stringify(block.input ?? {});
+      const cut = Math.ceil(json.length / 2);
+      for (const piece of [json.slice(0, cut), json.slice(cut)]) {
+        events.push({
+          type: 'content_block_delta',
+          index,
+          delta: { type: 'input_json_delta', partial_json: piece },
+        });
+      }
+    } else if (block.type === 'text') {
+      events.push({
+        type: 'content_block_start',
+        index,
+        content_block: { type: 'text', text: '' },
+      });
+      events.push({
+        type: 'content_block_delta',
+        index,
+        delta: { type: 'text_delta', text: String(block.text ?? '') },
+      });
+    } else {
+      events.push({ type: 'content_block_start', index, content_block: block });
+    }
+    events.push({ type: 'content_block_stop', index });
+  });
+  events.push({
+    type: 'message_delta',
+    delta: { stop_reason: reply.stop_reason },
+    usage: { output_tokens: reply.usage?.output_tokens },
+  });
+  events.push({ type: 'message_stop' });
+
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(encoder.encode(`event: x\ndata: ${JSON.stringify(event)}\n\n`));
+      }
+      controller.close();
+    },
+  });
+}
+
 /** Replies in order, recording every body it was sent. */
-function transport(replies: unknown[]) {
+function transport(replies: Parameters<typeof sseBody>[0][]) {
   const sent: Body[] = [];
   const fetchImpl = (async (_url: string, init: { body: string }) => {
     sent.push(JSON.parse(init.body) as Body);
@@ -49,6 +115,7 @@ function transport(replies: unknown[]) {
     return {
       ok: true,
       status: 200,
+      body: sseBody(reply),
       json: async () => reply,
       text: async () => '',
     } as unknown as Response;
@@ -79,7 +146,11 @@ beforeEach(async () => {
   writeApiKey('sk-ant-test');
 });
 
-const ask = async (replies: unknown[], question = 'is my squat moving?') => {
+const ask = async (
+  replies: Parameters<typeof sseBody>[0][],
+  question = 'is my squat moving?',
+  onText?: (delta: string) => void,
+) => {
   const { fetchImpl, sent } = transport(replies);
   const context = await buildCoachContext(EXERCISES);
   const answer = await askCoach({
@@ -87,6 +158,7 @@ const ask = async (replies: unknown[], question = 'is my squat moving?') => {
     turns: [],
     exercises: EXERCISES,
     context,
+    onText,
     fetchImpl,
   });
   return { answer, sent };
@@ -226,6 +298,34 @@ describe('running a lookup', () => {
     expect(results.content[0]?.is_error).toBe(true);
     // The conversation carries on rather than dying mid-answer.
     expect(answer.text).toBe('I could not look that up.');
+  });
+});
+
+describe('streaming the answer', () => {
+  it('hands over each piece as it arrives, not just the finished reply', async () => {
+    const deltas: string[] = [];
+    const { answer } = await ask(
+      [
+        asksFor([{ id: 'tu_1', name: 'exercise_history', input: { exerciseId: 'bb_back_squat' } }]),
+        says('Up 5kg. Keep going.'),
+      ],
+      'is my squat moving?',
+      (delta) => deltas.push(delta),
+    );
+
+    /* The point of streaming: something to read before the answer is
+       finished. A lookup makes this two serial round trips, so the wait is
+       long enough to matter. */
+    expect(deltas.join('')).toBe('Up 5kg. Keep going.');
+    expect(answer.text).toBe('Up 5kg. Keep going.');
+  });
+
+  it('does not stream the thinking, which arrives empty anyway', async () => {
+    const deltas: string[] = [];
+    await ask([says('Fine.')], 'how am I doing?', (delta) => deltas.push(delta));
+    // `display` defaults to omitted on this model, so a thinking block carries
+    // no text — and prose is the only thing a reader wants mid-answer.
+    expect(deltas).toEqual(['Fine.']);
   });
 });
 
