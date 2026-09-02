@@ -193,3 +193,58 @@ export async function readLastModelCall(): Promise<LastModelCall | undefined> {
 export async function writeLastModelCall(call: LastModelCall): Promise<void> {
   await db.settings.put({ key: LAST_MODEL_CALL_KEY, value: call });
 }
+
+/* -------------------------------------------------------------------------- */
+/*  The workout currently in progress.                                        */
+/*                                                                            */
+/*  Everything else in the app works on a draft that touches Dexie only when   */
+/*  saved, which is right for a screen you either finish or abandon. It was    */
+/*  wrong for the screen you leave to look something up: Close threw the       */
+/*  session away and Save wrote it down as finished, so there was no way to    */
+/*  step out mid-workout and come back.                                       */
+/*                                                                            */
+/*  One row, because there is one workout at a time. Cleared on save and on a  */
+/*  deliberate discard, and on nothing else.                                  */
+/* -------------------------------------------------------------------------- */
+
+export const ACTIVE_SESSION_KEY = 'activeSession';
+
+export interface ActiveSession {
+  /** The SessionDraft, opaque here: this module stores it, it does not read it. */
+  draft: unknown;
+  /**
+   * When the session began, in epoch millis. Persisted so the recorded duration
+   * survives leaving the screen — timing from the remount would report a
+   * forty-minute session as five.
+   */
+  startedAt: number;
+  /** For the resume bar: what to call it without loading the whole draft. */
+  label?: string;
+  savedAt: string;
+}
+
+export async function readActiveSession(): Promise<ActiveSession | undefined> {
+  const row = await db.settings.get(ACTIVE_SESSION_KEY);
+  const value = row?.value;
+  if (!isRecord(value) || value.draft === undefined) return undefined;
+  const startedAt = Number(value.startedAt);
+  return {
+    draft: value.draft,
+    startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
+    label: typeof value.label === 'string' ? value.label : undefined,
+    savedAt: typeof value.savedAt === 'string' ? value.savedAt : new Date().toISOString(),
+  };
+}
+
+export async function writeActiveSession(
+  session: Omit<ActiveSession, 'savedAt'>,
+): Promise<void> {
+  await db.settings.put({
+    key: ACTIVE_SESSION_KEY,
+    value: { ...session, savedAt: new Date().toISOString() },
+  });
+}
+
+export async function clearActiveSession(): Promise<void> {
+  await db.settings.delete(ACTIVE_SESSION_KEY);
+}

@@ -52,6 +52,17 @@ export function countLoggedSets(draft: SessionDraft): number {
   return draft.exercises.reduce((n, e) => n + e.sets.filter(isLoggable).length, 0);
 }
 
+/**
+ * How many sets each exercise carried, done or not. Taken from the draft as it
+ * stood at save time, which is the only place that knows what was intended:
+ * the set logs record what happened.
+ */
+export function plannedSetsOf(draft: SessionDraft): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const exercise of draft.exercises) out[exercise.exerciseId] = exercise.sets.length;
+  return out;
+}
+
 /* --- estimated energy cost (spec §10 caveat) ------------------------------ */
 
 /**
@@ -97,6 +108,15 @@ export async function loadDraft(sessionId: string): Promise<SessionDraft | undef
     byExercise.set(s.exerciseId, list);
   }
 
+  /*
+   * Rebuilt to what was PLANNED, not to what was logged. Reopening a session
+   * where two of three sets were done should show three rows with the third
+   * blank — restoring only the logged ones would quietly erase the record of
+   * what was skipped the moment the session was saved again.
+   */
+  const planned = session.plannedSets ?? {};
+  const exerciseIds = [...new Set([...byExercise.keys(), ...Object.keys(planned)])];
+
   return {
     id: session.id,
     blockId: session.blockId,
@@ -104,10 +124,14 @@ export async function loadDraft(sessionId: string): Promise<SessionDraft | undef
     date: session.date,
     durationMin: session.durationMin,
     notes: session.notes,
-    exercises: [...byExercise.entries()].map(([exerciseId, list]) => ({
-      exerciseId,
-      sets: list.sort((a, b) => a.setNo - b.setNo),
-    })),
+    exercises: exerciseIds.map((exerciseId) => {
+      const done = (byExercise.get(exerciseId) ?? []).sort((a, b) => a.setNo - b.setNo);
+      const target = Math.max(planned[exerciseId] ?? 0, done.length);
+      return {
+        exerciseId,
+        sets: Array.from({ length: Math.max(1, target) }, (_, i) => done[i] ?? emptySet(i + 1)),
+      };
+    }),
   };
 }
 
@@ -116,6 +140,10 @@ export interface SessionSummary {
   setCount: number;
   exerciseIds: string[];
   volumeKg: number;
+  /** Sets the session carried, done or not. Equal to setCount when finished. */
+  plannedCount: number;
+  /** Exercises that were planned and never started, by name-resolvable id. */
+  untouched: string[];
 }
 
 export async function listSessionSummaries(): Promise<SessionSummary[]> {
@@ -131,11 +159,18 @@ export async function listSessionSummaries(): Promise<SessionSummary[]> {
 
   return sessions.map((session) => {
     const list = grouped.get(session.id) ?? [];
+    const planned = session.plannedSets ?? {};
+    const logged = new Set(list.map((s) => s.exerciseId));
+    const plannedTotal = Object.values(planned).reduce((n, count) => n + count, 0);
     return {
       session,
       setCount: list.length,
-      exerciseIds: [...new Set(list.map((s) => s.exerciseId))],
+      exerciseIds: [...logged],
       volumeKg: list.reduce((sum, s) => sum + (s.effectiveKg ?? 0) * s.reps, 0),
+      /* Falls back to what was logged on sessions saved before plannedSets
+         existed, so those read as finished rather than as nothing planned. */
+      plannedCount: plannedTotal > 0 ? plannedTotal : list.length,
+      untouched: Object.keys(planned).filter((id) => !logged.has(id)),
     };
   });
 }
@@ -180,6 +215,9 @@ export async function saveSession(
     date: draft.date,
     durationMin: draft.durationMin,
     notes: draft.notes?.trim() ? draft.notes.trim() : undefined,
+    /* Every exercise the session carried, including ones with nothing logged
+       against them — those are exactly the ones worth knowing about. */
+    plannedSets: plannedSetsOf(draft),
   };
 
   const previous = await db.session.get(draft.id);

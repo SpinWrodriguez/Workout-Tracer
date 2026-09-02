@@ -163,6 +163,20 @@ export interface Session {
   hrAvg?: number;
   hrMax?: number;
   notes?: string;
+  /**
+   * How many sets each exercise was MEANT to have, by exercise id.
+   *
+   * Recorded so a saved session can say what it left behind — "Back squat 2 of
+   * 3", or an exercise that was planned and never started at all. Storing the
+   * skipped sets as SetLog rows would have done it too, and would have been
+   * wrong: setsPerMuscle counts rows rather than reps, so every skipped set
+   * would have counted as a set of training and inflated both the Levels
+   * screen and the shortfall the AI brief reads off it.
+   *
+   * Absent on every session logged before this existed. Those show only what
+   * was done, which is all anyone knew about them.
+   */
+  plannedSets?: Record<string, number>;
 }
 
 export interface SetLog {

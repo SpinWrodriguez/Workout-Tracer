@@ -223,6 +223,14 @@ export function HistoryScreen({
                       style={{ color: 'var(--color-volume)' }}
                     >
                       {summary.setCount}
+                      {/* Only when they differ: "12 of 12" on a finished
+                          session is noise, "8 of 12" is the whole point. */}
+                      {summary.plannedCount > summary.setCount && (
+                        <span className="text-[13px] font-medium text-text-dim">
+                          {' of '}
+                          {summary.plannedCount}
+                        </span>
+                      )}
                       <span className="ml-1 text-[11px] font-medium text-text-dim">sets</span>
                     </span>
                   </div>
@@ -231,6 +239,13 @@ export function HistoryScreen({
                       ? '---'
                       : summary.exerciseIds.map((id) => byId.get(id)?.name ?? id).join(' · ')}
                   </p>
+                  {/* Planned and never started. The one thing a set log can
+                      never tell you, because there is no row for it. */}
+                  {summary.untouched.length > 0 && (
+                    <p className="mt-1 truncate text-[12px] font-medium" style={{ color: 'var(--color-warn)' }}>
+                      Not started: {summary.untouched.map((id) => byId.get(id)?.name ?? id).join(' · ')}
+                    </p>
+                  )}
                   <p className="mt-1 text-[11px] font-medium text-text-faint">
                     {kg(summary.volumeKg)} kg effective volume
                     {summary.session.durationMin ? ` · ${summary.session.durationMin} min` : ''}

@@ -9,11 +9,22 @@
  * into component state — if it passes, the screen genuinely works.
  */
 
-import { exercises, named, seedBlock, seedSchedule, seedWorkout, user, draw } from '../test/dom';
+import {
+  confirmWith,
+  exercises,
+  named,
+  seedBlock,
+  seedSchedule,
+  seedWorkout,
+  user,
+  draw,
+} from '../test/dom';
 
 import { screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
+import { readActiveSession, writeActiveSession } from '../db/settings';
+import { todayIso } from '../lib/format';
 import { SessionScreen } from './SessionScreen';
 
 const SQUAT = 'bb_back_squat';
@@ -30,6 +41,23 @@ async function openProgrammedDay() {
   await screen.findByRole('button', { name: 'Set 1 weight' });
   await screen.findByRole('heading', { name: named(SQUAT) });
   return { onExit, view, ui: user() };
+}
+
+/**
+ * The stored draft, once the debounced write has landed. Its own helper so no
+ * assertion races the one-second delay — which is a product decision, not a
+ * number the tests get to shorten.
+ */
+async function waitForDraft() {
+  let stored: Awaited<ReturnType<typeof readActiveSession>>;
+  await waitFor(
+    async () => {
+      stored = await readActiveSession();
+      expect(stored).toBeDefined();
+    },
+    { timeout: 4000 },
+  );
+  return stored as NonNullable<typeof stored>;
 }
 
 /** The done checkbox on one set row. Every row carries the same label. */
@@ -109,6 +137,125 @@ describe('logging a set', () => {
       [1, 8],
       [2, 6],
     ]);
+  });
+});
+
+describe('leaving a workout and coming back', () => {
+  /*
+   * The whole point: stepping out mid-set to look at the Levels screen used to
+   * cost you the session, because Close discarded the draft and Save wrote it
+   * down as finished. There was no third option and this is it.
+   */
+  it('keeps the sets when the screen is closed', async () => {
+    const { ui, onExit, view } = await openProgrammedDay();
+
+    await typeInto(ui, 'Set 1 weight', '60');
+    await typeInto(ui, 'Set 1 reps', '8');
+    await ui.click(screen.getByRole('button', { name: 'Hide' }));
+
+    // The write is debounced a second: a Dexie put per keystroke would be a
+    // lot of writes for nothing.
+    const stored = await waitForDraft();
+    expect((stored.draft as { exercises: unknown[] }).exercises).toHaveLength(1);
+
+    // 'Later', not 'Close' — the word changed because the meaning did.
+    await ui.click(await screen.findByRole('button', { name: 'Later' }));
+    expect(onExit).toHaveBeenCalled();
+
+    // Nothing is in History: leaving is not saving.
+    expect(await db.setLog.count()).toBe(0);
+
+    // Coming back finds the workout where it was left.
+    view.unmount();
+    draw(<SessionScreen daySlot="A" exercises={exercises} onExit={vi.fn()} />);
+    const weight = await screen.findByRole('button', { name: 'Set 1 weight' });
+    await waitFor(() => expect(weight.textContent).toContain('60'));
+    expect(screen.getByRole('button', { name: 'Set 1 reps' }).textContent).toContain('8');
+  });
+
+  it('offers Save the moment it is resumed, with nothing edited', async () => {
+    /*
+     * A resumed workout has never been saved, so it is unsaved by definition.
+     * Treating the resumed draft as the saved state hid Save until something
+     * was changed: four logged sets on disk and no way to file them.
+     */
+    const { ui, view } = await openProgrammedDay();
+    await typeInto(ui, 'Set 1 reps', '8');
+    await ui.click(screen.getByRole('button', { name: 'Hide' }));
+    await waitForDraft();
+
+    view.unmount();
+    draw(<SessionScreen daySlot="A" exercises={exercises} onExit={vi.fn()} />);
+
+    expect(await screen.findByRole('button', { name: /^Save · 1 set$/ })).toBeTruthy();
+  });
+
+  it('records the duration from when the workout began, not from the remount', async () => {
+    /*
+     * A session left for forty minutes and finished on return is a forty-minute
+     * session. Timing it from the mount would file it as one minute, and that
+     * number feeds the shared activity row the nutrition app reads.
+     */
+    await seedBlock();
+    await seedSchedule({ A: { weekday: 1, intensity: 'heavy' } });
+    await seedWorkout('A', [SQUAT], 3);
+    await writeActiveSession({
+      draft: {
+        id: 's_resumed',
+        blockId: 'block_1',
+        daySlot: 'A',
+        date: todayIso(),
+        exercises: [{ exerciseId: SQUAT, sets: [{ setNo: 1, done: false }] }],
+      },
+      startedAt: Date.now() - 40 * 60_000,
+    });
+
+    draw(<SessionScreen daySlot="A" exercises={exercises} onExit={vi.fn()} />);
+    await screen.findByRole('button', { name: 'Set 1 weight' });
+    const ui = user();
+
+    await typeInto(ui, 'Set 1 reps', '8');
+    await ui.click(screen.getByRole('button', { name: 'Hide' }));
+    await ui.click(await screen.findByRole('button', { name: /^Save · 1 set$/ }));
+
+    await waitFor(async () => expect(await db.session.get('s_resumed')).toBeDefined());
+    const saved = await db.session.get('s_resumed');
+    expect(saved?.durationMin).toBeGreaterThanOrEqual(39);
+  });
+
+  it('stops being in progress once it is saved', async () => {
+    const { ui } = await openProgrammedDay();
+
+    await typeInto(ui, 'Set 1 reps', '8');
+    await ui.click(screen.getByRole('button', { name: 'Hide' }));
+    await waitForDraft();
+
+    await ui.click(await screen.findByRole('button', { name: /^Save · 1 set$/ }));
+
+    // Otherwise the app would offer to resume a workout already in History.
+    await waitFor(async () => expect(await readActiveSession()).toBeUndefined(), {
+      timeout: 4000,
+    });
+  });
+
+  it('throws it away only when discarding, and asks first', async () => {
+    const { ui, onExit } = await openProgrammedDay();
+
+    await typeInto(ui, 'Set 1 reps', '8');
+    await ui.click(screen.getByRole('button', { name: 'Hide' }));
+    await waitForDraft();
+
+    confirmWith(false);
+    await ui.click(screen.getByRole('button', { name: 'Discard this workout' }));
+    expect(await readActiveSession()).toBeDefined();
+    expect(onExit).not.toHaveBeenCalled();
+
+    confirmWith(true);
+    await ui.click(screen.getByRole('button', { name: 'Discard this workout' }));
+    await waitFor(async () => expect(await readActiveSession()).toBeUndefined(), {
+      timeout: 4000,
+    });
+    expect(onExit).toHaveBeenCalled();
   });
 });
 

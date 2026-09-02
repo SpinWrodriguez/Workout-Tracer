@@ -11,7 +11,12 @@ import {
   slotForDate,
   type BlockPlan,
 } from '../lib/program';
-import { readInventory } from '../db/settings';
+import {
+  clearActiveSession,
+  readActiveSession,
+  readInventory,
+  writeActiveSession,
+} from '../db/settings';
 import { hasLoadTranslation } from '../lib/load';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import { sessionWarnings, type RuleWarning } from '../lib/golf';
@@ -96,12 +101,21 @@ export function SessionScreen({
   const [picking, setPicking] = useState(false);
   const [detailId, setDetailId] = useState<string | undefined>(undefined);
   const [cell, setCell] = useState<ActiveCell | null>(null);
-  /* What the draft looked like when it was loaded or last saved. Save is only
-     offered when it differs — a button that is always there is not a prompt,
-     it is furniture. */
-  const [baseline, setBaseline] = useState<string | undefined>(undefined);
+  /*
+   * What is actually IN the database for this session, or undefined when
+   * nothing is. Save is offered when the draft differs from it — a button
+   * that is always there is not a prompt, it is furniture.
+   *
+   * Undefined for a session that has never been saved, which includes a
+   * resumed one. Setting it from the resumed draft made a workout with four
+   * logged sets look already-saved, so Save stayed hidden until something was
+   * edited: the sets were on disk but there was no way to file them.
+   */
+  const [saved, setSaved] = useState<string | undefined>(undefined);
   const [effortCell, setEffortCell] = useState<ActiveCell | null>(null);
-  const [startedAt] = useState(() => Date.now());
+  /* Set from the stored session when one is resumed, so a workout that began
+     forty minutes ago is not recorded as five minutes long. */
+  const [startedAt, setStartedAt] = useState(() => Date.now());
   const [history, setHistory] = useState<Record<string, SetLog[]>>({});
   const [allHistory, setAllHistory] = useState<Record<string, HistorySet[]>>({});
   const [inventory, setInventory] = useState<Inventory>(DEFAULT_INVENTORY);
@@ -134,11 +148,32 @@ export function SessionScreen({
         if (cancelled) return;
         if (existing) {
           setDraft(existing);
-          setBaseline(JSON.stringify(existing));
+          // This one IS in the database, so it starts clean.
+          setSaved(JSON.stringify(existing));
           setActiveId(existing.exercises[0]?.exerciseId);
           return;
         }
       }
+      /*
+       * An unfinished workout wins over everything. Leaving this screen used to
+       * throw the session away, so the only safe moves were finish it or lose
+       * it; a stored draft is what makes stepping out to check the Levels
+       * screen mid-set a normal thing to do.
+       */
+      if (!sessionId && !freestyle) {
+        const active = await readActiveSession();
+        if (cancelled) return;
+        const resumed = active?.draft as SessionDraft | undefined;
+        if (resumed?.id && Array.isArray(resumed.exercises)) {
+          setPlan(await readBlockPlan());
+          if (cancelled) return;
+          setStartedAt(active?.startedAt ?? Date.now());
+          setDraft(resumed);
+          setActiveId(resumed.exercises[0]?.exerciseId);
+          return;
+        }
+      }
+
       /*
        * A new session starts from the block, not from an empty picker. The
        * requested slot wins; otherwise it is whichever slot the builder put on
@@ -162,13 +197,11 @@ export function SessionScreen({
       if (blockPlan && slot && programmed) {
         const next = draftFromPlan({ plan: blockPlan, slot, exercisesById, date });
         setDraft(next);
-        setBaseline(JSON.stringify(next));
         setActiveId(next.exercises[0]?.exerciseId);
         return;
       }
 
       const blank = emptyDraft(blockPlan?.block.id ?? DEFAULT_BLOCK_ID, slot ?? 'A', date);
-      setBaseline(JSON.stringify(blank));
       setDraft(blank);
       setPicking(true);
     })();
@@ -459,7 +492,31 @@ export function SessionScreen({
 
   const loggedSets = draft ? countLoggedSets(draft) : 0;
   /* Unsaved work is a comparison, not a hunch. */
-  const dirty = draft !== undefined && baseline !== undefined && JSON.stringify(draft) !== baseline;
+  const dirty = draft !== null && JSON.stringify(draft) !== saved;
+
+  /*
+   * The draft, on disk, a beat after every change.
+   *
+   * Debounced because the keypad writes through on every keystroke and a Dexie
+   * put per digit is a lot of writes for no benefit. A second is short enough
+   * that nothing real is lost to a crash, and long enough that typing 12.5 is
+   * one write rather than four.
+   *
+   * Live sessions only: one opened from History is already saved, and treating
+   * it as in progress would offer to resume a workout from March.
+   */
+  const draftJson = draft ? JSON.stringify(draft) : undefined;
+  useEffect(() => {
+    if (sessionId || !draftJson) return;
+    const handle = setTimeout(() => {
+      void writeActiveSession({
+        draft: JSON.parse(draftJson) as SessionDraft,
+        startedAt,
+        label: programmedName,
+      });
+    }, 1000);
+    return () => clearTimeout(handle);
+  }, [draftJson, sessionId, startedAt, programmedName]);
 
   const handleSave = async () => {
     if (!draft || saving) return;
@@ -477,11 +534,26 @@ export function SessionScreen({
         },
         exercisesById,
       );
-      setBaseline(JSON.stringify(draft));
+      setSaved(JSON.stringify(draft));
+      // Saved, so it is no longer in progress. Leaving this behind would offer
+      // to resume a workout that is already in History.
+      await clearActiveSession();
       onExit();
     } finally {
       setSaving(false);
     }
+  };
+
+  /**
+   * Throws the session away. The only thing that does — Close now leaves it
+   * running, which is the whole point of persisting it.
+   */
+  const handleDiscard = async () => {
+    if (loggedSets > 0 && !window.confirm('Throw this workout away? The sets you logged go too.')) {
+      return;
+    }
+    await clearActiveSession();
+    onExit();
   };
 
   const handleDelete = async () => {
@@ -550,21 +622,15 @@ export function SessionScreen({
             <span className="text-[13px] font-medium text-text-dim">
               {friendlyDate(draft.date)}
             </span>
+            {/* No warning any more: the draft is on disk, so leaving costs
+                nothing and asking would be theatre. Discard is the button that
+                destroys work, and it lives at the bottom with Delete. */}
             <button
               type="button"
-              onClick={() => {
-                if (
-                  dirty &&
-                  loggedSets > 0 &&
-                  !window.confirm('Leave without saving? The sets you logged will be lost.')
-                ) {
-                  return;
-                }
-                onExit();
-              }}
+              onClick={onExit}
               className="rounded-full bg-surface-2 px-3.5 py-1.5 text-[13px] font-medium text-text-dim"
             >
-              Close
+              {sessionId ? 'Close' : 'Later'}
             </button>
           </span>
         }
@@ -849,7 +915,7 @@ export function SessionScreen({
             />
           </label>
 
-          {sessionId && (
+          {sessionId ? (
             <button
               type="button"
               onClick={handleDelete}
@@ -857,6 +923,17 @@ export function SessionScreen({
               style={{ color: 'var(--color-rir-1)' }}
             >
               Delete session
+            </button>
+          ) : (
+            /* The one button that destroys work. Closing the screen no longer
+               does, so this has to exist and has to be findable. */
+            <button
+              type="button"
+              onClick={() => void handleDiscard()}
+              className="mt-4 text-[13px] font-medium"
+              style={{ color: 'var(--color-rir-1)' }}
+            >
+              Discard this workout
             </button>
           )}
         </Card>

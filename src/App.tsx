@@ -8,6 +8,8 @@ import { startWorkoutAutoSync } from './lib/workoutAutoSync';
 import { BottomNav, type Tab } from './components/BottomNav';
 import { StartSheet, type StartOption } from './components/StartSheet';
 import { dayLabel } from './lib/dayLabel';
+import { ACTIVE_SESSION_KEY, readActiveSession } from './db/settings';
+import { ResumeBar } from './components/ResumeBar';
 import { readWeekPlan } from './lib/weekPlan';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
@@ -26,6 +28,15 @@ export default function App() {
   const [route, setRoute] = useState<Route>({ kind: 'tab', tab: 'dashboard' });
   const [starting, setStarting] = useState(false);
   const exercises = useLiveQuery(() => db.exercise.orderBy('name').toArray(), [], undefined);
+  /*
+   * A workout left running. Keyed on the settings row so it appears the moment
+   * the session screen writes one and disappears on save or discard, with no
+   * message passing between the two.
+   */
+  const active = useLiveQuery(async () => {
+    await db.settings.get(ACTIVE_SESSION_KEY);
+    return readActiveSession();
+  }, [], undefined);
 
   useEffect(() => {
     void seedDatabase().finally(() => setReady(true));
@@ -119,6 +130,15 @@ export default function App() {
         <ProgramScreen exercises={exercises} onStartDay={startSession} />
       )}
       {route.tab === 'settings' && <SettingsScreen />}
+
+      {/* Above the nav, on every tab, whenever a workout is unfinished. The
+          point of letting you leave mid-session is being able to get back. */}
+      {active && (
+        <ResumeBar
+          label={active.label}
+          onResume={() => setRoute({ kind: 'session' })}
+        />
+      )}
 
       <BottomNav
         tab={route.tab}
