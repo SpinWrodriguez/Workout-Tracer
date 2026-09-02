@@ -130,9 +130,7 @@ export function isModelAvailable(): boolean {
  */
 export function buildRequest(options: AskOptions): Record<string, unknown> {
   return {
-    model: MODEL,
-    max_tokens: options.maxTokens ?? 8000,
-    thinking: { type: 'adaptive' },
+    ...shared(options.maxTokens ?? 8000),
     output_config: {
       /*
        * Low, not medium. This is constrained selection from a fixed 71-row
@@ -150,11 +148,65 @@ export function buildRequest(options: AskOptions): Record<string, unknown> {
        */
       format: { type: 'json_schema', schema: options.schema },
     },
-    system: [{ type: 'text', text: options.system, cache_control: { type: 'ephemeral' } }],
+    system: cachedSystem(options.system),
     messages: [
       { role: 'user', content: options.user },
       ...(options.priorTurns ?? []).map((turn) => ({ role: turn.role, content: turn.content })),
     ],
+  };
+}
+
+/** What both shapes send. Split out so the two cannot drift on the model. */
+function shared(maxTokens: number): Record<string, unknown> {
+  return { model: MODEL, max_tokens: maxTokens, thinking: { type: 'adaptive' } };
+}
+
+/*
+ * The cache breakpoint. Everything before it is identical between calls of the
+ * same kind, so a second question in the same minute reads the rules back at a
+ * tenth of the price instead of paying for them again.
+ */
+function cachedSystem(text: string): unknown[] {
+  return [{ type: 'text', text, cache_control: { type: 'ephemeral' } }];
+}
+
+/**
+ * One turn of a conversation that can call tools.
+ *
+ * Deliberately not the same entry point as `buildRequest`: a constrained JSON
+ * answer and a conversation are different requests, and folding them into one
+ * builder full of optional keys is how an unsupported field gets sent by
+ * accident. That already cost an afternoon once, when `output_config.format`
+ * carried a `name` the API rejected outright.
+ */
+export interface ConversationOptions {
+  /** Cached prefix: the rules and what the app already knows. */
+  system: string;
+  /**
+   * The whole conversation so far, wire-shaped: assistant turns are the
+   * `content` arrays that came back, replayed unchanged. Thinking blocks are
+   * part of that content and are echoed back as they arrived, which is what
+   * the API asks for when continuing on the same model.
+   */
+  messages: unknown[];
+  /** What the model may call. Executed by the app, never by the API. */
+  tools: unknown[];
+  maxTokens?: number;
+  signal?: AbortSignal;
+}
+
+export function buildConversationRequest(options: ConversationOptions): Record<string, unknown> {
+  return {
+    ...shared(options.maxTokens ?? 4000),
+    /*
+     * No `format`: the reply is prose for a person to read, and a schema would
+     * also bar the tool_use blocks this whole shape exists for. `effort` still
+     * applies — it is thinking depth, not output shape.
+     */
+    output_config: { effort: 'low' },
+    system: cachedSystem(options.system),
+    tools: options.tools,
+    messages: options.messages,
   };
 }
 
@@ -253,7 +305,28 @@ async function edgeFailure(error: { message: string; context?: unknown }): Promi
   return `ask-model ${status}${detail ? ` — ${detail.slice(0, 300)}` : ''}`;
 }
 
-async function viaEdge(body: Record<string, unknown>, signal?: AbortSignal): Promise<AskResult> {
+/*
+ * The raw reply, before anyone decides what shape of answer they wanted. Both
+ * transports return this and both entry points read it, so the fallback logic
+ * below is written once rather than once per kind of request.
+ */
+interface RawResult {
+  payload?: unknown;
+  transport: Transport;
+  error?: string;
+  ms?: number;
+}
+
+/** Whether a reply carries content at all, which is what "answered" means. */
+function hasContent(payload: unknown): boolean {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    Array.isArray((payload as { content?: unknown }).content)
+  );
+}
+
+async function viaEdge(body: Record<string, unknown>, signal?: AbortSignal): Promise<RawResult> {
   const client = await getSupabase();
   if (!client) return { transport: 'edge', error: 'Supabase is not configured.' };
   const started = Date.now();
@@ -261,9 +334,8 @@ async function viaEdge(body: Record<string, unknown>, signal?: AbortSignal): Pro
   const ms = Date.now() - started;
   if (error) return { transport: 'edge', error: await edgeFailure(error), ms };
   if (signal?.aborted) return { transport: 'edge', error: 'Cancelled.', ms };
-  const text = textOf(data);
-  return text
-    ? { text, transport: 'edge', usage: usageOf(data), ms }
+  return hasContent(data)
+    ? { payload: data, transport: 'edge', ms }
     : { transport: 'edge', error: 'Empty reply.', ms };
 }
 
@@ -272,7 +344,7 @@ async function viaDeviceKey(
   key: string,
   signal?: AbortSignal,
   fetchImpl: typeof fetch = fetch,
-): Promise<AskResult> {
+): Promise<RawResult> {
   const started = Date.now();
   const response = await fetchImpl(ANTHROPIC_URL, {
     method: 'POST',
@@ -294,11 +366,10 @@ async function viaDeviceKey(
       ms: Date.now() - started,
     };
   }
-  const payload = await response.json();
+  const payload: unknown = await response.json();
   const ms = Date.now() - started;
-  const text = textOf(payload);
-  return text
-    ? { text, transport: 'device-key', usage: usageOf(payload), ms }
+  return hasContent(payload)
+    ? { payload, transport: 'device-key', ms }
     : { transport: 'device-key', error: 'Empty reply.', ms };
 }
 
@@ -308,21 +379,21 @@ function withStop(text: string): string {
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
-/**
- * Asks the model, preferring the Edge Function and falling back to a pasted
- * key. Never throws: a caller that cannot get an answer carries on without one.
+/*
+ * The Edge Function first, a pasted key second. Never throws: a caller that
+ * cannot get an answer carries on without one.
  */
-export async function askModel(
-  options: AskOptions,
-  fetchImpl: typeof fetch = fetch,
-): Promise<AskResult> {
-  const body = buildRequest(options);
+async function dispatch(
+  body: Record<string, unknown>,
+  signal: AbortSignal | undefined,
+  fetchImpl: typeof fetch,
+): Promise<RawResult> {
   const key = readApiKey();
 
   if (isSupabaseConfigured() && !edgeDown) {
     try {
-      const result = await viaEdge(body, options.signal);
-      if (result.text) return result;
+      const result = await viaEdge(body, signal);
+      if (result.payload) return result;
       /*
        * Configured but not answering — most likely never deployed. Remembered
        * so the UI stops offering AI it cannot deliver, and so the next
@@ -349,11 +420,91 @@ export async function askModel(
   if (!key) return { transport: 'none', error: 'No model key set.' };
 
   try {
-    return await viaDeviceKey(body, key, options.signal, fetchImpl);
+    return await viaDeviceKey(body, key, signal, fetchImpl);
   } catch (cause) {
     return {
       transport: 'device-key',
       error: cause instanceof Error ? cause.message : String(cause),
     };
   }
+}
+
+/**
+ * Asks the model, preferring the Edge Function and falling back to a pasted
+ * key. Never throws: a caller that cannot get an answer carries on without one.
+ */
+export async function askModel(
+  options: AskOptions,
+  fetchImpl: typeof fetch = fetch,
+): Promise<AskResult> {
+  const raw = await dispatch(buildRequest(options), options.signal, fetchImpl);
+  if (!raw.payload) return { transport: raw.transport, error: raw.error, ms: raw.ms };
+  const text = textOf(raw.payload);
+  return text
+    ? { text, transport: raw.transport, usage: usageOf(raw.payload), ms: raw.ms }
+    : { transport: raw.transport, error: 'Empty reply.', ms: raw.ms };
+}
+
+/** One tool_use block, as the API sent it. */
+export interface ToolCall {
+  id: string;
+  name: string;
+  input: unknown;
+}
+
+export interface ConversationResult {
+  /**
+   * The assistant turn exactly as it arrived, to be replayed as the next
+   * request's assistant message. Not rebuilt from the parts below: a turn
+   * carries thinking blocks that have to go back unchanged, and rebuilding it
+   * would quietly drop them.
+   */
+  content?: unknown[];
+  /** The prose, if any. A turn that only calls a tool has none. */
+  text?: string;
+  /** What it wants run. Non-empty exactly when stopReason is 'tool_use'. */
+  toolCalls: ToolCall[];
+  stopReason?: string;
+  transport: Transport;
+  error?: string;
+  usage?: AskUsage;
+  ms?: number;
+}
+
+function toolCallsOf(content: unknown[]): ToolCall[] {
+  const calls: ToolCall[] = [];
+  for (const block of content) {
+    if (typeof block !== 'object' || block === null) continue;
+    const row = block as { type?: unknown; id?: unknown; name?: unknown; input?: unknown };
+    if (row.type !== 'tool_use') continue;
+    if (typeof row.id !== 'string' || typeof row.name !== 'string') continue;
+    calls.push({ id: row.id, name: row.name, input: row.input });
+  }
+  return calls;
+}
+
+/**
+ * One turn of a tool-using conversation. The caller owns the loop, because the
+ * loop is where the app's own rules live: which tools exist, how many rounds
+ * are worth paying for, and what to do with an answer.
+ */
+export async function askConversation(
+  options: ConversationOptions,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ConversationResult> {
+  const raw = await dispatch(buildConversationRequest(options), options.signal, fetchImpl);
+  if (!raw.payload) {
+    return { toolCalls: [], transport: raw.transport, error: raw.error, ms: raw.ms };
+  }
+  const content = (raw.payload as { content?: unknown[] }).content ?? [];
+  const stop = (raw.payload as { stop_reason?: unknown }).stop_reason;
+  return {
+    content,
+    text: textOf(raw.payload),
+    toolCalls: toolCallsOf(content),
+    stopReason: typeof stop === 'string' ? stop : undefined,
+    transport: raw.transport,
+    usage: usageOf(raw.payload),
+    ms: raw.ms,
+  };
 }

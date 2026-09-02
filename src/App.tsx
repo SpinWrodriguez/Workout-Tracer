@@ -10,6 +10,8 @@ import { StartSheet, type StartOption } from './components/StartSheet';
 import { dayLabel } from './lib/dayLabel';
 import { ACTIVE_SESSION_KEY, readActiveSession } from './db/settings';
 import { ResumeBar } from './components/ResumeBar';
+import { CoachButton, CoachSheet } from './components/CoachSheet';
+import { isModelAvailable } from './lib/askModel';
 import { readWeekPlan } from './lib/weekPlan';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
@@ -27,6 +29,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [route, setRoute] = useState<Route>({ kind: 'tab', tab: 'dashboard' });
   const [starting, setStarting] = useState(false);
+  const [asking, setAsking] = useState(false);
   const exercises = useLiveQuery(() => db.exercise.orderBy('name').toArray(), [], undefined);
   /*
    * A workout left running. Keyed on the settings row so it appears the moment
@@ -131,6 +134,14 @@ export default function App() {
       )}
       {route.tab === 'settings' && <SettingsScreen />}
 
+      {/* Not offered where nothing can answer it. `isModelAvailable` is false
+          with no key and no relay, and turns false again the moment a relay is
+          found not to be deployed — so the button does not sit there promising
+          an answer the app cannot get. */}
+      {isModelAvailable() && (
+        <CoachButton onOpen={() => setAsking(true)} raised={active !== undefined} />
+      )}
+
       {/* Above the nav, on every tab, whenever a workout is unfinished. The
           point of letting you leave mid-session is being able to get back. */}
       {active && (
@@ -145,6 +156,8 @@ export default function App() {
         onTab={(tab) => setRoute({ kind: 'tab', tab })}
         onNewSession={() => setStarting(true)}
       />
+
+      {asking && <CoachSheet exercises={exercises} onClose={() => setAsking(false)} />}
 
       {starting && (
         <StartSheet
