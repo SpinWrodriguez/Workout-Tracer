@@ -121,6 +121,16 @@ export function lastSyncReport(): WorkoutSyncReport | undefined {
   return latest;
 }
 
+/**
+ * Forgets the last outcome. For tests: this is module state that outlives a
+ * render, so one test's signed-out sync would otherwise be the next test's
+ * opening warning — which is exactly how the first version of the sync suite
+ * failed, in the test that ran second.
+ */
+export function forgetSyncReport(): void {
+  latest = undefined;
+}
+
 export function onSyncReport(listener: (report: WorkoutSyncReport) => void): () => void {
   listeners.add(listener);
   return () => {

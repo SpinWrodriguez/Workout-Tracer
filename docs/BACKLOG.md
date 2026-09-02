@@ -175,7 +175,7 @@ dropped in: find a CC0 front/back muscle map, map its path ids onto the
 
 ---
 
-## 9. Automated UI tests — done, except sync
+## 9. Automated UI tests — done
 
 `src/test/dom.ts` is the jsdom harness; `*.dom.test.tsx` files opt in with a
 `// @vitest-environment jsdom` docblock so the node-environment suites are
@@ -184,10 +184,15 @@ going away, creating a workout, moving a session to another date, renaming a
 workout, and applying a rule fix. Each was verified to fail when the behaviour
 is broken on purpose.
 
-**What is left:** sync. It was in the original list and is the one flow still
-only checked at the unit level, because it needs a fake Supabase store driven
-through the UI rather than through `workoutSync` directly — `fakeStore` in
-`workoutSync.test.ts` is most of the way there.
+Sync was the last gap and is now covered too, in
+`src/components/NutritionSync.dom.test.tsx`: signing in, pushing what is
+actually on the device, restoring onto a device with nothing on it, local work
+winning over a later-stamped cloud row, and the three states where nothing is
+being saved. Only the network boundary is faked — `WeightSource` and
+`WorkoutStore` are the seams the app already defines, so snapshot, reconcile
+and apply are all the real code. `forgetSyncReport()` exists for it: the last
+outcome is module state that outlives a render, so without resetting it one
+test's signed-out sync is the next test's opening warning.
 
 Two things the harness records, both learned the hard way and worth knowing
 before writing another DOM test:
@@ -204,7 +209,22 @@ before writing another DOM test:
 
 ---
 
-## 10. Ask the AI about my training (floating button)
+## 10. Ask the AI about my training (floating button) — done
+
+Built in `src/lib/aiCoach.ts` (context + loop), `src/lib/coachTools.ts` (the
+three local tools) and `src/components/CoachSheet.tsx`. `askModel.ts` grew a
+second entry point, `askConversation`, for the tool shape.
+
+**Measured:** the library serialises to 29,745 characters, about 7,400 tokens.
+What is sent instead is ~400 tokens of context on a full week plus 2,100
+characters of rules. Three rounds of lookups, then it answers with what it has.
+
+**What is left:** streaming. The reply arrives all at once, so a two-lookup
+answer is a spinner for its whole length. The relay does
+`await upstream.text()`, so passing a stream through means editing
+`supabase/functions/ask-model/index.ts` and redeploying it.
+
+### Original notes
 
 **The user's own idea.** A floating button that opens a chat which already
 knows the training: *is my squat actually moving?*, *what did I leave unfinished
@@ -241,7 +261,11 @@ key or no network the button is absent rather than broken.
 
 ---
 
-## 11. A generation speed toggle
+## 11. A generation speed toggle — not wanted
+
+The user turned this down: the workouts are better with thinking on, and a
+setting to make them worse is not worth the row in Settings. Left here so it is
+not proposed again. What to do instead about latency is streaming, item 10.
 
 Thinking is roughly 93% of the billed output on a generation, and it is the
 latency. The user does not want it off by default — the workouts are better
