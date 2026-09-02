@@ -218,6 +218,20 @@ describe('what the coach is sent', () => {
     expect(sent[0]?.output_config.effort).toBe('low');
   });
 
+  it('says where the app\'s own numbers come from, so it does not invent one', async () => {
+    const { sent } = await ask([says('ok')]);
+    const system = sent[0]?.system[0]?.text ?? '';
+    /* Found by using it: asked what the weekly set target was for, it
+       explained that the app derives it from recovery capacity and session
+       count — which is not a thing the app does — and tied it to the
+       under-the-floor flag, which is a different rule with fixed numbers.
+       Both were invented to fill a gap in what it had been told. */
+    expect(system).toMatch(/lifter sets it themselves/);
+    expect(system).toMatch(/Nothing derives it/);
+    expect(system).toMatch(/separate rule with fixed numbers/);
+    expect(system).toMatch(/Never explain one of the app's numbers by inventing/);
+  });
+
   it('tells it what the app already knows, so it does not ask', async () => {
     await db.session.put({
       id: 's1',
