@@ -204,7 +204,62 @@ before writing another DOM test:
 
 ---
 
-## 10. Smaller things
+## 10. Ask the AI about my training (floating button)
+
+**The user's own idea.** A floating button that opens a chat which already
+knows the training: *is my squat actually moving?*, *what did I leave unfinished
+last week?*, *what should I do Thursday if my back is sore?*
+
+Related to item 2 but not the same feature: item 2 is a one-shot digest
+rendered as a card, this is a conversation that can ask follow-ups.
+
+Suggested shape:
+
+- **Always sent, ~600 tokens:** the Levels summary, recent sessions, this
+  week's workouts, and the goals from Settings. Small enough to send on every
+  turn without thinking about it.
+- **The exercise library is not sent.** It is ~6,200 tokens, and it is already
+  on the device. The model asks for what it needs and the app answers from
+  Dexie: `search_exercises`, `exercise_detail`, `exercise_history`. Not from
+  Supabase — that would add a round trip and a second copy to keep in sync for
+  data that is already local.
+- **Every number gets recomputed before it is shown.** Same standard as
+  `blockValidation` and item 2. A claim the local data does not support is
+  dropped.
+- Build it non-streaming first, so it works against the `ask-model` relay that
+  is already deployed. Streaming is a separate change: the relay currently does
+  `await upstream.text()`, so passing a stream through means editing
+  `supabase/functions/ask-model/index.ts` and redeploying.
+
+Expect it to feel slower than the week builder: a question that needs history
+is two or three serial calls. Streaming is what makes that bearable, because
+the text starts arriving before the answer is finished.
+
+**Done when:** a question about real logged training gets an answer that cites
+numbers the app can verify, the library is never sent in a prompt, and with no
+key or no network the button is absent rather than broken.
+
+---
+
+## 11. A generation speed toggle
+
+Thinking is roughly 93% of the billed output on a generation, and it is the
+latency. The user does not want it off by default — the workouts are better
+with it — but wants the choice per run.
+
+- **Fast** — thinking off.
+- **Balanced** — `effort: 'low'`, which is today's behaviour.
+- **Careful** — `effort: 'medium'`.
+
+Record the setting alongside the numbers in the existing "Last generation" line
+in Settings, so the cost of the choice is visible next to the time it saved.
+
+**Done when:** the toggle changes what `askModel` sends, the choice survives a
+reload, and the Settings line says which setting produced the last generation.
+
+---
+
+## 12. Smaller things
 
 - **Conflict UI for sync.** Last write wins with no notification. Two devices
   editing the same week silently lose one side.
