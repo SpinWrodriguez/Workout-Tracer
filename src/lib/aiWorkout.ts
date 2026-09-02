@@ -343,9 +343,24 @@ export interface GenerateAiWorkoutInput {
   ask?: typeof askModel;
 }
 
+/** Everything the round trips cost, summed across retries. */
+export interface AiCost {
+  ms: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
 export type AiOutcome =
-  | { ok: true; workout: AiWorkout; attempts: number; transport: AskResult['transport'] }
-  | { ok: false; reason: string; attempts: number; violations?: Violation[] };
+  | {
+      ok: true;
+      workout: AiWorkout;
+      attempts: number;
+      transport: AskResult['transport'];
+      cost: AiCost;
+    }
+  | { ok: false; reason: string; attempts: number; violations?: Violation[]; cost: AiCost };
 
 /**
  * Asks, validates, and asks again with the violations. Bounded by the same
@@ -363,9 +378,27 @@ export async function generateAiWorkout(input: GenerateAiWorkoutInput): Promise<
   const priorTurns: { role: 'assistant' | 'user'; content: string }[] = [];
 
   let lastViolations: Violation[] | undefined;
+  /* Summed across retries, because a three-attempt generation costs three
+     round trips and reporting only the last one would flatter it. */
+  const cost: AiCost = {
+    ms: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  };
+  const charge = (result: AskResult) => {
+    cost.ms += result.ms ?? 0;
+    cost.inputTokens += result.usage?.inputTokens ?? 0;
+    cost.outputTokens += result.usage?.outputTokens ?? 0;
+    cost.cacheReadTokens += result.usage?.cacheReadTokens ?? 0;
+    cost.cacheWriteTokens += result.usage?.cacheWriteTokens ?? 0;
+  };
 
   for (let attempt = 1; attempt <= MAX_VALIDATION_ATTEMPTS; attempt += 1) {
-    if (input.signal?.aborted) return { ok: false, reason: 'Cancelled.', attempts: attempt - 1 };
+    if (input.signal?.aborted) {
+      return { ok: false, reason: 'Cancelled.', attempts: attempt - 1, cost };
+    }
 
     const result = await ask({
       system,
@@ -374,8 +407,14 @@ export async function generateAiWorkout(input: GenerateAiWorkoutInput): Promise<
       priorTurns,
       signal: input.signal,
     });
+    charge(result);
     if (!result.text) {
-      return { ok: false, reason: result.error ?? 'No answer from the model.', attempts: attempt };
+      return {
+        ok: false,
+        reason: result.error ?? 'No answer from the model.',
+        attempts: attempt,
+        cost,
+      };
     }
 
     const parsed = parseWorkout(result.text, input.blockId, input.slot, byId);
@@ -387,7 +426,13 @@ export async function generateAiWorkout(input: GenerateAiWorkoutInput): Promise<
 
     const problems = input.validate(parsed.workout).filter((v) => severityOf(v.code) === 'problem');
     if (problems.length === 0) {
-      return { ok: true, workout: parsed.workout, attempts: attempt, transport: result.transport };
+      return {
+        ok: true,
+        workout: parsed.workout,
+        attempts: attempt,
+        transport: result.transport,
+        cost,
+      };
     }
 
     lastViolations = problems;
@@ -400,6 +445,7 @@ export async function generateAiWorkout(input: GenerateAiWorkoutInput): Promise<
     reason: `The model could not produce a workout that passes the rules in ${MAX_VALIDATION_ATTEMPTS} attempts.`,
     attempts: MAX_VALIDATION_ATTEMPTS,
     violations: lastViolations,
+    cost,
   };
 }
 

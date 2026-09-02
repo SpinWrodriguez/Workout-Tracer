@@ -11,7 +11,9 @@ import { isSupabaseConfigured } from '../lib/supabaseSource';
 import {
   AI_INSTRUCTIONS_MAX,
   readAiInstructions,
+  readLastModelCall,
   writeAiInstructions,
+  type LastModelCall,
 } from '../db/settings';
 import { Card, Label } from './Layout';
 
@@ -90,9 +92,33 @@ export function AiInstructionsEditor() {
   );
 }
 
+/*
+ * Sonnet 5 list prices, per million tokens. Four rates, not two: a cached read
+ * is a tenth of a fresh input token and a cache write is a quarter more, so
+ * charging everything at the input rate would misreport the one number this
+ * card exists to tell the truth about. `input_tokens` from the API already
+ * excludes what was read from cache, so these four do not double count.
+ */
+const PER_MTOK = { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 };
+
+function centsFor(call: LastModelCall): string {
+  const dollars =
+    ((call.inputTokens ?? 0) * PER_MTOK.input +
+      (call.outputTokens ?? 0) * PER_MTOK.output +
+      (call.cacheWriteTokens ?? 0) * PER_MTOK.cacheWrite +
+      (call.cacheReadTokens ?? 0) * PER_MTOK.cacheRead) /
+    1_000_000;
+  return `${(dollars * 100).toFixed(1)}c`;
+}
+
 export function ModelKeyEditor() {
   const [key, setKey] = useState(() => readApiKey() ?? '');
   const [saved, setSaved] = useState(false);
+  const [last, setLast] = useState<LastModelCall | undefined>(undefined);
+
+  useEffect(() => {
+    void readLastModelCall().then(setLast);
+  }, []);
   const transport = availableTransport();
   const edge = isSupabaseConfigured();
   const edgeFailed = edgeUnavailable();
@@ -192,6 +218,27 @@ export function ModelKeyEditor() {
         so enter it again on each device. Uses {MODEL}: one call per workout you ask for, never
         on open.
       </p>
+
+      {/* Measured, not estimated. Output tokens are the latency: the JSON for a
+          workout is a couple of hundred, so a big number there is reasoning.
+          A cache read of zero means the exercise library is being re-billed
+          on every call. */}
+      {last && (
+        <div className="mt-3 rounded-xl bg-surface-2 p-3">
+          <Label>Last generation</Label>
+          <div className="mt-1.5 flex items-baseline justify-between gap-3">
+            <span className="text-[13px] font-medium text-text-dim">
+              {(last.ms / 1000).toFixed(1)}s
+              {last.attempts > 1 ? ` · ${last.attempts} attempts` : ''}
+            </span>
+            <span className="text-[13px] font-semibold">{centsFor(last)}</span>
+          </div>
+          <p className="mt-1 text-[12px] font-medium text-text-dim">
+            {last.inputTokens ?? 0} in · {last.outputTokens ?? 0} out ·{' '}
+            {last.cacheReadTokens ? `${last.cacheReadTokens} cached` : 'nothing cached'}
+          </p>
+        </div>
+      )}
     </Card>
   );
 }

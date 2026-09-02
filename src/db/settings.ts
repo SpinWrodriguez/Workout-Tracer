@@ -146,3 +146,50 @@ export async function writeAiInstructions(text: string): Promise<void> {
   if (trimmed) await db.settings.put({ key: AI_INSTRUCTIONS_KEY, value: trimmed });
   else await db.settings.delete(AI_INSTRUCTIONS_KEY);
 }
+
+/* -------------------------------------------------------------------------- */
+/*  What the last generation cost.                                            */
+/*                                                                            */
+/*  Written because "it feels slow" and "it looks cheap" are not measurements. */
+/*  The output token count is the latency story on a thinking model, and the   */
+/*  cache read tells you whether the 11k-token library is being re-billed on   */
+/*  every call. Both were invisible until this existed.                       */
+/* -------------------------------------------------------------------------- */
+
+export const LAST_MODEL_CALL_KEY = 'lastModelCall';
+
+export interface LastModelCall {
+  at: string;
+  /** How many round trips the validator needed. More than one is a retry. */
+  attempts: number;
+  ms: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+}
+
+export async function readLastModelCall(): Promise<LastModelCall | undefined> {
+  const row = await db.settings.get(LAST_MODEL_CALL_KEY);
+  const value = row?.value;
+  if (!isRecord(value)) return undefined;
+  const at = typeof value.at === 'string' ? value.at : undefined;
+  if (!at) return undefined;
+  const num = (key: string): number | undefined => {
+    const raw = value[key];
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined;
+  };
+  return {
+    at,
+    attempts: num('attempts') ?? 1,
+    ms: num('ms') ?? 0,
+    inputTokens: num('inputTokens'),
+    outputTokens: num('outputTokens'),
+    cacheReadTokens: num('cacheReadTokens'),
+    cacheWriteTokens: num('cacheWriteTokens'),
+  };
+}
+
+export async function writeLastModelCall(call: LastModelCall): Promise<void> {
+  await db.settings.put({ key: LAST_MODEL_CALL_KEY, value: call });
+}

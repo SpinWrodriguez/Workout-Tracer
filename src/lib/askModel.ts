@@ -134,7 +134,15 @@ export function buildRequest(options: AskOptions): Record<string, unknown> {
     max_tokens: options.maxTokens ?? 8000,
     thinking: { type: 'adaptive' },
     output_config: {
-      effort: 'medium',
+      /*
+       * Low, not medium. This is constrained selection from a fixed 71-row
+       * list with a validator recomputing every pick behind it — not
+       * open-ended reasoning. At medium the measured output was 1,000-2,600
+       * tokens for a workout whose JSON is about two hundred, so the thinking
+       * was most of a twelve-second wait. Raise it if the picks get worse;
+       * the numbers to judge that by are in Settings.
+       */
+      effort: 'low',
       /*
        * type and schema, and nothing else. An extra key here — a `name` for the
        * schema, which seemed harmless — is an unknown field, and the Messages
@@ -168,11 +176,44 @@ function textOf(payload: unknown): string | undefined {
   return undefined;
 }
 
+/** What one call cost and how long it took. Reported, never guessed at. */
+export interface AskUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+}
+
 export interface AskResult {
   text?: string;
   transport: Transport;
   /** Set when the call was attempted and failed, for the UI to show once. */
   error?: string;
+  usage?: AskUsage;
+  /** Round trip in milliseconds, measured here rather than inferred. */
+  ms?: number;
+}
+
+/*
+ * The output token count is the whole latency story on a thinking model: the
+ * JSON for a four-exercise workout is a couple of hundred tokens, so an
+ * output of two thousand is nine parts reasoning to one part answer. Without
+ * this the only evidence was "it feels slow".
+ */
+function usageOf(payload: unknown): AskUsage | undefined {
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const usage = (payload as { usage?: unknown }).usage;
+  if (typeof usage !== 'object' || usage === null) return undefined;
+  const read = (key: string): number | undefined => {
+    const value = (usage as Record<string, unknown>)[key];
+    return typeof value === 'number' ? value : undefined;
+  };
+  return {
+    inputTokens: read('input_tokens'),
+    outputTokens: read('output_tokens'),
+    cacheReadTokens: read('cache_read_input_tokens'),
+    cacheWriteTokens: read('cache_creation_input_tokens'),
+  };
 }
 
 /**
@@ -215,11 +256,15 @@ async function edgeFailure(error: { message: string; context?: unknown }): Promi
 async function viaEdge(body: Record<string, unknown>, signal?: AbortSignal): Promise<AskResult> {
   const client = await getSupabase();
   if (!client) return { transport: 'edge', error: 'Supabase is not configured.' };
+  const started = Date.now();
   const { data, error } = await client.functions.invoke(EDGE_FUNCTION, { body });
-  if (error) return { transport: 'edge', error: await edgeFailure(error) };
-  if (signal?.aborted) return { transport: 'edge', error: 'Cancelled.' };
+  const ms = Date.now() - started;
+  if (error) return { transport: 'edge', error: await edgeFailure(error), ms };
+  if (signal?.aborted) return { transport: 'edge', error: 'Cancelled.', ms };
   const text = textOf(data);
-  return text ? { text, transport: 'edge' } : { transport: 'edge', error: 'Empty reply.' };
+  return text
+    ? { text, transport: 'edge', usage: usageOf(data), ms }
+    : { transport: 'edge', error: 'Empty reply.', ms };
 }
 
 async function viaDeviceKey(
@@ -228,6 +273,7 @@ async function viaDeviceKey(
   signal?: AbortSignal,
   fetchImpl: typeof fetch = fetch,
 ): Promise<AskResult> {
+  const started = Date.now();
   const response = await fetchImpl(ANTHROPIC_URL, {
     method: 'POST',
     signal,
@@ -245,10 +291,15 @@ async function viaDeviceKey(
     return {
       transport: 'device-key',
       error: `${response.status} ${response.statusText}${detail ? ` — ${detail.slice(0, 200)}` : ''}`,
+      ms: Date.now() - started,
     };
   }
-  const text = textOf(await response.json());
-  return text ? { text, transport: 'device-key' } : { transport: 'device-key', error: 'Empty reply.' };
+  const payload = await response.json();
+  const ms = Date.now() - started;
+  const text = textOf(payload);
+  return text
+    ? { text, transport: 'device-key', usage: usageOf(payload), ms }
+    : { transport: 'device-key', error: 'Empty reply.', ms };
 }
 
 /** Joins an upstream message to our own advice without running the two together. */

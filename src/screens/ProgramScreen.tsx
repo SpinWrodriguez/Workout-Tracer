@@ -50,7 +50,7 @@ import {
 import { isModelAvailable } from '../lib/askModel';
 import { generateAiWorkout, templateForAiWorkout, type AiWorkout } from '../lib/aiWorkout';
 import { briefPayload, buildBrief, undertrained, type DayConstraints } from '../lib/aiBrief';
-import { readAiInstructions } from '../db/settings';
+import { readAiInstructions, writeLastModelCall } from '../db/settings';
 import { DaySlotCard } from '../components/DaySlotCard';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { Card, Empty, Label, Screen } from '../components/Layout';
@@ -623,6 +623,18 @@ export function ProgramScreen({
           },
         );
       },
+    });
+
+    /* Recorded whether it worked or not: a failed run costs money too, and a
+       three-attempt failure is the most expensive thing this feature does. */
+    await writeLastModelCall({
+      at: new Date().toISOString(),
+      attempts: outcome.attempts,
+      ms: outcome.cost.ms,
+      inputTokens: outcome.cost.inputTokens,
+      outputTokens: outcome.cost.outputTokens,
+      cacheReadTokens: outcome.cost.cacheReadTokens,
+      cacheWriteTokens: outcome.cost.cacheWriteTokens,
     });
 
     if (!outcome.ok) return { ok: false, reason: outcome.reason };
