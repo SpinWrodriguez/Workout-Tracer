@@ -195,10 +195,12 @@ before writing another DOM test:
 - `readBlockPlan` takes the **latest** block by start date. A second seeded
   block dated earlier is invisible to every screen, and the screen renders its
   empty state rather than failing.
-- Waiting on the wrong write passes alone and fails under a parallel run.
-  Creating a workout writes the exercises and *then* the schedule entry; the
-  day editor is handed the slots the block defines. Wait for the thing you are
-  about to assert on, never for something adjacent to it.
+- Waiting on the wrong thing passes alone and fails under a parallel run — it
+  has cost three separate fixes. Wait on what you assert on: a DOM assertion
+  goes *inside* `waitFor`, because the row changes a tick before `useLiveQuery`
+  re-renders; and a row assertion waits on that row, because one screen action
+  writes several tables in sequence. See the rule at the top of
+  `src/test/dom.ts`.
 
 ---
 

@@ -252,12 +252,19 @@ describe('renaming a workout', () => {
     await ui.clear(await screen.findByRole('textbox', { name: 'Name' }));
     await ui.tab();
 
-    // Blank means "describe yourself again", not a stored empty string — the
-    // day goes back to being named after what is in it.
-    await waitFor(async () =>
-      expect((await readSchedules())[BLOCK_ID]?.A?.name).toBeUndefined(),
+    /*
+     * Blank means "describe yourself again", not a stored empty string — the day
+     * goes back to being named after what is in it.
+     *
+     * Waited for on the SCREEN, not in the database. The stored name clears a
+     * tick before useLiveQuery re-renders the card, so waiting on the row and
+     * then asserting on the heading read the DOM one tick early — green here,
+     * red in CI.
+     */
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Monday squats' })).toBeNull(),
     );
-    expect(screen.queryByRole('heading', { name: 'Monday squats' })).toBeNull();
+    expect((await readSchedules())[BLOCK_ID]?.A?.name).toBeUndefined();
   });
 });
 

@@ -8,6 +8,19 @@
  * bugs — a keypad covering the RIR badge, setup controls silently resetting, a
  * save button that never appeared — and then guarded none of them. These
  * suites drive the same flows the way a user does, by role and text.
+ *
+ * ONE RULE, learned three times the hard way: wait for the thing you assert
+ * on. Not something next to it.
+ *
+ *   - Asserting on the DOM? Put the assertion inside waitFor. The database row
+ *     changes a tick before useLiveQuery re-renders, so waiting on the row and
+ *     then reading the screen is green here and red in CI.
+ *   - Asserting on a row? Wait on that row. A screen action often writes
+ *     several tables in sequence, and waiting on the first reads the rest
+ *     mid-write.
+ *
+ * Both variants passed in isolation and failed under a parallel run, which is
+ * the worst way for a test to be wrong.
  */
 
 import 'fake-indexeddb/auto';
