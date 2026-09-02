@@ -54,7 +54,7 @@ export default defineConfig(() => ({
       workbox: {
         // Fonts are bundled rather than fetched, so everything the app needs
         // is precached: it has to work in a garage with no wifi.
-        globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,woff,woff2}'],
         // The UI is English; the Cyrillic/Greek/Vietnamese subsets would add
         // ~120 KiB to the precache that no browser here will ever request.
         globIgnores: ['**/*-{cyrillic,cyrillic-ext,greek,greek-ext,vietnamese}-*.woff2'],

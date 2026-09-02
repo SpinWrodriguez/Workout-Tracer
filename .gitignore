@@ -31,3 +31,8 @@ dev-dist
 
 # Local scratch space for verification scripts
 .scratch/
+
+# Source artwork for the exercise illustrations: 26 MB of full-size PNGs that
+# scripts/photos-optimise.mjs turns into the 361 KB in public/exercise-photos.
+# Only the outputs belong in a repo this small.
+photos-in/
