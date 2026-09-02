@@ -13,12 +13,23 @@ export function ExercisePicker({
   exercises,
   selectedIds,
   onPick,
+  onUnpick,
   onClose,
   onInfo,
 }: {
   exercises: Exercise[];
   selectedIds: string[];
   onPick: (exerciseId: string) => void;
+  /**
+   * Tapping something already picked. Without this a ticked row is a dead
+   * target: it shows a tick, it takes the tap, and nothing happens — which
+   * is how it read to the one person using it.
+   *
+   * Optional because "already picked" does not mean the same thing
+   * everywhere. The History picker chooses which exercise to chart, where
+   * one is always selected and unpicking it means nothing.
+   */
+  onUnpick?: (exerciseId: string) => void;
   onClose: () => void;
   /** Opens the cue, photo and description for one exercise. */
   onInfo?: (exerciseId: string) => void;
@@ -107,7 +118,8 @@ export function ExercisePicker({
                 >
                 <button
                   type="button"
-                  onClick={() => onPick(exercise.id)}
+                  onClick={() => (already && onUnpick ? onUnpick(exercise.id) : onPick(exercise.id))}
+                  aria-pressed={onUnpick ? already : undefined}
                   className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 text-left"
                 >
                   <span className="min-w-0 flex-1">

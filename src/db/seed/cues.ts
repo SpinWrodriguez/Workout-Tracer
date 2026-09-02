@@ -85,7 +85,6 @@ export const CUES: Record<string, string> = {
   cb_pull_through: 'Face away from the low pulley. Let the cable pull the hips back, then stand tall.',
   kb_reverse_lunge: 'Step back, not forward. Kinder on the knee and easier to control.',
   kb_step_up: 'Drive through the top foot. Do not push off the floor with the trailing leg.',
-  bw_ab_wheel: 'Ribs down, hips tucked. Roll only as far as the lower back stays flat.',
   bw_neutral_pull_up: 'Neutral grip on the multi-grip bar, the kindest angle for a cranky shoulder.',
   bw_captains_knee_raise: 'On the dip station, so nothing hangs from the hands. The grip-free leg raise.',
   kb_overhead_carry: 'Bell locked overhead, biceps by the ear. Walk tall and do not lean away from it.',

@@ -416,8 +416,95 @@ describe('reordering and removing an exercise', () => {
       within(card).getByRole('button', { name: `Delete ${named('bb_rdl')}` }),
     );
 
-    await waitFor(async () =>
-      expect(await orderInDb()).toEqual(['bb_back_squat', 'sm_calf_raise']),
+    /*
+     * Removing is two writes — the delete, then a renumber of what is left —
+     * and waiting only on the first let the second land in the NEXT test's
+     * freshly cleared database. It showed up as a stray sm_calf_raise in a
+     * test that never seeded one, which is the harness rule at the top of
+     * src/test/dom.ts earning its keep for the fourth time: wait on what
+     * finishes last.
+     */
+    await waitFor(async () => {
+      const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
+      expect(rows.map((row) => row.exerciseId).sort()).toEqual([
+        'bb_back_squat',
+        'sm_calf_raise',
+      ]);
+      // Contiguous from zero: that is the renumber, and it writes last.
+      expect(rows.map((row) => row.order).sort()).toEqual([0, 1]);
+    });
+  });
+});
+
+/*
+ * Choosing an exercise, and finding out what it is before you choose it. Both
+ * were reported from the phone: a ticked row in the picker took the tap and
+ * did nothing, and the Program screen was the one place with no way to look a
+ * movement up — which is the screen where knowing changes the choice.
+ */
+describe('picking and unpicking an exercise', () => {
+  it('takes it out of the workout when it is already in', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat', 'bb_rdl']);
+    const { ui } = await openProgram();
+
+    const card = await workoutCard('Monday squats');
+    await ui.click(within(card).getByRole('button', { name: 'Edit' }));
+    await ui.click(within(card).getByRole('button', { name: 'Add exercise' }));
+
+    /* The tick is a promise that tapping does something. Before this it was
+       wired to the same "add" handler, so a second tap was swallowed. */
+    const row = await screen.findByRole('button', {
+      name: new RegExp(`^${named('bb_back_squat')}`),
+    });
+    expect(row.getAttribute('aria-pressed')).toBe('true');
+    await ui.click(row);
+
+    await waitFor(async () => {
+      const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
+      expect(rows.map((entry) => entry.exerciseId)).toEqual(['bb_rdl']);
+    });
+  });
+
+  it('puts it back when it is tapped again', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_rdl']);
+    const { ui } = await openProgram();
+
+    const card = await workoutCard('Monday squats');
+    await ui.click(within(card).getByRole('button', { name: 'Edit' }));
+    await ui.click(within(card).getByRole('button', { name: 'Add exercise' }));
+
+    const row = await screen.findByRole('button', {
+      name: new RegExp(`^${named('bb_back_squat')}`),
+    });
+    expect(row.getAttribute('aria-pressed')).toBe('false');
+    await ui.click(row);
+
+    await waitFor(async () => {
+      const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
+      expect(rows.map((entry) => entry.exerciseId).sort()).toEqual(['bb_back_squat', 'bb_rdl']);
+    });
+  });
+});
+
+describe('reading up on an exercise from the Program screen', () => {
+  it('opens the detail sheet from a row of the workout', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+    const { ui } = await openProgram();
+
+    const card = await workoutCard('Monday squats');
+    await ui.click(
+      within(card).getByRole('button', { name: `About ${named('bb_back_squat')}` }),
     );
+
+    /* The cue is the part that is always there, mapped or not — so it is what
+       proves the sheet actually opened rather than a photo that may not have
+       been fetched. */
+    expect(await screen.findByText('In this gym')).toBeTruthy();
+    expect(
+      await screen.findByRole('heading', { name: named('bb_back_squat') }),
+    ).toBeTruthy();
   });
 });

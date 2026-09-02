@@ -60,6 +60,7 @@ import { briefPayload, buildBrief, undertrained, type DayConstraints } from '../
 import { readAiInstructions, writeLastModelCall } from '../db/settings';
 import { DaySlotCard } from '../components/DaySlotCard';
 import { ExercisePicker } from '../components/ExercisePicker';
+import { ExerciseDetail } from '../components/ExerciseDetail';
 import { Card, Empty, Label, Screen } from '../components/Layout';
 import { WeekStrip, type WeekStripDay } from '../components/WeekStrip';
 import { shiftIso, weekStart } from '../lib/format';
@@ -88,6 +89,10 @@ export function ProgramScreen({
   const [training, setTraining] = useState<TrainingPrefs>(DEFAULT_TRAINING);
   const [editingSlot, setEditingSlot] = useState<DaySlot | null>(null);
   const [addingTo, setAddingTo] = useState<DaySlot | null>(null);
+  /* Which exercise is being read about. The sheet already existed on the
+     Session and History screens; this is the screen where you are choosing,
+     which is when knowing how a movement goes actually changes the choice. */
+  const [detailId, setDetailId] = useState<string | undefined>(undefined);
   const [creating, setCreating] = useState(false);
   const [inventory, setInventory] = useState<Inventory>(DEFAULT_INVENTORY);
 
@@ -1106,6 +1111,7 @@ export function ProgramScreen({
             onRemove={(exerciseId) => {
               if (block) void removeBlockExercise(block.id, slot, exerciseId);
             }}
+            onInfo={setDetailId}
             onReorder={(orderedIds) => {
               if (block) void reorderBlockExercises(block.id, slot, orderedIds);
             }}
@@ -1198,7 +1204,18 @@ export function ProgramScreen({
           exercises={exercises}
           selectedIds={entriesForSlot(slots ?? [], addingTo).map((entry) => entry.exerciseId)}
           onPick={(exerciseId) => void addBlockExercise(block.id, addingTo, exerciseId)}
+          // Tapping a ticked row takes it back out, which is what the tick
+          // looked like it promised.
+          onUnpick={(exerciseId) => void removeBlockExercise(block.id, addingTo, exerciseId)}
           onClose={() => setAddingTo(null)}
+          onInfo={setDetailId}
+        />
+      )}
+
+      {detailId && byId.get(detailId) && (
+        <ExerciseDetail
+          exercise={byId.get(detailId) as Exercise}
+          onClose={() => setDetailId(undefined)}
         />
       )}
 

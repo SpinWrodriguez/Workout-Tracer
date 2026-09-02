@@ -74,7 +74,7 @@ describe('telling two days of the same week apart', () => {
       'Full Body Pull',
     );
     expect(
-      describeDay(pick('bb_back_squat', 'sm_incline_press', 'bb_overhead_press', 'bw_ab_wheel')),
+      describeDay(pick('bb_back_squat', 'sm_incline_press', 'bb_overhead_press', 'bw_plank')),
     ).toBe('Full Body Push');
   });
 

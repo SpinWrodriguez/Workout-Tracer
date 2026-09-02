@@ -315,7 +315,25 @@ export function SessionScreen({
     setPicking(false);
   };
 
+
+  /**
+   * Takes an exercise out of the session — from the Remove button, or by
+   * tapping it again in the picker.
+   *
+   * Guarded, because a picked exercise here is not just an intention: it may
+   * already hold sets you have done, and until now both routes binned them
+   * without a word.
+   */
   const removeExercise = (exerciseId: string) => {
+    const logged =
+      draft?.exercises
+        .find((entry) => entry.exerciseId === exerciseId)
+        ?.sets.filter((set) => set.done).length ?? 0;
+    if (logged > 0) {
+      const name = exercisesById.get(exerciseId)?.name ?? exerciseId;
+      const sets = logged === 1 ? `1 logged set` : `${logged} logged sets`;
+      if (!window.confirm(`Remove ${name}? It has ${sets}, and they go with it.`)) return;
+    }
     setDraft((prev) =>
       prev ? { ...prev, exercises: prev.exercises.filter((e) => e.exerciseId !== exerciseId) } : prev,
     );
@@ -990,6 +1008,7 @@ export function SessionScreen({
           exercises={exercises}
           selectedIds={draft.exercises.map((e) => e.exerciseId)}
           onPick={addExercise}
+          onUnpick={removeExercise}
           onClose={() => setPicking(false)}
           onInfo={setDetailId}
         />

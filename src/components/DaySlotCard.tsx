@@ -55,6 +55,22 @@ function Stepper({
   );
 }
 
+/** Same mark as the picker uses, so the two read as the same affordance. */
+function InfoButton({ name, onClick }: { name: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`About ${name}`}
+      className="-my-2 flex size-8 shrink-0 items-center justify-center text-text-faint"
+    >
+      <svg viewBox="0 0 24 24" className="size-4" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M12 11v5.5M12 7.6v.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    </button>
+  );
+}
 export function DaySlotCard({
   weekday,
   intensity = 'heavy',
@@ -66,6 +82,7 @@ export function DaySlotCard({
   onStart,
   onAdd,
   onRemove,
+  onInfo,
   onReorder,
   onUpdate,
   onClearDay,
@@ -85,6 +102,8 @@ export function DaySlotCard({
   onAdd: () => void;
   onRemove: (exerciseId: string) => void;
   /** The exercise ids in their new order, after a drag or an arrow key. */
+  /** Opens the cue, the photo and the steps for one exercise. */
+  onInfo: (exerciseId: string) => void;
   onReorder: (orderedIds: string[]) => void;
   onUpdate: (entry: BlockExercise, patch: Partial<BlockExercise>) => void;
   onClearDay: () => void;
@@ -168,8 +187,14 @@ export function DaySlotCard({
               key={entry.exerciseId}
               className="flex items-baseline justify-between gap-3 py-1.5"
             >
-              <span className="min-w-0 truncate text-[15px] font-medium">
-                {exercise?.name ?? entry.exerciseId}
+              <span className="flex min-w-0 items-center gap-1">
+                <span className="min-w-0 truncate text-[15px] font-medium">
+                  {exercise?.name ?? entry.exerciseId}
+                </span>
+                <InfoButton
+                  name={exercise?.name ?? entry.exerciseId}
+                  onClick={() => onInfo(entry.exerciseId)}
+                />
               </span>
               <Label>
                 {prescription(exercise, entry.targetSets, entry.repRangeLow, entry.repRangeHigh)}
@@ -193,7 +218,10 @@ export function DaySlotCard({
               label: name,
               content: (
                 <>
-                  <div className="truncate text-[15px] font-medium">{name}</div>
+                  <div className="flex items-center gap-1">
+                    <span className="min-w-0 truncate text-[15px] font-medium">{name}</span>
+                    <InfoButton name={name} onClick={() => onInfo(entry.exerciseId)} />
+                  </div>
 
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-2">
                     <span className="flex items-center gap-2">

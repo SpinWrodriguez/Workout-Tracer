@@ -296,3 +296,51 @@ describe('the save button', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /^Save · / })).toBeNull());
   });
 });
+
+describe('taking an exercise back out of a session', () => {
+  it('asks first when sets have already been logged against it', async () => {
+    const { ui } = await openProgrammedDay();
+
+    await typeInto(ui, 'Set 1 weight', '60');
+    await ui.click(screen.getByRole('button', { name: 'Next' }));
+    await typeInto(ui, 'Set 1 reps', '8');
+    await ui.click(screen.getByRole('button', { name: 'Hide' }));
+    await ui.click(doneBox(1));
+
+    /* Said no. Removing here is the only action in the session that can lose
+       work you have already done, and until now both routes to it — this
+       button and tapping the exercise again in the picker — did it without a
+       word. */
+    confirmWith(false);
+    await ui.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(await screen.findByRole('heading', { name: named(SQUAT) })).toBeTruthy();
+  });
+
+  it('takes it out once, when the answer is yes', async () => {
+    const { ui } = await openProgrammedDay();
+
+    await typeInto(ui, 'Set 1 weight', '60');
+    await ui.click(screen.getByRole('button', { name: 'Hide' }));
+    await ui.click(doneBox(1));
+
+    confirmWith(true);
+    await ui.click(screen.getByRole('button', { name: 'Remove' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: named(SQUAT) })).toBeNull(),
+    );
+  });
+
+  it('does not ask about an exercise with nothing logged against it', async () => {
+    const { ui } = await openProgrammedDay();
+
+    /* Nothing done yet, so there is nothing to lose and nothing to ask. A
+       confirm here would be a dialog for every mis-tap. */
+    confirmWith(false);
+    await ui.click(screen.getByRole('button', { name: 'Remove' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: named(SQUAT) })).toBeNull(),
+    );
+  });
+});

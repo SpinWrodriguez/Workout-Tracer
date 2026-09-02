@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import 'fake-indexeddb/auto';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { db } from '../db/db';
+import { DEFAULT_BLOCK_ID, seedDatabase } from '../db/seed';
 import {
   CABLE_BILATERAL,
   CABLE_SINGLE_PULLEY,
@@ -160,5 +163,53 @@ describe('the four data fixes', () => {
         expect(exercise.loadMode, exercise.id).not.toBe('weight');
       }
     }
+  });
+});
+
+describe('an exercise the seed no longer lists', () => {
+  beforeEach(async () => {
+    await db.open();
+    await Promise.all(db.tables.map((table) => table.clear()));
+  });
+
+  /** An exercise on the device that the seed file does not have. */
+  const stale = async () => {
+    const template = EXERCISES[0];
+    if (!template) throw new Error('the seed is empty');
+    await db.exercise.put({ ...template, id: 'bw_ab_wheel', name: 'Ab wheel rollout' });
+  };
+
+  it('is taken off the device, because bulkPut never removes anything', async () => {
+    /*
+     * The ab wheel rollout was the first removal — there is no ab wheel in
+     * this garage. Dropping it from the seed file is not enough on its own:
+     * every installed device would have gone on offering it in the picker,
+     * and the generator could still have drawn it.
+     */
+    await stale();
+    await seedDatabase();
+    expect(await db.exercise.get('bw_ab_wheel')).toBeUndefined();
+  });
+
+  it('stays if a set was ever logged against it, so History keeps its name', async () => {
+    await stale();
+    await db.session.put({
+      id: 's1',
+      blockId: DEFAULT_BLOCK_ID,
+      daySlot: 'A',
+      date: '2026-01-05',
+    });
+    await db.setLog.put({ sessionId: 's1', exerciseId: 'bw_ab_wheel', setNo: 1, reps: 10 });
+
+    await seedDatabase();
+
+    /* A removal must never turn a logged session into a raw id on the History
+       screen. The seed decides what is OFFERED, not what happened. */
+    expect(await db.exercise.get('bw_ab_wheel')).toBeDefined();
+  });
+
+  it('leaves the seeded exercises alone', async () => {
+    await seedDatabase();
+    expect(await db.exercise.count()).toBe(EXERCISES.length);
   });
 });
