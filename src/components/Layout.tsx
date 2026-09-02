@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 /**
  * Screen shell. One screen = one job: a single scroll area, chrome pinned
@@ -43,26 +43,84 @@ export function Screen({
   );
 }
 
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-4 shrink-0 text-text-dim transition-transform"
+      style={{ transform: open ? 'rotate(180deg)' : undefined }}
+      fill="none"
+      aria-hidden="true"
+    >
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function Card({
   title,
   trailing,
   children,
   className = '',
+  collapsible = false,
+  defaultOpen = false,
+  summary,
 }: {
   title?: string;
   trailing?: ReactNode;
   children?: ReactNode;
   className?: string;
+  /**
+   * Turns the header into a toggle. Settings is the reason: ten cards of
+   * controls, nine of which are set once and never touched again, is a screen
+   * you scroll past rather than read.
+   */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+  /** One line worth seeing while shut — what the section currently says. */
+  summary?: ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  if (!collapsible) {
+    return (
+      <section className={`card ${className}`}>
+        {(title || trailing) && (
+          <header className="mb-3 flex items-center justify-between gap-3">
+            {title && <h2 className="card-title">{title}</h2>}
+            {trailing}
+          </header>
+        )}
+        {children}
+      </section>
+    );
+  }
+
   return (
     <section className={`card ${className}`}>
-      {(title || trailing) && (
-        <header className="mb-3 flex items-center justify-between gap-3">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="-my-1 flex w-full items-center gap-3 py-1 text-left"
+      >
+        <span className="min-w-0 flex-1">
           {title && <h2 className="card-title">{title}</h2>}
-          {trailing}
-        </header>
-      )}
-      {children}
+          {!open && summary !== undefined && (
+            <span className="mt-0.5 block truncate text-[12px] font-medium text-text-dim">
+              {summary}
+            </span>
+          )}
+        </span>
+        <Chevron open={open} />
+      </button>
+      {/*
+        Hidden rather than unmounted. These sections hold half-typed text and
+        their own live queries, and throwing that away on a collapse would make
+        the toggle destructive — a section you closed by accident would lose
+        what you were writing in it.
+      */}
+      <div className={open ? 'mt-3' : 'hidden'}>{children}</div>
     </section>
   );
 }

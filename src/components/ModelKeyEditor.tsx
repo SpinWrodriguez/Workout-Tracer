@@ -51,7 +51,11 @@ export function AiInstructionsEditor() {
   }, []);
 
   return (
-    <Card title="Your goals">
+    <Card
+      title="Your goals"
+      collapsible
+      summary={loaded ? (text.trim() ? text.trim().split('\n')[0] : 'nothing set') : '--'}
+    >
       <p className="text-[13px] text-text-dim">
         What does not change week to week: what you are training for, what you are working
         around, what you would rather not do. Read on every generation, so editing this
@@ -129,7 +133,17 @@ export function ModelKeyEditor() {
   };
 
   return (
-    <Card title="AI workout generation">
+    <Card
+      title="AI workout generation"
+      collapsible
+      summary={
+        transport === 'edge'
+          ? 'Server-side key'
+          : transport === 'device-key'
+            ? 'Key on this device'
+            : 'Off — no key'
+      }
+    >
       <p className="text-[13px] text-text-dim">
         Unlocks "Build the week with AI" and the AI options on the Program tab. The model only
         proposes — every pick is rechecked against your plates, your rules and your calendar

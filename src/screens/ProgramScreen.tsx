@@ -417,14 +417,6 @@ export function ProgramScreen({
     await writeDay(day, variant);
   };
 
-  /**
-   * The next draw along. Rotation is bounded and repeatable, so asking for the
-   * same variant is asking for the same day — which is what made "Regenerate"
-   * look broken: it was wired to variant 0, documented as always the strongest
-   * draw, so pressing it returned exactly what was already on screen.
-   */
-  const nextVariant = (slot: DaySlot) => (schedule?.[slot]?.variant ?? 0) + 1;
-
   /** Carries out the change a problem described. */
   const applyFix = async (fix: Fix) => {
     if (!block) return;
@@ -1118,23 +1110,9 @@ export function ProgramScreen({
               if (block) void reorderBlockExercises(block.id, slot, orderedIds);
             }}
             onUpdate={(entry, patch) => void updateBlockExercise(entry, patch)}
-            generated={scheduled?.generated === true}
-            onGenerate={() => {
-              // Only ever destructive with a yes: a workout built by hand is
-              // not something to overwrite because a button was nearby.
-              if (
-                list.length > 0 &&
-                !window.confirm(
-                  `Replace the ${list.length} exercises in ${labelFor(slot)} with a new draw?`,
-                )
-              ) {
-                return;
-              }
-              // An empty workout has nothing to differ from, so it takes the
-              // strongest draw; a day with contents is being asked to change.
-              void generateSlot(slot, list.length === 0 ? 0 : nextVariant(slot));
-            }}
-            onShuffle={() => void generateSlot(slot, nextVariant(slot))}
+            /* Only reachable on an empty workout now, so it cannot overwrite
+               anything and takes variant 0 — the strongest draw. */
+            onGenerate={() => void generateSlot(slot, 0)}
             onClearDay={() => {
               if (
                 block &&

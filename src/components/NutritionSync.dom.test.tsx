@@ -149,8 +149,11 @@ describe('signing in', () => {
     await ui.type(code, '123456');
     await ui.click(within(card).getByRole('button', { name: 'Verify and sync' }));
 
+    /* Asserted on the control that only exists once signed in, rather than on
+       the email: the collapsed summary prints the account too, so matching the
+       address now finds it twice. */
     await waitFor(() =>
-      expect(within(card).getByText('lifter@example.com')).toBeTruthy(),
+      expect(within(card).getByRole('button', { name: 'Sync now' })).toBeTruthy(),
     );
   });
 });

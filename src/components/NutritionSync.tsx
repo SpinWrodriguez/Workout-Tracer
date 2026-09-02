@@ -110,7 +110,7 @@ export function NutritionSync() {
 
   if (!isSupabaseConfigured()) {
     return (
-      <Card title="Cloud sync">
+      <Card title="Cloud sync" collapsible summary="not in this build">
         <p className="text-[13px] text-text-dim">
           No Supabase project in this build. Copy{' '}
           <code className="text-text">.env.example</code> to{' '}
@@ -148,7 +148,21 @@ export function NutritionSync() {
           : undefined;
 
   return (
-    <Card title="Cloud sync">
+    <Card
+      title="Cloud sync"
+      collapsible
+      /* Opens itself when nothing is being saved. A section you have to think
+         to open is the wrong place to hide "signed out since March" — and the
+         Dashboard's own warning is the other half of that. */
+      defaultOpen={autoWarning !== undefined}
+      summary={
+        autoWarning
+          ? 'nothing is being saved'
+          : session.signedIn
+            ? `${session.email ?? 'signed in'}${dirty ? ' · unsaved changes' : ''}`
+            : 'signed out'
+      }
+    >
       <p className="text-[13px] text-text-dim">
         Same account as the nutrition app. Weigh-ins come down, training data goes up a few
         seconds after every change. Works offline from the local copy.

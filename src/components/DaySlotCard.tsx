@@ -70,8 +70,6 @@ export function DaySlotCard({
   onUpdate,
   onClearDay,
   onGenerate,
-  onShuffle,
-  generated,
   label,
   customName,
   onRename,
@@ -91,10 +89,8 @@ export function DaySlotCard({
   onUpdate: (entry: BlockExercise, patch: Partial<BlockExercise>) => void;
   onClearDay: () => void;
   onGenerate: () => void;
-  onShuffle: () => void;
   /** False when the day has no weekday yet, so there is nothing to build to. */
   /** This day came out of the generator, so re-rolling it costs nothing. */
-  generated: boolean;
   /** What to show: a name the user typed, or one derived from the exercises. */
   label: string;
   /** Only what the user typed, so the field is empty when nothing is set. */
@@ -145,6 +141,12 @@ export function DaySlotCard({
         </span>
       }
     >
+      {/* The only draw offered on a card, and only when there is nothing to
+          lose. Shuffle and Regenerate used to sit here too, both re-rolling
+          the same deterministic selector: they replaced a workout you had
+          chosen with a differently-shaped one and never explained the
+          difference, so the honest options are the two you already have —
+          build it yourself, or ask the AI. */}
       {entries.length === 0 && (
         <>
           <Empty>--- sets</Empty>
@@ -228,18 +230,6 @@ export function DaySlotCard({
         />
       )}
 
-      {/* Offered only on a generated workout: it re-rolls the draw, and on one
-          built by hand that would silently throw the work away. */}
-      {!editing && entries.length > 0 && generated && (
-        <button
-          type="button"
-          onClick={onShuffle}
-          className="mt-3 h-9 w-full rounded-full bg-surface-2 text-[12px] font-medium text-text-dim"
-        >
-          Shuffle the exercises
-        </button>
-      )}
-
       {editing && (
         <label className="mt-1 mb-3 block">
           <span className="label">Name</span>
@@ -268,15 +258,6 @@ export function DaySlotCard({
           >
             Add exercise
           </button>
-          {entries.length > 0 && (
-            <button
-              type="button"
-              onClick={onGenerate}
-              className="h-11 rounded-full bg-surface-2 px-4 text-[13px] font-medium text-text-dim"
-            >
-              Regenerate
-            </button>
-          )}
           <button
             type="button"
             onClick={onClearDay}

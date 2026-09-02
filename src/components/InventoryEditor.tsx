@@ -78,7 +78,7 @@ export function InventoryEditor() {
 
   if (!inventory || !ladders) {
     return (
-      <Card title="Equipment">
+      <Card title="Equipment" collapsible>
         <Label>--</Label>
       </Card>
     );
@@ -110,7 +110,7 @@ export function InventoryEditor() {
 
   return (
     <>
-      <Card title="Plate inventory">
+      <Card title="Plate inventory" collapsible>
         <p className="text-[13px] text-text-dim">
           Counted in pairs — a bar takes one plate from each pair per side. Every weight input in
           the app snaps to what this can actually load.
@@ -200,7 +200,7 @@ export function InventoryEditor() {
         {ladderRow('Smith ladder', ladders.smith)}
       </Card>
 
-      <Card title="Kettlebells and hand-held" className="mt-3">
+      <Card title="Kettlebells and hand-held" className="mt-3" collapsible>
         <p className="text-[13px] text-text-dim">
           Goblet squats, carries and loaded split squats snap to these plus anything the plates can
           make.
@@ -239,7 +239,7 @@ export function InventoryEditor() {
         {ladderRow('Hand-held ladder', ladders.hand)}
       </Card>
 
-      <Card title="Cable stacks" className="mt-3">
+      <Card title="Cable stacks" className="mt-3" collapsible>
         <div className="flex gap-3">
           <NumberField
             label="Stack"

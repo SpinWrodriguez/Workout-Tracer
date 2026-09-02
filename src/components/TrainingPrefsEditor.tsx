@@ -36,7 +36,7 @@ export function TrainingPrefsEditor() {
 
   if (!prefs) {
     return (
-      <Card title="Training">
+      <Card title="Training" collapsible>
         <Label>--</Label>
       </Card>
     );
@@ -55,7 +55,11 @@ export function TrainingPrefsEditor() {
     });
 
   return (
-    <Card title="Training">
+    <Card
+      title="Training"
+      collapsible
+      summary={`${prefs.weeklySetTarget} sets a week · ${prefs.sessionMinutes} min sessions`}
+    >
       <Label>Golf days</Label>
       <p className="mt-1 text-[13px] text-text-dim">
         Grip work stays clear of these, and no session is placed on one.

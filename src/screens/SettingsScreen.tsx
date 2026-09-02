@@ -75,7 +75,7 @@ export function SettingsScreen() {
         <NutritionSync />
       </div>
 
-      <Card title="Build" className="mt-3">
+      <Card title="Build" className="mt-3" collapsible summary={__BUILD_ID__}>
         <div className="flex items-baseline justify-between gap-3">
           <Label>This version</Label>
           <span className="text-[13px] font-medium tabular-nums">{__BUILD_ID__}</span>
@@ -94,7 +94,7 @@ export function SettingsScreen() {
         <AiInstructionsEditor />
       </div>
 
-      <Card title="Backup" className="mt-3">
+      <Card title="Backup" className="mt-3" collapsible summary="import or export the training data">
         <p className="text-[13px] text-text-dim">
           Exports the training data. Import also reads the nutrition app's older combined
           files, and never duplicates or deletes — so re-importing is safe.
@@ -162,7 +162,14 @@ export function SettingsScreen() {
         )}
       </Card>
 
-      <Card title="Descriptions and photos" className="mt-3">
+      <Card
+        title="Descriptions and photos"
+        className="mt-3"
+        collapsible
+        summary={
+          counts === undefined ? '--' : `${counts.freeDb} of ${mappedIds().length} cached`
+        }
+      >
         <p className="text-[13px] text-text-dim">
           Descriptions and photos for the {mappedIds().length} exercises mapped to
           free-exercise-db. Fetched once, stored locally, never needed at runtime.
@@ -219,7 +226,16 @@ export function SettingsScreen() {
         )}
       </Card>
 
-      <Card title="Stored data" className="mt-3">
+      <Card
+        title="Stored data"
+        className="mt-3"
+        collapsible
+        summary={
+          counts === undefined
+            ? '--'
+            : `${counts.session} sessions · ${counts.setLog} set logs`
+        }
+      >
         {counts === undefined ? (
           <Label>--</Label>
         ) : (

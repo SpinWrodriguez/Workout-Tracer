@@ -147,12 +147,13 @@ describe('the week pass', () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/*  Why "Regenerate" has to advance the variant.                              */
+/*  Variant rotation, which no button drives any more.                        */
 /*                                                                            */
-/*  Variant 0 is documented as always the strongest draw, and returning to it  */
-/*  returns exactly the day you first saw. That is a good property and it is   */
-/*  why the button was broken: it passed 0 every time, so pressing it on a day */
-/*  already showing variant 0 handed back an identical list, forever.          */
+/*  Regenerate and Shuffle both re-rolled this and are gone: a card's only     */
+/*  draw is now the first one, on an empty workout, at variant 0. The property */
+/*  is still worth pinning, because variant 0 being repeatable is what makes   */
+/*  a first draw reproducible — and because the rotation is how the week       */
+/*  generator keeps three days from picking the same exercises.               */
 /* -------------------------------------------------------------------------- */
 
 describe('variant rotation is what makes a day change', () => {
@@ -167,7 +168,7 @@ describe('variant rotation is what makes a day change', () => {
     }).exercises.map((entry) => entry.exerciseId);
 
   it('gives an identical day for an unchanged variant', () => {
-    // Four presses of a button that passes 0 — the reported symptom.
+    // The reproducibility half: the same variant is the same day, always.
     const first = day(0);
     for (let i = 0; i < 3; i += 1) expect(day(0)).toEqual(first);
   });

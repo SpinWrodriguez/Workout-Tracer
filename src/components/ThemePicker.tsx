@@ -12,7 +12,11 @@ export function ThemePicker() {
   const [choice, resolved, set] = useTheme();
 
   return (
-    <Card title="Appearance">
+    <Card
+      title="Appearance"
+      collapsible
+      summary={choice === 'system' ? `System — currently ${resolved}` : `Always ${resolved}`}
+    >
       <p className="text-[13px] text-text-dim">
         Dark is the design the app was built to. Light keeps the same palette with the neutrals
         inverted and the accents darkened so small text stays readable on white.

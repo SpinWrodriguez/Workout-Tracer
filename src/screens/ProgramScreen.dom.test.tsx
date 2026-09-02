@@ -9,7 +9,6 @@
 
 import {
   BLOCK_ID,
-  confirmWith,
   exercises,
   exercisesById,
   named,
@@ -128,13 +127,13 @@ describe('placement is one week, not every week', () => {
        workout, and a weekday is the RECURRING address — so one press filled
        every week the block would ever have. */
     await seedSchedule({ A: { weekday: undefined, intensity: 'heavy', name: 'Monday squats' } });
-    await seedWorkout('A', ['bb_back_squat']);
     const { ui } = await openProgram();
 
+    /* An empty workout being filled in. Shuffle and Regenerate are gone, so
+       this is the only draw a card offers — and the only one that cannot
+       replace exercises somebody chose. */
     const card = await workoutCard('Monday squats');
-    await ui.click(within(card).getByRole('button', { name: 'Edit' }));
-    confirmWith(true);
-    await ui.click(await screen.findByRole('button', { name: 'Regenerate' }));
+    await ui.click(within(card).getByRole('button', { name: 'Build this workout' }));
 
     await waitFor(async () => {
       const stored = (await readSchedules())[BLOCK_ID]?.A;
@@ -179,18 +178,15 @@ describe('placement is one week, not every week', () => {
        in the week being looked at. */
     await db.golfDay.put({ date: dayOfThisWeek(5), status: 'planned', holes: 18 });
     await seedSchedule({ A: { intensity: 'heavy', name: 'Thursday session' } });
-    await seedWorkout('A', ['bb_deadlift']);
     await seedPlan({ [THURSDAY]: 'A' });
     const { ui } = await openProgram();
 
     const card = await workoutCard('Thursday session');
-    await ui.click(within(card).getByRole('button', { name: 'Edit' }));
-    confirmWith(true);
-    await ui.click(await screen.findByRole('button', { name: 'Regenerate' }));
+    await ui.click(within(card).getByRole('button', { name: 'Build this workout' }));
 
     await waitFor(async () => {
       const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
-      expect(rows.some((row) => row.exerciseId !== 'bb_deadlift')).toBe(true);
+      expect(rows.length).toBeGreaterThan(0);
     });
     const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
     const grippy = rows.filter((row) => exercisesById.get(row.exerciseId)?.gripLoad === 'high');
