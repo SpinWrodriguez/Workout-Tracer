@@ -3,6 +3,7 @@ import type { BlockExercise, Exercise } from '../db/types';
 import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
 
 import { Card, Empty, Label } from './Layout';
+import { SortableRows } from './SortableRows';
 import { formatDuration, isTimed, prescription, repUnitWord, stepFor } from '../lib/repUnit';
 
 /* -------------------------------------------------------------------------- */
@@ -65,7 +66,7 @@ export function DaySlotCard({
   onStart,
   onAdd,
   onRemove,
-  onMove,
+  onReorder,
   onUpdate,
   onClearDay,
   onGenerate,
@@ -85,7 +86,8 @@ export function DaySlotCard({
   onStart: () => void;
   onAdd: () => void;
   onRemove: (exerciseId: string) => void;
-  onMove: (exerciseId: string, direction: -1 | 1) => void;
+  /** The exercise ids in their new order, after a drag or an arrow key. */
+  onReorder: (orderedIds: string[]) => void;
   onUpdate: (entry: BlockExercise, patch: Partial<BlockExercise>) => void;
   onClearDay: () => void;
   onGenerate: () => void;
@@ -156,88 +158,75 @@ export function DaySlotCard({
         </>
       )}
 
-      {entries.map((entry, index) => {
-        const exercise = exercisesById.get(entry.exerciseId);
-        return (
-          <div
-            key={entry.exerciseId}
-            className={editing ? 'border-t border-border py-2.5 first:border-t-0 first:pt-0' : ''}
-          >
-            <div className="flex items-baseline justify-between gap-3 py-1.5">
+      {!editing &&
+        entries.map((entry) => {
+          const exercise = exercisesById.get(entry.exerciseId);
+          return (
+            <div
+              key={entry.exerciseId}
+              className="flex items-baseline justify-between gap-3 py-1.5"
+            >
               <span className="min-w-0 truncate text-[15px] font-medium">
                 {exercise?.name ?? entry.exerciseId}
               </span>
-              {!editing && (
-                <Label>
-                  {prescription(exercise, entry.targetSets, entry.repRangeLow, entry.repRangeHigh)}
-                </Label>
-              )}
-              {editing && (
-                <span className="flex shrink-0 items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onMove(entry.exerciseId, -1)}
-                    disabled={index === 0}
-                    aria-label="Move up"
-                    className="size-7 rounded-lg bg-surface-2 text-[13px] disabled:text-text-faint"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onMove(entry.exerciseId, 1)}
-                    disabled={index === entries.length - 1}
-                    aria-label="Move down"
-                    className="size-7 rounded-lg bg-surface-2 text-[13px] disabled:text-text-faint"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onRemove(entry.exerciseId)}
-                    aria-label={`Remove ${exercise?.name ?? entry.exerciseId}`}
-                    className="size-7 rounded-lg bg-surface-2 text-[13px]"
-                    style={{ color: 'var(--color-rir-1)' }}
-                  >
-                    ×
-                  </button>
-                </span>
-              )}
+              <Label>
+                {prescription(exercise, entry.targetSets, entry.repRangeLow, entry.repRangeHigh)}
+              </Label>
             </div>
+          );
+        })}
 
-            {editing && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <span className="flex items-center gap-2">
-                  <Label>sets</Label>
-                  <Stepper
-                    value={entry.targetSets}
-                    label="set"
-                    onChange={(targetSets) => onUpdate(entry, { targetSets })}
-                  />
-                </span>
-                <span className="flex items-center gap-2">
-                  <Label>{repUnitWord(exercise)}</Label>
-                  <Stepper
-                    value={entry.repRangeLow}
-                    label={`minimum ${repUnitWord(exercise)}`}
-                    step={stepFor(exercise)}
-                    format={isTimed(exercise) ? formatDuration : undefined}
-                    onChange={(repRangeLow) => onUpdate(entry, { repRangeLow })}
-                  />
-                  <span className="text-[13px] font-medium text-text-dim">to</span>
-                  <Stepper
-                    value={entry.repRangeHigh}
-                    label={`maximum ${repUnitWord(exercise)}`}
-                    step={stepFor(exercise)}
-                    format={isTimed(exercise) ? formatDuration : undefined}
-                    onChange={(repRangeHigh) => onUpdate(entry, { repRangeHigh })}
-                  />
-                </span>
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {/* Drag the grip to reorder, swipe the row to uncover Delete. It was
+          three small buttons: two taps to move an exercise two places, with
+          the delete target 28px from them. */}
+      {editing && (
+        <SortableRows
+          onReorder={onReorder}
+          onDelete={onRemove}
+          rows={entries.map((entry) => {
+            const exercise = exercisesById.get(entry.exerciseId);
+            const name = exercise?.name ?? entry.exerciseId;
+            return {
+              key: entry.exerciseId,
+              label: name,
+              content: (
+                <>
+                  <div className="truncate text-[15px] font-medium">{name}</div>
+
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <span className="flex items-center gap-2">
+                      <Label>sets</Label>
+                      <Stepper
+                        value={entry.targetSets}
+                        label="set"
+                        onChange={(targetSets) => onUpdate(entry, { targetSets })}
+                      />
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <Label>{repUnitWord(exercise)}</Label>
+                      <Stepper
+                        value={entry.repRangeLow}
+                        label={`minimum ${repUnitWord(exercise)}`}
+                        step={stepFor(exercise)}
+                        format={isTimed(exercise) ? formatDuration : undefined}
+                        onChange={(repRangeLow) => onUpdate(entry, { repRangeLow })}
+                      />
+                      <span className="text-[13px] font-medium text-text-dim">to</span>
+                      <Stepper
+                        value={entry.repRangeHigh}
+                        label={`maximum ${repUnitWord(exercise)}`}
+                        step={stepFor(exercise)}
+                        format={isTimed(exercise) ? formatDuration : undefined}
+                        onChange={(repRangeHigh) => onUpdate(entry, { repRangeHigh })}
+                      />
+                    </span>
+                  </div>
+                </>
+              ),
+            };
+          })}
+        />
+      )}
 
       {/* Offered only on a generated workout: it re-rolls the draw, and on one
           built by hand that would silently throw the work away. */}

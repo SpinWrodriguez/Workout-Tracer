@@ -357,3 +357,71 @@ describe('fixing a rule violation', () => {
     expect(remaining.map((row) => row.exerciseId)).toEqual(['bb_back_squat']);
   });
 });
+
+/*
+ * Reordering is a drag and deleting is a swipe, and jsdom has neither. What it
+ * can drive is the keyboard on the grip and the delete button sitting behind
+ * the row — which is exactly why both exist: the gesture must not be the only
+ * way in, for a test or for anyone not using a thumb.
+ */
+describe('reordering and removing an exercise', () => {
+  const orderInDb = async () =>
+    (await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray())
+      .sort((a, b) => a.order - b.order)
+      .map((row) => row.exerciseId);
+
+  /** A three-exercise workout, opened for editing. */
+  async function openEditor() {
+    await seedSchedule({ A: { weekday: undefined, intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat', 'bb_rdl', 'sm_calf_raise']);
+    const { ui } = await openProgram();
+    const card = await workoutCard('Monday squats');
+    await ui.click(within(card).getByRole('button', { name: 'Edit' }));
+    return { ui, card };
+  }
+
+  const gripFor = (card: HTMLElement, exerciseId: string) =>
+    within(card).findByRole('button', { name: `Reorder ${named(exerciseId)}` });
+
+  it('moves the exercise its grip belongs to, and leaves the rest in place', async () => {
+    const { ui, card } = await openEditor();
+
+    /* Focused the way a keyboard reaches it — by tabbing. A press of the
+       grip cannot focus it: the drag handler calls preventDefault, which is
+       what stops a drag from also selecting the page. */
+    (await gripFor(card, 'bb_back_squat')).focus();
+    await ui.keyboard('{ArrowDown}');
+
+    /* The order is stored, not just shown: `order` is what every other screen
+       reads the workout back in. */
+    await waitFor(async () =>
+      expect(await orderInDb()).toEqual(['bb_rdl', 'bb_back_squat', 'sm_calf_raise']),
+    );
+  });
+
+  it('does not wrap the top row round to the bottom', async () => {
+    const { ui, card } = await openEditor();
+
+    /* Up from the first row has nowhere to go. Pressing down after it proves
+       the press was a no-op rather than a move that went somewhere odd: a wrap
+       would have left this order unreachable. */
+    (await gripFor(card, 'bb_back_squat')).focus();
+    await ui.keyboard('{ArrowUp}{ArrowDown}');
+
+    await waitFor(async () =>
+      expect(await orderInDb()).toEqual(['bb_rdl', 'bb_back_squat', 'sm_calf_raise']),
+    );
+  });
+
+  it('deletes the exercise the uncovered button belongs to', async () => {
+    const { ui, card } = await openEditor();
+
+    await ui.click(
+      within(card).getByRole('button', { name: `Delete ${named('bb_rdl')}` }),
+    );
+
+    await waitFor(async () =>
+      expect(await orderInDb()).toEqual(['bb_back_squat', 'sm_calf_raise']),
+    );
+  });
+});

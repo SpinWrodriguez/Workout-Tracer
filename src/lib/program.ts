@@ -492,23 +492,37 @@ export async function updateBlockExercise(
 }
 
 /** Moves one exercise up or down within its day. */
-export async function moveBlockExercise(
+/**
+ * Writes a whole new order for one workout's exercises.
+ *
+ * Takes the order rather than a direction because the list is dragged now:
+ * a drag knows where the row ended up, not how many places it travelled.
+ * Ids the workout does not contain are ignored, and any it holds that the
+ * caller left out keep their existing order at the end — a reorder should
+ * never be able to lose an exercise.
+ */
+export async function reorderBlockExercises(
   blockId: string,
   slot: DaySlot,
-  exerciseId: string,
-  direction: -1 | 1,
+  orderedIds: string[],
 ): Promise<void> {
   const rows = entriesForSlot(
     await db.blockExercise.where('blockId').equals(blockId).toArray(),
     slot,
   );
-  const index = rows.findIndex((row) => row.exerciseId === exerciseId);
-  const target = index + direction;
-  if (index < 0 || target < 0 || target >= rows.length) return;
-  const reordered = [...rows];
-  const [moved] = reordered.splice(index, 1);
-  reordered.splice(target, 0, moved as BlockExercise);
-  await db.blockExercise.bulkPut(reordered.map((row, i) => ({ ...row, order: i })));
+  const byId = new Map(rows.map((row) => [row.exerciseId, row]));
+  const ordered: BlockExercise[] = [];
+  for (const id of orderedIds) {
+    const row = byId.get(id);
+    if (row) {
+      ordered.push(row);
+      byId.delete(id);
+    }
+  }
+  // Whatever the caller did not mention, in the order it already had.
+  for (const row of rows) if (byId.has(row.exerciseId)) ordered.push(row);
+
+  await db.blockExercise.bulkPut(ordered.map((row, i) => ({ ...row, order: i })));
 }
 
 /** Removes a whole day: its exercises and its place in the week. */

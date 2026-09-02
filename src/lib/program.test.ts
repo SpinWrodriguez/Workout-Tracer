@@ -21,7 +21,7 @@ import {
   normaliseSchedule,
   readBlockPlan,
   readSchedules,
-  moveBlockExercise,
+  reorderBlockExercises,
   removeBlockExercise,
   slotForDate,
   slotsByWeekday,
@@ -322,20 +322,39 @@ describe('hand-editing a block', () => {
     expect(rows.map((r) => r.order)).toEqual([0, 1]);
   });
 
-  it('reorders within the day and stops at the ends', async () => {
+  it('writes whatever order it is handed', async () => {
     for (const [i, id] of ['bb_back_squat', 'bb_bench_press', 'bb_rdl'].entries()) {
       await db.blockExercise.put(base('A', id, i));
     }
-    await moveBlockExercise('block_1', 'A', 'bb_rdl', -1);
-    expect(entriesForSlot(await db.blockExercise.toArray(), 'A').map((r) => r.exerciseId)).toEqual([
-      'bb_back_squat',
+    /* A drag knows where the row landed, not how many places it travelled, so
+       this takes the order rather than a direction. */
+    await reorderBlockExercises('block_1', 'A', ['bb_rdl', 'bb_back_squat', 'bb_bench_press']);
+    const rows = entriesForSlot(await db.blockExercise.toArray(), 'A');
+    expect(rows.map((r) => r.exerciseId)).toEqual([
       'bb_rdl',
+      'bb_back_squat',
       'bb_bench_press',
     ]);
-    await moveBlockExercise('block_1', 'A', 'bb_back_squat', -1);
-    expect(entriesForSlot(await db.blockExercise.toArray(), 'A')[0]?.exerciseId).toBe(
-      'bb_back_squat',
-    );
+    expect(rows.map((r) => r.order)).toEqual([0, 1, 2]);
+  });
+
+  it('cannot lose an exercise the caller forgot to mention', async () => {
+    for (const [i, id] of ['bb_back_squat', 'bb_bench_press', 'bb_rdl'].entries()) {
+      await db.blockExercise.put(base('A', id, i));
+    }
+    // A stale list, from a render that predates an added exercise.
+    await reorderBlockExercises('block_1', 'A', ['bb_rdl', 'bb_back_squat']);
+    expect(
+      entriesForSlot(await db.blockExercise.toArray(), 'A').map((r) => r.exerciseId),
+    ).toEqual(['bb_rdl', 'bb_back_squat', 'bb_bench_press']);
+  });
+
+  it('ignores ids the workout does not hold', async () => {
+    await db.blockExercise.put(base('A', 'bb_back_squat', 0));
+    await reorderBlockExercises('block_1', 'A', ['not_an_exercise', 'bb_back_squat']);
+    expect(
+      entriesForSlot(await db.blockExercise.toArray(), 'A').map((r) => r.exerciseId),
+    ).toEqual(['bb_back_squat']);
   });
 
   it('keeps the rep range from crossing over', async () => {

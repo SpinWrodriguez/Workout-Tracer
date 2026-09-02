@@ -28,7 +28,7 @@ import {
   clearDaySlot,
   definedSlotsOf,
   entriesForSlot,
-  moveBlockExercise,
+  reorderBlockExercises,
   planDate,
   readPlans,
   readSchedules,
@@ -1114,8 +1114,8 @@ export function ProgramScreen({
             onRemove={(exerciseId) => {
               if (block) void removeBlockExercise(block.id, slot, exerciseId);
             }}
-            onMove={(exerciseId, direction) => {
-              if (block) void moveBlockExercise(block.id, slot, exerciseId, direction);
+            onReorder={(orderedIds) => {
+              if (block) void reorderBlockExercises(block.id, slot, orderedIds);
             }}
             onUpdate={(entry, patch) => void updateBlockExercise(entry, patch)}
             generated={scheduled?.generated === true}
