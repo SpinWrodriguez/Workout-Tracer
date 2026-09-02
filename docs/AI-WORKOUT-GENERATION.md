@@ -278,6 +278,29 @@ something the lifter is allowed to overrule anyway.
 
 ---
 
+## 5a. The schema the API will actually accept
+
+Structured outputs take a SUBSET of JSON Schema, and a rejected keyword fails
+the whole request with a 400 before the model runs. Out: `minLength`/`maxLength`,
+`minimum`/`maximum`/`multipleOf`, `minItems`/`maxItems`, `pattern`, recursive
+schemas, and `additionalProperties` set to anything but `false` — which is
+itself required on every object.
+
+The official SDKs strip those and check them client-side. This app builds the
+request body by hand so the key can live in an Edge Function, so nothing strips
+them: the schema shipped with `maxLength`, `minimum`, `maxItems` and an extra
+`name` key on `output_config.format`, and every call 400'd from the first one.
+
+Nothing caught it because every suite stubs the transport, which makes a schema
+the API refuses look identical to one it accepts. `aiWorkout.test.ts` now walks
+the schema for rejected keywords and asserts `output_config.format` carries
+`type` and `schema` and nothing else. Any hand-built request body needs that
+kind of guard; a stub cannot provide one.
+
+The bounds those keywords expressed live in `parseWorkout`, which is where they
+belonged anyway — a schema cannot say that a plank is measured in seconds or
+that a Turkish get-up is 1-5 reps.
+
 ## 6. Request settings
 
 Model `claude-sonnet-5`, adaptive thinking, and the caching breakpoint after the

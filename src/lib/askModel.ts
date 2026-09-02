@@ -61,7 +61,6 @@ export interface AskOptions {
   user: string;
   /** JSON schema the reply is constrained to. */
   schema: unknown;
-  schemaName: string;
   /**
    * Prior turns, for the validation retry. The assistant's rejected reply and
    * the violations it has to fix, so it repairs rather than starts over.
@@ -136,7 +135,12 @@ export function buildRequest(options: AskOptions): Record<string, unknown> {
     thinking: { type: 'adaptive' },
     output_config: {
       effort: 'medium',
-      format: { type: 'json_schema', name: options.schemaName, schema: options.schema },
+      /*
+       * type and schema, and nothing else. An extra key here — a `name` for the
+       * schema, which seemed harmless — is an unknown field, and the Messages
+       * API rejects the whole request rather than ignoring it.
+       */
+      format: { type: 'json_schema', schema: options.schema },
     },
     system: [{ type: 'text', text: options.system, cache_control: { type: 'ephemeral' } }],
     messages: [

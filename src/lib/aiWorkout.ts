@@ -156,35 +156,56 @@ export function buildUser(goal: string, existing: ExistingWorkout[]): string {
  * unloadable_weight violations when the app already knows every weight the
  * plates can make.
  */
+/*
+ * Structured outputs accept a SUBSET of JSON Schema, and the rejected keywords
+ * fail the whole request with a 400 before the model ever runs. Out: string
+ * constraints (minLength/maxLength), numeric constraints (minimum/maximum),
+ * and array-length constraints (minItems/maxItems). In: the basic types, enum,
+ * const, anyOf/allOf, $ref, the named string formats, and
+ * additionalProperties: false — which is REQUIRED on every object here.
+ *
+ * The Python and TypeScript SDKs strip the unsupported ones for you and check
+ * them client-side. This app builds the request by hand so the key can stay in
+ * an Edge Function, so nothing stripped them and every call 400'd. Nothing
+ * caught it either: the suites stub the transport, so a schema the real API
+ * refuses looks identical to one it accepts. schemaIsSupported() in
+ * aiWorkout.test.ts is the guard that would have.
+ *
+ * Every bound those keywords used to express is enforced in parseWorkout
+ * instead, which is where it belonged anyway — a schema cannot say that a
+ * plank is measured in seconds or that a get-up is 1-5 reps.
+ */
 export const WORKOUT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   required: ['name', 'focus', 'intensity', 'why', 'exercises'],
   properties: {
-    name: { type: 'string', maxLength: 40 },
+    name: { type: 'string' },
     focus: { enum: WORKOUT_FOCUSES },
     intensity: { enum: ['heavy', 'light'] },
-    why: { type: 'string', maxLength: 300 },
+    why: { type: 'string' },
     exercises: {
       type: 'array',
-      minItems: 3,
-      maxItems: 7,
       items: {
         type: 'object',
         additionalProperties: false,
         required: ['exerciseId', 'sets', 'repLow', 'repHigh'],
         properties: {
           exerciseId: { type: 'string' },
-          sets: { type: 'integer', minimum: 1, maximum: 5 },
-          // The real bound is per-exercise and a schema cannot express it;
-          // workingRepRange clamps to the exercise's own repMin/repMax.
-          repLow: { type: 'integer', minimum: 1, maximum: 120 },
-          repHigh: { type: 'integer', minimum: 1, maximum: 120 },
+          sets: { type: 'integer' },
+          repLow: { type: 'integer' },
+          repHigh: { type: 'integer' },
         },
       },
     },
   },
 } as const;
+
+/** What the schema used to say, now enforced where it can actually be checked. */
+export const NAME_MAX = 40;
+export const MIN_EXERCISES = 3;
+export const MAX_EXERCISES = 7;
+export const MAX_SETS = 5;
 
 export const SCHEMA_NAME = 'workout';
 
@@ -265,7 +286,7 @@ export function parseWorkout(
       blockId,
       exerciseId,
       daySlot: slot,
-      targetSets: Number.isFinite(sets) ? Math.min(5, Math.max(1, Math.round(sets))) : 3,
+      targetSets: Number.isFinite(sets) ? Math.min(MAX_SETS, Math.max(1, Math.round(sets))) : 3,
       repRangeLow: range.low,
       repRangeHigh: range.high,
       // The model's ordering is preserved: it was asked to order the session.
@@ -278,7 +299,10 @@ export function parseWorkout(
     return { ok: false, failure: { kind: 'bad_shape', detail: 'no usable exercises' } };
   }
 
-  const name = typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : undefined;
+  /* Clamped here because the schema is not allowed to say it. A 40-character
+     cap is a fact about the card it appears on, not about the model. */
+  const trimmedName = typeof payload.name === 'string' ? payload.name.trim() : '';
+  const name = trimmedName ? trimmedName.slice(0, NAME_MAX) : undefined;
   const why = typeof payload.why === 'string' && payload.why.trim() ? payload.why.trim() : undefined;
   return { ok: true, workout: { name, focus, intensity, why, exercises } };
 }
@@ -344,7 +368,6 @@ export async function generateAiWorkout(input: GenerateAiWorkoutInput): Promise<
       system,
       user,
       schema: WORKOUT_SCHEMA,
-      schemaName: SCHEMA_NAME,
       priorTurns,
       signal: input.signal,
     });

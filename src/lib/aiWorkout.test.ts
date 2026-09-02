@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EXERCISES } from '../db/seed/exercises';
 import {
+  MAX_SETS,
+  NAME_MAX,
   SYSTEM_PROMPT,
   WORKOUT_SCHEMA,
   buildSystem,
@@ -38,6 +40,84 @@ const asker = (...replies: string[]) => {
   });
   return { ask, calls };
 };
+
+/*
+ * Structured outputs accept a subset of JSON Schema, and a rejected keyword
+ * fails the whole request with a 400 before the model runs. The SDKs strip
+ * them; this app builds the body by hand so the key can live server-side, so
+ * nothing does — and every suite stubs the transport, which makes a schema the
+ * real API refuses look exactly like one it accepts. This is the guard that
+ * closes that gap.
+ */
+const UNSUPPORTED = [
+  'minLength',
+  'maxLength',
+  'minimum',
+  'maximum',
+  'exclusiveMinimum',
+  'exclusiveMaximum',
+  'multipleOf',
+  'minItems',
+  'maxItems',
+  'uniqueItems',
+  'minProperties',
+  'maxProperties',
+  'pattern',
+];
+
+/** Every keyword used anywhere in a schema, at any depth. */
+function keywordsIn(node: unknown, found = new Set<string>()): Set<string> {
+  if (Array.isArray(node)) {
+    for (const item of node) keywordsIn(item, found);
+    return found;
+  }
+  if (typeof node !== 'object' || node === null) return found;
+  for (const [key, value] of Object.entries(node)) {
+    found.add(key);
+    keywordsIn(value, found);
+  }
+  return found;
+}
+
+/** Objects must say additionalProperties: false, at every depth. */
+function objectsClosed(node: unknown): boolean {
+  if (Array.isArray(node)) return node.every(objectsClosed);
+  if (typeof node !== 'object' || node === null) return true;
+  const record = node as Record<string, unknown>;
+  if (record.type === 'object' && record.additionalProperties !== false) return false;
+  return Object.values(record).every(objectsClosed);
+}
+
+describe('the schema the API will actually accept', () => {
+  it('uses no keyword structured outputs rejects', () => {
+    const used = keywordsIn(WORKOUT_SCHEMA);
+    expect([...used].filter((key) => UNSUPPORTED.includes(key))).toEqual([]);
+  });
+
+  it('closes every object, which structured outputs require', () => {
+    expect(objectsClosed(WORKOUT_SCHEMA)).toBe(true);
+  });
+
+  it('enforces in code the bounds the schema is not allowed to state', () => {
+    const byId = new Map(EXERCISES.map((exercise) => [exercise.id, exercise]));
+    const reply = JSON.stringify({
+      name: 'A name far longer than the forty characters a card can show',
+      focus: 'lower',
+      intensity: 'heavy',
+      why: 'because',
+      exercises: [{ exerciseId: 'bb_back_squat', sets: 99, repLow: 1, repHigh: 900 }],
+    });
+
+    const parsed = parseWorkout(reply, 'b1', 'A', byId);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.workout.name?.length).toBe(NAME_MAX);
+    expect(parsed.workout.exercises[0]?.targetSets).toBe(MAX_SETS);
+    // Clamped to the exercise's own bounds, not to a global range.
+    const squat = byId.get('bb_back_squat');
+    expect(parsed.workout.exercises[0]?.repRangeHigh).toBeLessThanOrEqual(squat?.repMax ?? 0);
+  });
+});
 
 describe('what the model is shown', () => {
   it('offers the whole library except warm-up movement', () => {
@@ -81,7 +161,6 @@ describe('what the model is shown', () => {
       system: buildSystem(EXERCISES),
       user: buildUser('tired today', []),
       schema: WORKOUT_SCHEMA,
-      schemaName: 'workout',
     });
     expect(request.model).toBe(MODEL);
     const system = request.system as { cache_control?: unknown }[];

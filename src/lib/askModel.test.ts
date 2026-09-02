@@ -40,7 +40,6 @@ const options = {
   system: 'rules and library',
   user: 'a goal',
   schema: { type: 'object' },
-  schemaName: 'workout',
 };
 
 /*
@@ -195,9 +194,11 @@ describe('the model the app asks for', () => {
     const body = buildRequest(options);
     expect(body.thinking).toEqual({ type: 'adaptive' });
     expect(JSON.stringify(body)).not.toContain('budget_tokens');
-    const output = body.output_config as { format?: { type?: string; name?: string } };
+    const output = body.output_config as { format?: Record<string, unknown> };
     expect(output.format?.type).toBe('json_schema');
-    expect(output.format?.name).toBe('workout');
+    /* type and schema only. An unknown field in output_config.format fails the
+       whole request, which is what a hand-built body has to get exactly right. */
+    expect(Object.keys(output.format ?? {}).sort()).toEqual(['schema', 'type']);
   });
 
   it('agrees with the relay on the API version, which is not negotiated', () => {
