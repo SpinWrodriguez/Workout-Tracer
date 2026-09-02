@@ -200,9 +200,25 @@ describe('what the coach is sent', () => {
   it('keeps the always-sent context small enough not to think about', async () => {
     const { sent } = await ask([says('ok')]);
     const system = sent[0]?.system[0]?.text ?? '';
-    /* Roughly four characters to a token, so this is about 1,300 tokens of
-       rules and context on an empty database — a fraction of one library. */
+    /* Roughly four characters to a token, so this is about 1,200 tokens of
+       rules and context on an empty database — a fraction of one library, and
+       cached, so a second question in the same minute reads it back at a
+       tenth of the price. */
     expect(system.length).toBeLessThan(5200);
+  });
+
+  it('licenses general training knowledge, not just a read of the data', async () => {
+    const { sent } = await ask([says('ok')]);
+    const system = sent[0]?.system[0]?.text ?? '';
+    /* Found by using it: asked what a good per-muscle set range was, it said
+       the app does not hand it one and offered to flag gaps instead. The rule
+       against inventing numbers ABOUT THEIR TRAINING had gagged the general
+       knowledge that is most of why anyone asks. */
+    expect(system).toMatch(/General training knowledge is yours to give/);
+    expect(system).toMatch(/Declining to answer a training question/);
+    /* And it had learnt to punt to the Program screen, which is a real
+       boundary for writing a workout and not a reason to dodge a question. */
+    expect(system).toMatch(/Never use the Program screen, or anything else in the app, as a reason not to answer/);
   });
 
   it('offers the three tools and no output schema', async () => {
