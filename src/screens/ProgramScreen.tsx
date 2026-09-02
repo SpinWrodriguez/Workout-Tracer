@@ -39,6 +39,7 @@ import {
   updateBlockExercise,
   writePlan,
   writeSchedule,
+  type BlockSchedule,
 } from '../lib/program';
 import { DayEditor } from '../components/DayEditor';
 import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
@@ -48,7 +49,13 @@ import {
   type WeekPlanDay,
 } from '../components/WeekPlanSheet';
 import { isModelAvailable } from '../lib/askModel';
-import { generateAiWorkout, templateForAiWorkout, type AiWorkout } from '../lib/aiWorkout';
+import {
+  generateAiWorkout,
+  libraryForFocuses,
+  templateForAiWorkout,
+  type AiWorkout,
+} from '../lib/aiWorkout';
+import { generateAiWeek, type WeekSlotRequest } from '../lib/aiWeek';
 import { briefPayload, buildBrief, undertrained, type DayConstraints } from '../lib/aiBrief';
 import { readAiInstructions, writeLastModelCall } from '../db/settings';
 import { DaySlotCard } from '../components/DaySlotCard';
@@ -580,13 +587,21 @@ export function ProgramScreen({
       intensity: want.intensity ?? workout.intensity,
     });
 
+    /*
+     * Only what this focus allows. The prompt already forbids the rest, so
+     * sending it was four thousand tokens an ask of library the model was told
+     * to ignore. With no chosen focus the model decides for itself and needs
+     * the whole list.
+     */
+    const available = libraryForFocuses(exercises, want.focus ? [want.focus] : []);
+
     const outcome = await generateAiWorkout({
       blockId: block.id,
       slot,
       user: JSON.stringify(
         briefPayload(brief, { goal: want.goal, instructions, undertrained: short, existing, constraints }),
       ),
-      exercises,
+      exercises: available,
       validate: (workout: AiWorkout) => {
         const shaped = requiredShape(workout);
         const template = templateForAiWorkout(shaped, slot, sessionMinutes, placed);
@@ -717,28 +732,188 @@ export function ProgramScreen({
    * are each individually useful, and throwing away three good sessions
    * because the fourth failed would be the wrong trade.
    */
+  /**
+   * A week, in one request.
+   *
+   * It used to be one call per day, each seeing the ones before it. That cost
+   * four prefills of the exercise library and four passes of thinking for a
+   * four-day week — about fifty seconds. One call prefills once, thinks once,
+   * and sees every day at the same time, which is better for variety than
+   * seeing only the earlier ones.
+   *
+   * The model still never sees a date. It fills the numbered slots below, and
+   * the mapping from number back to date never leaves this function.
+   */
   const askForWeek = async (days: PlannedWeekDay[], note: string) => {
     if (!block || asking || days.length === 0) return;
     setAsking(true);
     setAskError(undefined);
     setBuilding({ done: 0, total: days.length });
     try {
-      for (const [index, day] of days.entries()) {
-        setBuilding({ done: index, total: days.length });
-        const outcome = await askOneWorkout({
-          goal: note,
-          forDate: day.date,
-          focus: day.focus,
-          intensity: day.intensity,
-        });
-        if (!outcome.ok) {
-          setAskError(
-            `${WEEKDAY_LABEL[weekdayOf(day.date)]}: ${outcome.reason}` +
-              (index > 0 ? ` The ${index} before it were kept.` : ''),
-          );
-          return;
-        }
+      const current = await db.blockExercise.where('blockId').equals(block.id).toArray();
+      const stored = (await readSchedules())[block.id] ?? {};
+      const existing = definedSlotsOf(stored, current).map((other) => ({
+        slot: other,
+        name: labelFor(other),
+        focus: stored[other]?.focus,
+        intensity: (stored[other]?.intensity ?? 'heavy') as Intensity,
+        exerciseIds: current.filter((row) => row.daySlot === other).map((row) => row.exerciseId),
+      }));
+
+      /* Enough ids for every day, taken before any writing so the whole week
+         lands on slots that were free when it was asked for. */
+      const free = DAY_SLOTS.filter((candidate) => !definedSlotsOf(stored, current).includes(candidate));
+      if (free.length < days.length) {
+        setAskError(
+          `Only ${free.length} workout ${free.length === 1 ? 'slot' : 'slots'} left in this block, and you asked for ${days.length}.`,
+        );
+        return;
       }
+
+      const golfWeekdays = training.golfWeekdays as never as Weekday[];
+      /* Position in the request, 1-based. The only address the model gets. */
+      const requests: WeekSlotRequest[] = days.map((day, index) => {
+        const constraints: string[] = [];
+        if (!gripAllowed(weekdayOf(day.date), golfWeekdays)) {
+          constraints.push('Do not use any exercise with gripLoad "high".');
+        }
+        if (day.intensity === 'light') {
+          constraints.push('Do not use any exercise with spinalLoad "high".');
+          constraints.push('This is a light session: two working sets an exercise, higher reps.');
+        }
+        return { slot: index + 1, focus: day.focus, intensity: day.intensity, constraints };
+      });
+
+      const weekFrom = weekStart(days[0]?.date ?? todayIso());
+      const weekSessions = await db.session
+        .where('date')
+        .between(weekFrom, shiftIso(weekFrom, 7), true, false)
+        .toArray();
+      const sessionIds = new Set(weekSessions.map((session) => session.id));
+      const weekLogs = (await db.setLog.toArray()).filter((log) => sessionIds.has(log.sessionId));
+      const instructions = await readAiInstructions();
+      const short = undertrained(weekLogs, byId);
+      const brief = buildBrief({ goal: note, instructions, undertrained: short, existing });
+
+      const outcome = await generateAiWeek({
+        slots: requests,
+        exercises: libraryForFocuses(exercises, days.map((day) => day.focus)),
+        // A week is several workouts in one reply, so the single-workout
+        // ceiling would truncate it mid-JSON.
+        maxTokens: 16000,
+        user: JSON.stringify({
+          ...briefPayload(brief, { goal: note, instructions, undertrained: short, existing }),
+          slots: requests,
+        }),
+        validate: (workout) => {
+          const day = days[workout.slot - 1];
+          if (!day) return [];
+          const template = templateDayFor({
+            slot: free[workout.slot - 1] as DaySlot,
+            weekday: weekdayOf(day.date),
+            intensity: workout.intensity,
+            focus: workout.focus,
+            minutesPerSession: sessionMinutes,
+            golfWeekdays,
+          });
+          return validateBlock(
+            {
+              days: [
+                {
+                  slot: free[workout.slot - 1] as DaySlot,
+                  weekday: weekdayOf(day.date),
+                  exercises: workout.exercises.map((entry) => ({
+                    ...entry,
+                    blockId: block.id,
+                    daySlot: free[workout.slot - 1] as DaySlot,
+                  })),
+                },
+              ],
+            },
+            {
+              exercisesById: byId,
+              golfWeekdays: training.golfWeekdays as never,
+              weeklySetTarget: training.weeklySetTarget,
+              sessionBudgetMinutes: sessionMinutes,
+              hasHistory: hasHistory ?? false,
+              laddersFor: (exercise) => ladderFor(exercise, inventory),
+              template: [template],
+              nameFor: () => workout.name ?? `Slot ${workout.slot}`,
+            },
+          ).filter((violation) => severityOf(violation.code) === 'problem');
+        },
+      });
+
+      await writeLastModelCall({
+        at: new Date().toISOString(),
+        attempts: outcome.attempts,
+        ms: outcome.cost.ms,
+        inputTokens: outcome.cost.inputTokens,
+        outputTokens: outcome.cost.outputTokens,
+        cacheReadTokens: outcome.cost.cacheReadTokens,
+        cacheWriteTokens: outcome.cost.cacheWriteTokens,
+      });
+
+      if (!outcome.ok) {
+        setAskError(outcome.reason);
+        return;
+      }
+
+      /* Written together: a half-placed week is worse than none, and the whole
+         reply is already in hand by the time we get here. */
+      const schedule: BlockSchedule = { ...stored };
+      const plans = (await readPlans())[block.id] ?? {};
+      let plan = plans;
+      for (const workout of outcome.workouts) {
+        const slot = free[workout.slot - 1] as DaySlot;
+        const day = days[workout.slot - 1];
+        if (!day) continue;
+        const template = templateDayFor({
+          slot,
+          weekday: weekdayOf(day.date),
+          intensity: workout.intensity,
+          focus: workout.focus,
+          minutesPerSession: sessionMinutes,
+          golfWeekdays,
+        });
+        await db.blockExercise.bulkPut(
+          workout.exercises.map((entry) => ({ ...entry, blockId: block.id, daySlot: slot })),
+        );
+        schedule[slot] = {
+          intensity: workout.intensity,
+          focus: workout.focus,
+          variant: 0,
+          effortCue: template.effortCue,
+          generated: true,
+          name:
+            workout.name ??
+            describeDay(
+              workout.exercises
+                .map((entry) => byId.get(entry.exerciseId))
+                .filter((exercise): exercise is Exercise => exercise !== undefined),
+              workout.intensity,
+            ),
+        };
+        plan = planDate(plan, schedule, weekDatesOf(day.date), slot, day.date);
+        setBuilding({ done: workout.slot, total: days.length });
+      }
+      await writeSchedule(block.id, schedule);
+      await writePlan(block.id, plan);
+
+      if (outcome.shortfall.length > 0) {
+        /* Some days landed and some did not. Saying so beats closing the sheet
+           on a week that is quietly short a session. */
+        const which = outcome.shortfall
+          .map((slot) => days[slot - 1]?.date)
+          .filter((date): date is string => date !== undefined)
+          .map((date) => WEEKDAY_LABEL[weekdayOf(date)])
+          .join(', ');
+        setAskError(
+          `Built ${outcome.workouts.length} of ${days.length}. ${which} did not pass the rules: ${outcome.reason ?? ''}`,
+        );
+        return;
+      }
+
       setPlanningWeek(false);
     } catch (cause) {
       setAskError(cause instanceof Error ? cause.message : String(cause));

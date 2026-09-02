@@ -27,20 +27,23 @@ const dayOfThisWeek = (offset: number) => shiftIso(weekStart(todayIso()), offset
  * cooperating model would send and validation is exercised for real.
  */
 function stubModel() {
-  const asked: { focus?: WorkoutFocus; constraints: string[] }[] = [];
+  const asked: { slots: { slot: number; focus: string; constraints: string[] }[] }[] = [];
+  /** How many times the API was called. One week should be one call. */
+  let calls = 0;
 
-  const pickFor = (focus: WorkoutFocus, noHighGrip: boolean) => {
-    const wanted = new Set<string>(patternsForFocus(focus));
+  const pickFor = (focus: string, noHighGrip: boolean, avoid: Set<string>) => {
+    const wanted = new Set<string>(patternsForFocus(focus as WorkoutFocus));
     return [...exercisesById.values()]
       .filter(
         (exercise) =>
           wanted.has(exercise.pattern) &&
           !exercise.isMobility &&
           exercise.skillLevel !== 'advanced' &&
+          !avoid.has(exercise.id) &&
           (!noHighGrip || exercise.gripLoad !== 'high'),
       )
       /* One heavy spinal lift at most: two in a session is a lower-back
-         stacking bug and the validator would rightly reject the reply. */
+         stacking bug and the validator would rightly reject it. */
       .filter((exercise, index, all) =>
         exercise.spinalLoad !== 'high'
           ? true
@@ -50,42 +53,47 @@ function stubModel() {
   };
 
   const fetchStub = vi.fn(async (_url: string, init?: RequestInit) => {
-    const body = JSON.parse(String(init?.body)) as {
-      messages: { content: string }[];
-    };
+    calls += 1;
+    const body = JSON.parse(String(init?.body)) as { messages: { content: string }[] };
     const sent = JSON.parse(String(body.messages[0]?.content)) as {
-      constraints?: string[];
+      slots?: { slot: number; focus: string; intensity: string; constraints: string[] }[];
     };
-    const constraints = sent.constraints ?? [];
-    const focus = constraints
-      .map((line) => /Return focus "([a-z]+)"/.exec(line)?.[1])
-      .find((match): match is string => match !== undefined) as WorkoutFocus | undefined;
-    const noHighGrip = constraints.some((line) => line.includes('gripLoad "high"'));
-    asked.push({ focus, constraints });
+    const slots = sent.slots ?? [];
+    asked.push({ slots });
 
-    const chosen = pickFor(focus ?? 'full', noHighGrip);
-    const reply = {
-      name: undefined,
-      focus: focus ?? 'full',
-      intensity: constraints.some((line) => line.includes('light session')) ? 'light' : 'heavy',
-      why: 'stub',
-      exercises: chosen.map((exercise) => ({
-        exerciseId: exercise.id,
-        sets: 3,
-        repLow: exercise.repMin,
-        repHigh: exercise.repMax,
-      })),
-    };
+    /* Nothing repeated between slots, which is what seeing the whole week at
+       once is for — and what the prompt asks of a real model. */
+    const used = new Set<string>();
+    const workouts = slots.map((slot) => {
+      const noHighGrip = slot.constraints.some((line) => line.includes('gripLoad "high"'));
+      const chosen = pickFor(slot.focus, noHighGrip, used);
+      for (const exercise of chosen) used.add(exercise.id);
+      return {
+        slot: slot.slot,
+        name: null,
+        focus: slot.focus,
+        intensity: slot.intensity,
+        exercises: chosen.map((exercise) => ({
+          exerciseId: exercise.id,
+          sets: 3,
+          repLow: exercise.repMin,
+          repHigh: exercise.repMax,
+        })),
+      };
+    });
+
     return {
       ok: true,
       status: 200,
-      json: async () => ({ content: [{ type: 'text', text: JSON.stringify(reply) }] }),
+      json: async () => ({
+        content: [{ type: 'text', text: JSON.stringify({ workouts }) }],
+      }),
       text: async () => '',
     } as unknown as Response;
   });
 
   vi.stubGlobal('fetch', fetchStub);
-  return { asked, fetchStub };
+  return { asked, fetchStub, callCount: () => calls };
 }
 
 beforeEach(() => {
@@ -169,13 +177,14 @@ describe('building a week with a model', () => {
     await ui.click(screen.getByRole('button', { name: 'Pull' }));
     await ui.click(screen.getByRole('button', { name: 'Build 1 workout' }));
 
-    await waitFor(async () => expect(Object.keys((await readSchedules())[BLOCK_ID] ?? {})).toHaveLength(1), {
-      timeout: 8000,
-    });
+    await waitFor(
+      async () => expect(Object.keys((await readPlans())[BLOCK_ID] ?? {})).not.toHaveLength(0),
+      { timeout: 8000 },
+    );
 
     // The requirement reached the model as a constraint, not a hint.
-    expect(asked[0]?.focus).toBe('pull');
-    expect(asked[0]?.constraints.join(' ')).toMatch(/light session/);
+    expect(asked[0]?.slots[0]?.focus).toBe('pull');
+    expect(asked[0]?.slots[0]?.constraints.join(' ')).toMatch(/light session/);
     // And what came back is stored as what was asked for.
     const stored = Object.values((await readSchedules())[BLOCK_ID] ?? {})[0];
     expect(stored?.focus).toBe('pull');
@@ -194,11 +203,12 @@ describe('building a week with a model', () => {
     await ui.click(screen.getByRole('button', { name: 'Pull' }));
     await ui.click(screen.getByRole('button', { name: 'Build 1 workout' }));
 
-    await waitFor(async () => expect(await db.blockExercise.count()).toBeGreaterThan(0), {
-      timeout: 8000,
-    });
+    await waitFor(
+      async () => expect(Object.keys((await readPlans())[BLOCK_ID] ?? {})).not.toHaveLength(0),
+      { timeout: 8000 },
+    );
 
-    expect(asked[0]?.constraints.join(' ')).toMatch(/gripLoad "high"/);
+    expect(asked[0]?.slots[0]?.constraints.join(' ')).toMatch(/gripLoad "high"/);
     const rows = await db.blockExercise.toArray();
     const grippy = rows.filter((row) => exercisesById.get(row.exerciseId)?.gripLoad === 'high');
     expect(grippy).toEqual([]);
@@ -214,36 +224,109 @@ describe('building a week with a model', () => {
     expect(button.hasAttribute('disabled')).toBe(true);
   }, 20000);
 
-  it('keeps the workouts it already built when a later day fails', async () => {
+  it('asks once for the whole week, however many days it is', async () => {
+    /*
+     * The point of the rewrite. One call per day meant four prefills of the
+     * exercise library and four passes of thinking for a four-day week; the
+     * lifter's wait scaled with the size of their week for no reason.
+     */
+    const { callCount, asked } = stubModel();
+    const { ui } = await openProgram();
+    await planDays(ui, [0, 2, 3]);
+
+    await ui.click(screen.getByRole('button', { name: 'Build 3 workouts' }));
+
+    await waitFor(
+      async () => {
+        const plan = (await readPlans())[BLOCK_ID] ?? {};
+        expect(Object.values(plan).filter((slot) => slot !== null)).toHaveLength(3);
+      },
+      { timeout: 8000 },
+    );
+
+    expect(callCount()).toBe(1);
+    // All three slots in the one request, numbered rather than dated.
+    expect(asked[0]?.slots.map((slot) => slot.slot)).toEqual([1, 2, 3]);
+  }, 20000);
+
+  it('does not repeat exercises across the week', async () => {
+    /* Seeing every day at once is what one call buys, beyond the speed: the
+       day-by-day version only ever saw the days before it. */
+    stubModel();
+    const { ui } = await openProgram();
+    await planDays(ui, [0, 2, 3]);
+    await ui.click(screen.getByRole('button', { name: 'Build 3 workouts' }));
+
+    /*
+     * Waited on the PLAN, which is the last of the three writes. Waiting on
+     * blockExercise let the test finish while writeSchedule and writePlan were
+     * still in flight — they then landed in the NEXT test's freshly cleared
+     * database and broke it. Wait on what finishes last.
+     */
+    await waitFor(
+      async () => {
+        const plan = (await readPlans())[BLOCK_ID] ?? {};
+        expect(Object.values(plan).filter((slot) => slot !== null)).toHaveLength(3);
+      },
+      { timeout: 8000 },
+    );
+
+    const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
+    const ids = rows.map((row) => row.exerciseId);
+    expect(new Set(ids).size).toBe(ids.length);
+  }, 20000);
+
+  it('keeps the days that passed when one of them cannot', async () => {
+    /*
+     * The day-by-day version kept the first three when the fourth failed, and
+     * the one-call rewrite nearly lost that. Three good sessions are not worth
+     * discarding because the fourth would not pass.
+     */
     const { fetchStub } = stubModel();
-    let calls = 0;
     const original = fetchStub.getMockImplementation();
     fetchStub.mockImplementation(async (url: string, init?: RequestInit) => {
-      calls += 1;
-      if (calls > 1) {
-        return { ok: false, status: 500, text: async () => 'upstream exploded' } as unknown as Response;
+      const response = (await original?.(url, init)) as Response;
+      const payload = (await response.json()) as {
+        content: { text: string }[];
+      };
+      const parsed = JSON.parse(payload.content[0]?.text ?? '{}') as {
+        workouts: { slot: number; exercises: unknown[] }[];
+      };
+      /* Slot 2 always comes back stacking two heavy spinal lifts, which the
+         validator rejects every time — so it exhausts its attempts while
+         slot 1 passes on the first. */
+      for (const workout of parsed.workouts) {
+        if (workout.slot !== 2) continue;
+        workout.exercises = [
+          { exerciseId: 'bb_back_squat', sets: 3, repLow: 6, repHigh: 10 },
+          { exerciseId: 'bb_front_squat', sets: 3, repLow: 6, repHigh: 10 },
+        ];
       }
-      return (await original?.(url, init)) as Response;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [{ type: 'text', text: JSON.stringify(parsed) }],
+        }),
+        text: async () => '',
+      } as unknown as Response;
     });
 
     const { ui } = await openProgram();
     await planDays(ui, [0, 2]);
     await ui.click(screen.getByRole('button', { name: 'Build 2 workouts' }));
 
-    /* Three good sessions are not worth throwing away because a fourth failed,
-       so the run stops and says where. */
-    const message = await screen.findByText(/before it were kept|upstream|failed/i, {}, { timeout: 8000 });
+    const message = await screen.findByText(/Built 1 of 2/i, {}, { timeout: 12000 });
     expect(message).toBeTruthy();
 
+    // The day that worked is on the calendar, with its exercises.
     const plan = (await readPlans())[BLOCK_ID] ?? {};
-    const monday = plan[dayOfThisWeek(0)];
-    expect(monday).toBeTruthy();
+    expect(plan[dayOfThisWeek(0)]).toBeTruthy();
     expect(plan[dayOfThisWeek(2)] ?? null).toBeNull();
-    // Kept means kept: the exercises are still there, not just the placement.
-    const kept = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
-    expect(kept.filter((row) => row.daySlot === monday).length).toBeGreaterThan(0);
-    expect((await readSchedules())[BLOCK_ID]?.[monday as 'A']?.generated).toBe(true);
-  }, 20000);
+    const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.daySlot === plan[dayOfThisWeek(0)])).toBe(true);
+  }, 30000);
 
   it('replaces what was on a day rather than double-booking it', async () => {
     stubModel();

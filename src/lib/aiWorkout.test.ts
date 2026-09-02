@@ -7,12 +7,14 @@ import {
   WORKOUT_SCHEMA,
   buildSystem,
   buildUser,
+  libraryForFocuses,
   generateAiWorkout,
   libraryFor,
   parseWorkout,
   type AiWorkout,
 } from './aiWorkout';
 import { buildRequest, MODEL } from './askModel';
+import { patternsForFocus } from './weekTemplate';
 import type { Violation } from './blockValidation';
 
 const byId = new Map(EXERCISES.map((e) => [e.id, e]));
@@ -86,6 +88,45 @@ function objectsClosed(node: unknown): boolean {
   if (record.type === 'object' && record.additionalProperties !== false) return false;
   return Object.values(record).every(objectsClosed);
 }
+
+describe('how much library a workout is shown', () => {
+  /*
+   * The prompt forbids anything outside the focus's patterns, so sending the
+   * rest is tokens spent on choices the model is not allowed to make. For a
+   * lower-body day that was 42 rows and about four thousand tokens an ask.
+   */
+  it('shows only the patterns the focus asks for', () => {
+    const lower = libraryForFocuses(EXERCISES, ['lower']);
+    const allowed = new Set(patternsForFocus('lower'));
+
+    expect(lower.length).toBeLessThan(EXERCISES.length);
+    expect(lower.every((exercise) => allowed.has(exercise.pattern))).toBe(true);
+    // The thing a lower day is for is still in there.
+    expect(lower.some((exercise) => exercise.id === 'bb_back_squat')).toBe(true);
+    // And the thing it is not for is gone.
+    expect(lower.some((exercise) => exercise.id === 'bb_bench_press')).toBe(false);
+  });
+
+  it('spans every focus when a week asks for several', () => {
+    const week = libraryForFocuses(EXERCISES, ['lower', 'upper']);
+    expect(week.some((exercise) => exercise.id === 'bb_back_squat')).toBe(true);
+    expect(week.some((exercise) => exercise.id === 'bb_bench_press')).toBe(true);
+    expect(week.length).toBeLessThan(EXERCISES.length);
+  });
+
+  it('shows everything when no focus has been chosen', () => {
+    // A typed goal the model reads for itself: it has to see the whole world.
+    expect(libraryForFocuses(EXERCISES, [])).toHaveLength(EXERCISES.length);
+  });
+
+  it('measurably shrinks what gets sent', () => {
+    const full = buildSystem(EXERCISES).length;
+    const lower = buildSystem(libraryForFocuses(EXERCISES, ['lower'])).length;
+    // Roughly two thirds smaller; asserted loosely so adding exercises to the
+    // library does not fail the suite for the wrong reason.
+    expect(lower).toBeLessThan(full * 0.7);
+  });
+});
 
 describe('the schema the API will actually accept', () => {
   it('uses no keyword structured outputs rejects', () => {

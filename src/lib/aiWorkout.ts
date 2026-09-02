@@ -11,6 +11,7 @@ import {
 } from './blockValidation';
 import {
   WORKOUT_FOCUSES,
+  patternsForFocus,
   templateDayFor,
   workoutTemplate,
   type Intensity,
@@ -102,7 +103,7 @@ export const SYSTEM_PROMPT = `You choose exercises for one workout in a home gym
 
 The gym is a Cortex SM-26 multi-gym, an Olympic barbell, a few kettlebells and bands, in a garage. The lifter is a returning intermediate training two, at best three times a week around weekend golf. Sessions are about 40 minutes.
 
-You will be given the complete exercise library, the workouts already in the current block, and a goal. Return one workout.
+You will be given the exercises available for this workout, the workouts already in the current block, and a goal. Return one workout. The library you are given may be narrowed to what the requested focus allows — treat it as the whole world of choices, not a sample.
 
 The goal may be the lifter's own words, or a summary the app derived from which muscles are short this week — treat both the same way. You may also be given \`standingInstructions\`, which is what the lifter has said they are training for in general, and \`constraints\`, which are absolute: an exercise a constraint rules out is not available, whatever the goal says.
 
@@ -124,6 +125,26 @@ Rules:
 Say nothing about the calendar. You are not told which day this workout falls on, how far it is from a round, or what else is scheduled that week, and any statement you make about spacing, rest days, recovery or being clear of anything will be wrong and will be discarded.
 
 Your answer is a proposal. Every id, rep range, set count and weight is recomputed against the real inventory and the real calendar before anything is shown. If a rule is broken you will be given the specific violations and asked to return the whole workout again.`;
+
+/**
+ * The exercises a workout could actually use.
+ *
+ * The prompt already forbids anything outside the focus's patterns, so sending
+ * the rest of the library is waste: for a lower-body day it was 42 rows and
+ * four thousand tokens the model was told to ignore. An empty list of focuses
+ * means the focus is not decided yet — a typed goal the model reads for itself
+ * — and then it genuinely needs to see everything.
+ *
+ * Mobility rows are dropped later by libraryFor, which is where that belongs.
+ */
+export function libraryForFocuses(exercises: Exercise[], focuses: WorkoutFocus[]): Exercise[] {
+  if (focuses.length === 0) return exercises;
+  const wanted = new Set<MovementPattern>(focuses.flatMap((focus) => patternsForFocus(focus)));
+  const sliced = exercises.filter((exercise) => wanted.has(exercise.pattern));
+  // A focus whose patterns somehow match nothing gets the whole library rather
+  // than an empty one: too few choices is a worse failure than too many.
+  return sliced.length >= MIN_EXERCISES ? sliced : exercises;
+}
 
 export function buildSystem(exercises: Exercise[]): string {
   return `${SYSTEM_PROMPT}\n\nLibrary:\n${JSON.stringify(libraryFor(exercises))}`;
