@@ -169,8 +169,26 @@ export function normaliseActivity(value: unknown, source: Activity['source']): A
   return [...seen.values()];
 }
 
-export function normaliseGoals(value: unknown): Goals[] {
+/** The fields a goals record can carry, apart from the date. */
+const GOAL_FIELDS = ['kcal', 'protein', 'carbs', 'fat', 'focus', 'maintenance'] as const;
+
+/** True for an object that is goals rather than a map of dates to goals. */
+function looksLikeGoals(value: Record<string, unknown>): boolean {
+  return GOAL_FIELDS.some((field) => value[field] !== undefined);
+}
+
+/**
+ * @param asOf the date to file goals under when the file does not say. The
+ * nutrition app keeps ONE goals object and does not date it — its own backups
+ * carry `goals: { kcal: 2200, protein: 170 }` — and everything here is keyed
+ * by date, so an undated object matched no shape and was dropped on the floor:
+ * imported, reported as zero, and gone from the next export this app wrote.
+ * Filing it under the day the file was written is the only date the file
+ * actually attests to.
+ */
+export function normaliseGoals(value: unknown, asOf?: string): Goals[] {
   const out: Goals[] = [];
+  const fallback = asOf && ISO_DATE.test(asOf) ? asOf.slice(0, 10) : undefined;
   const add = (date: string | undefined, raw: unknown) => {
     if (!isRecord(raw)) return;
     const d = str(raw.date) ?? date;
@@ -187,11 +205,15 @@ export function normaliseGoals(value: unknown): Goals[] {
   };
 
   if (Array.isArray(value)) {
-    for (const row of value) add(undefined, row);
+    // An undated row in a list is still the goals it holds.
+    for (const row of value) add(fallback, row);
   } else if (isRecord(value)) {
     if (str(value.date)) {
       // A single "current goals" object rather than a history.
       add(undefined, value);
+    } else if (looksLikeGoals(value)) {
+      // The same, from an app that never wrote the date down.
+      add(fallback, value);
     } else {
       for (const [date, entry] of Object.entries(value)) add(date, entry);
     }
@@ -259,7 +281,9 @@ export async function importBackup(raw: unknown): Promise<ImportReport> {
 
     bodyWeight = normaliseBodyWeight(shared.bodyWeight);
     activity = normaliseActivity(shared.activity, 'manual');
-    goals = normaliseGoals(shared.goals);
+    /* The file's own export date, which is the only date an undated goals
+       object can honestly be filed under. */
+    goals = normaliseGoals(shared.goals, str(raw._exportedAt));
     selections = normaliseNutritionDays(nutrition.selections);
     checked = normaliseNutritionDays(nutrition.checked);
     savedMeals = normaliseSavedMeals(nutrition.savedMeals);
@@ -281,7 +305,7 @@ export async function importBackup(raw: unknown): Promise<ImportReport> {
     // v2 → v3 migration table, spec §10.
     bodyWeight = normaliseBodyWeight(raw.weights);
     activity = normaliseActivity(raw.exercise, 'manual');
-    goals = normaliseGoals(raw.goals);
+    goals = normaliseGoals(raw.goals, str(raw._exportedAt));
     selections = normaliseNutritionDays(raw.selections);
     checked = normaliseNutritionDays(raw.checked);
     savedMeals = normaliseSavedMeals(raw.savedMeals);

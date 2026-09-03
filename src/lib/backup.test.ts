@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../db/db';
 import { seedDatabase } from '../db/seed';
 import { EXERCISES } from '../db/seed/exercises';
-import { buildBackup, importBackup } from './backup';
+import { buildBackup, importBackup, normaliseGoals } from './backup';
 import { loadDraft, saveSession, type SessionDraft } from './sessions';
 
 const exercisesById = new Map(EXERCISES.map((e) => [e.id, e]));
@@ -363,5 +363,54 @@ describe('Phase 1 acceptance — log yesterday from memory', () => {
     const activity = await db.sharedActivity.where('source').equals('workout').toArray();
     expect(activity).toHaveLength(1);
     expect(activity[0]?.date).toBe('2026-08-28');
+  });
+});
+
+describe('goals the nutrition app never dated', () => {
+  /* Its own backups carry one current goals object with no date on it, and
+     everything here is keyed by date — so it matched no shape, imported as
+     zero rows, and was gone from the next export this app wrote. */
+  const UNDATED = { kcal: 2200, protein: 170, carbs: 190, fat: 70, maintenance: 2400 };
+
+  it('files it under the day the file was exported', () => {
+    const rows = normaliseGoals(UNDATED, '2026-08-31T07:12:00+10:00');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ date: '2026-08-31', kcal: 2200, maintenance: 2400 });
+  });
+
+  it('keeps a date the file did write, over the export date', () => {
+    const rows = normaliseGoals({ ...UNDATED, date: '2026-07-01' }, '2026-08-31');
+    expect(rows[0]?.date).toBe('2026-07-01');
+  });
+
+  it('still reads a map of dates to goals as one', () => {
+    const rows = normaliseGoals(
+      { '2026-06-14': { kcal: 2000 }, '2026-07-01': { kcal: 2100 } },
+      '2026-08-31',
+    );
+    expect(rows.map((row) => row.date)).toEqual(['2026-06-14', '2026-07-01']);
+  });
+
+  it('keeps an undated row out of a list, dated the same way', () => {
+    const rows = normaliseGoals([UNDATED], '2026-08-31');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.date).toBe('2026-08-31');
+  });
+
+  it('invents nothing from an empty object, or with no date to use', () => {
+    // What the real backup actually held: nothing.
+    expect(normaliseGoals({}, '2026-08-31')).toEqual([]);
+    expect(normaliseGoals(UNDATED, undefined)).toEqual([]);
+    expect(normaliseGoals(UNDATED, 'not a date')).toEqual([]);
+  });
+
+  it('lands in the database through a whole v2 import', async () => {
+    const report = await importBackup({
+      ...V2_BACKUP,
+      _exportedAt: '2026-08-31T07:12:00+10:00',
+      goals: UNDATED,
+    });
+    expect(report.counts.goals).toBe(1);
+    expect((await db.sharedGoals.get('2026-08-31'))?.protein).toBe(170);
   });
 });

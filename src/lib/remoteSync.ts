@@ -1,5 +1,6 @@
 import { db } from '../db/db';
 import { normaliseActivity, normaliseBodyWeight, normaliseGoals } from './backup';
+import { todayIso } from './format';
 
 /* -------------------------------------------------------------------------- */
 /*  Reading the nutrition app's data straight from Supabase.                  */
@@ -60,7 +61,10 @@ export function extractShared(data: unknown) {
   return {
     bodyWeight: normaliseBodyWeight(blob.weights),
     activity: normaliseActivity(blob.exercise, 'manual'),
-    goals: normaliseGoals(blob.goals),
+    /* Dated today when the blob does not say: the nutrition app keeps one
+       undated goals object, and today is when it was read. Without a date it
+       matched no shape and was silently dropped. */
+    goals: normaliseGoals(blob.goals, todayIso()),
   };
 }
 
