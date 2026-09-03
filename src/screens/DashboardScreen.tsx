@@ -1,12 +1,13 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import type { DaySlot, Exercise } from '../db/types';
+import type { DaySlot, Exercise, MuscleId } from '../db/types';
 import { EM_WEIGHT, friendlyDate, fromIsoDate, kg, rate, todayIso, weekStart } from '../lib/format';
 import { linearTrend, rollingAverage, type DatedPoint } from '../lib/stats';
 import { WEEKDAY_LABEL } from '../lib/golf';
 import { readWeekPlan } from '../lib/weekPlan';
 import { WEEKLY_SET_TARGET } from '../lib/blockValidation';
 import { readTraining } from '../db/settings';
+import { setsPerMuscle } from '../lib/volume';
 import { Card, Empty, Label, Screen } from '../components/Layout';
 import { BodyWeightChart } from '../components/LazyCharts';
 import { ThemeToggleButton } from '../components/ThemePicker';
@@ -15,15 +16,16 @@ import { SyncWarning } from '../components/SyncWarning';
 import { dayLabel, slotFallback } from '../lib/dayLabel';
 
 /**
- * Exercise and muscle targets for a realistic two-session week (spec §1):
- * ~6 exercises a session at 3 sets. Neither is a setting, so both stay here.
+ * Fallbacks for a week with nothing planned in it: a realistic two-session
+ * week (spec §1) at ~6 exercises a session.
  *
- * The set target is NOT here. It became a Settings control — the stepper the
- * generator builds weeks to and the validator enforces — and this ring went on
- * printing the constant, so moving the target to 39 left the dashboard saying
- * 33 and nothing in the app agreeing with anything else.
+ * Only fallbacks. Both rings now take their denominator from the week that is
+ * actually planned, because a constant is a number nobody chose: 12 exercises
+ * was invented for Phase 1, and a real week of three sessions put 18 on the
+ * board — a ring reading "18 of 12" is not measuring anything. The set target
+ * is neither: it is the stepper in Settings.
  */
-const WEEKLY_TARGET = { exercises: 12, muscles: 10 };
+const WEEKLY_FALLBACK = { exercises: 12, muscles: 10 };
 
 /** Height of the ring row, and the diameter of the emphasised centre ring. */
 const RING_ROW = 112;
@@ -67,20 +69,23 @@ export function DashboardScreen({
     const byId = new Map(exercises.map((e) => [e.id, e]));
 
     const exerciseIds = new Set(logs.map((l) => l.exerciseId));
-    const muscles = new Set<string>();
-    for (const id of exerciseIds) {
-      const exercise = byId.get(id);
-      // Primary muscles only here. Weighted primary/secondary volume is the
-      // Phase 4 job; this ring just answers "did I touch it this week".
-      for (const m of exercise?.primaryMuscles ?? []) muscles.add(m);
-    }
+    /*
+     * Every muscle the week actually worked, primary or secondary, through the
+     * app's own definition of volume — a set counts 1 for a muscle it trains
+     * directly and 0.5 for one it trains indirectly, so anything above zero
+     * got work. Counting primaries only reported 10 muscles for a week that
+     * had touched 17, and read as a maxed-out ring because the invented target
+     * was also 10.
+     */
+    const volume = setsPerMuscle(logs, byId);
+    const muscles = (Object.keys(volume) as MuscleId[]).filter((id) => (volume[id] ?? 0) > 0);
 
     return {
       from,
       sessionCount: sessions.length,
       setCount: logs.length,
       exerciseCount: exerciseIds.size,
-      muscleCount: muscles.size,
+      muscleCount: muscles.length,
       volumeKg: logs.reduce((sum, l) => sum + (l.effectiveKg ?? 0) * l.reps, 0),
     };
   }, [exercises]);
@@ -104,6 +109,24 @@ export function DashboardScreen({
   /* useLiveQuery hands back the previous result while a new one is in flight,
      so read the shape through locals rather than assuming every field landed. */
   const programDays = program?.days ?? [];
+
+  /*
+   * What this week set out to do: the exercises it programmed, and the muscles
+   * those exercises touch. Recomputed from the plan rather than stored, like
+   * every other number in the app — and it moves when the week does, which a
+   * constant never did.
+   */
+  const plannedExercises = new Set(
+    programDays.flatMap((day) => day.entries.map((entry) => entry.exerciseId)),
+  );
+  const plannedMuscles = new Set<MuscleId>();
+  for (const id of plannedExercises) {
+    const exercise = exercises.find((row) => row.id === id);
+    for (const muscle of exercise?.primaryMuscles ?? []) plannedMuscles.add(muscle);
+    for (const muscle of exercise?.secondaryMuscles ?? []) plannedMuscles.add(muscle);
+  }
+  const exerciseTarget = plannedExercises.size || WEEKLY_FALLBACK.exercises;
+  const muscleTarget = plannedMuscles.size || WEEKLY_FALLBACK.muscles;
 
   const latest = points.at(-1);
   const average = rollingAverage(points, 7);
@@ -223,7 +246,7 @@ export function DashboardScreen({
         <div className="mt-1 flex items-start">
           <Ring
             value={week?.muscleCount ?? 0}
-            target={WEEKLY_TARGET.muscles}
+            target={muscleTarget}
             label="Muscles"
             color="var(--color-muscle)"
             slotHeight={RING_ROW}
@@ -239,7 +262,7 @@ export function DashboardScreen({
           />
           <Ring
             value={week?.exerciseCount ?? 0}
-            target={WEEKLY_TARGET.exercises}
+            target={exerciseTarget}
             label="Exercises"
             color="var(--color-strength)"
             slotHeight={RING_ROW}
