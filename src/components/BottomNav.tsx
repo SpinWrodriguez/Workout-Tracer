@@ -4,6 +4,7 @@
 /* -------------------------------------------------------------------------- */
 
 import { tap } from '../lib/haptics';
+import { HapticTick } from './HapticTick';
 
 export type Tab = 'dashboard' | 'levels' | 'program' | 'history' | 'settings';
 
@@ -91,6 +92,7 @@ export function BottomNav({
           className="absolute -top-6 left-1/2 flex size-14 -translate-x-1/2 items-center justify-center rounded-full bg-cta text-3xl leading-none font-light text-bg"
         >
           +
+          <HapticTick />
         </button>
 
         {RIGHT.map((t) => (

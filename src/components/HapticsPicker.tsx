@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import { hapticsEnabled, setHapticsEnabled, testTap } from '../lib/haptics';
+import { hapticsEnabled, setHapticsEnabled } from '../lib/haptics';
 import { Card, Label, SegmentedToggle } from './Layout';
+import { HapticTick } from './HapticTick';
 
 /* -------------------------------------------------------------------------- */
 /*  The tap you feel.                                                        */
 /*                                                                           */
-/*  With a Test row, which is not decoration: whether this works at all is a  */
-/*  property of the phone and its iOS version, and the only way anyone finds  */
-/*  out is by feeling it. Apple never shipped the Vibration API, so on an     */
-/*  iPhone this rides on a side effect of a switch control that Apple has     */
-/*  already narrowed once. One tap here answers it.                          */
+/*  The Test row is the same mechanism as the real buttons, not a simulation  */
+/*  of it — it cannot be anything else, because on current iOS a tick only    */
+/*  comes from a finger landing on a switch and never from script. So this    */
+/*  button carries one too, and answering "does this phone still do it" is    */
+/*  one tap.                                                                  */
 /* -------------------------------------------------------------------------- */
 
 const CHOICES = ['on', 'off'] as const;
@@ -35,24 +36,25 @@ export function HapticsPicker() {
           onChange={(next) => {
             setChoice(next);
             setHapticsEnabled(next === 'on');
-            // Fired from the tap that turned it on, which is the only moment
-            // iOS will allow it.
-            if (next === 'on') testTap();
           }}
         />
       </div>
 
+      {/* force, because this has to work even while the setting is off: its
+          job is to say whether the phone is capable, not whether the app is
+          currently asking. */}
       <button
         type="button"
-        onClick={() => testTap()}
-        className="mt-3 h-11 w-full rounded-full bg-surface-2 text-[14px] font-medium"
+        className="relative mt-3 h-11 w-full rounded-full bg-surface-2 text-[14px] font-medium"
       >
-        Test it
+        Tap here to feel it
+        <HapticTick force />
       </button>
 
       <Label className="mt-2 block">
-        Nothing? Then this iPhone's version has closed the door — the app cannot tell the
-        difference, and nothing else changes.
+        Nothing? Then this iPhone's iOS has closed the door on it. Apple has never shipped a
+        vibration API for the web, so this rides on a switch control and they have narrowed it
+        twice already.
       </Label>
     </Card>
   );
