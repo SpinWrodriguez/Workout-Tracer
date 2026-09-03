@@ -77,6 +77,7 @@ export function DaySlotCard({
   intensity = 'heavy',
   entries,
   exercisesById,
+  minutes,
   editing,
   isToday,
   onToggleEdit,
@@ -96,6 +97,11 @@ export function DaySlotCard({
   intensity?: 'heavy' | 'light';
   entries: BlockExercise[];
   exercisesById: Map<string, Exercise>;
+  /**
+   * How long this day should take on the clock, already scaled by what past
+   * sessions actually took. Undefined while there is nothing to say.
+   */
+  minutes?: number;
   editing: boolean;
   isToday: boolean;
   onToggleEdit: () => void;
@@ -121,6 +127,7 @@ export function DaySlotCard({
      else, so it re-seeds whenever the day is renamed or regenerated. Adjusted
      during render rather than in an effect, which is React's own answer to
      "reset some state when a prop changes" and avoids a second render pass. */
+  const totalSets = entries.reduce((sum, entry) => sum + entry.targetSets, 0);
   const [typed, setTyped] = useState(customName ?? '');
   const [lastSeen, setLastSeen] = useState(customName);
   if (lastSeen !== customName) {
@@ -259,6 +266,18 @@ export function DaySlotCard({
             };
           })}
         />
+      )}
+
+      {/* What the day adds up to. The estimate has been computed since the
+          first generator and never shown, so the one question you ask before
+          starting — have I got time for this — was the one thing the card
+          could not answer. Scaled by the factor learned from real durations,
+          so it is minutes rather than arithmetic. */}
+      {entries.length > 0 && (
+        <Label className="mt-2 block">
+          {entries.length} {entries.length === 1 ? 'exercise' : 'exercises'} · {totalSets} sets
+          {minutes !== undefined ? ` · about ${minutes} min` : ''}
+        </Label>
       )}
 
       {editing && (

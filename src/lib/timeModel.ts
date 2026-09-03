@@ -75,6 +75,19 @@ export function budgetMinutes(realMinutes: number, factor: number | undefined): 
   return Math.round(realMinutes / factor);
 }
 
+/**
+ * The minutes a day of this size should really take, from the model's estimate.
+ *
+ * The other direction to budgetMinutes: that turns a real budget into the
+ * estimate-minutes to build to, this turns an estimate back into minutes to
+ * expect on the clock. Same one number, so the figure a card shows and the
+ * budget the generator built to cannot disagree.
+ */
+export function realMinutes(estimateMinutes: number, factor: number | undefined): number {
+  if (factor === undefined || factor <= 0) return estimateMinutes;
+  return Math.round(estimateMinutes * factor);
+}
+
 /** One past session as the model would have estimated it, from what was logged. */
 export function estimateOf(
   session: Session,

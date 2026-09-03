@@ -14,7 +14,8 @@ import {
 import { linearTrend, rollingAverage, type DatedPoint } from '../lib/stats';
 import { WEEKDAY_LABEL } from '../lib/golf';
 import { readWeekPlan } from '../lib/weekPlan';
-import { WEEKLY_SET_TARGET } from '../lib/blockValidation';
+import { WEEKLY_SET_TARGET, sessionMinutes } from '../lib/blockValidation';
+import { readTimeFactor, realMinutes } from '../lib/timeModel';
 import { readTraining } from '../db/settings';
 import { setsPerMuscle } from '../lib/volume';
 import { Card, Empty, Label, Screen } from '../components/Layout';
@@ -105,6 +106,18 @@ export function DashboardScreen({
       volumeKg: logs.reduce((sum, l) => sum + (l.effectiveKg ?? 0) * l.reps, 0),
     };
   }, [exercises]);
+
+  /*
+   * How long each of this week's days should take on the clock. The estimate
+   * has always existed; nothing showed it, so "have I got time for this" was
+   * the one question the week could not answer. Scaled by what past sessions
+   * really took.
+   */
+  const timeFactor = useLiveQuery(
+    () => readTimeFactor(new Map(exercises.map((e) => [e.id, e]))),
+    [exercises],
+    undefined,
+  );
 
   const bodyWeight = useLiveQuery(
     () => db.sharedBodyWeight.orderBy('date').toArray(),
@@ -227,6 +240,12 @@ export function DashboardScreen({
                       <Label>
                         {day.intensity === 'light' ? 'light' : 'heavy'}
                         {isToday ? ' · today' : ''}
+                        {day.entries.length > 0
+                          ? ` · ${realMinutes(
+                              sessionMinutes(day.entries, byId),
+                              timeFactor,
+                            )} min`
+                          : ''}
                       </Label>
                     </span>
                     <p className="mt-0.5 truncate text-[12px] font-medium text-text-dim">

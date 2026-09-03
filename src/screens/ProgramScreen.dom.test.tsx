@@ -22,7 +22,10 @@ import {
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
+import type { BlockExercise } from '../db/types';
+import { sessionMinutes } from '../lib/blockValidation';
 import { shiftIso, todayIso, weekStart } from '../lib/format';
+import { realMinutes, timeFactor } from '../lib/timeModel';
 import { WEEKDAY_LABEL, weekdayOf } from '../lib/golf';
 import { readPlans, readSchedules } from '../lib/program';
 import { ProgramScreen } from './ProgramScreen';
@@ -485,6 +488,78 @@ describe('picking and unpicking an exercise', () => {
       const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
       expect(rows.map((entry) => entry.exerciseId).sort()).toEqual(['bb_back_squat', 'bb_rdl']);
     });
+  });
+});
+
+describe('how long the workout takes', () => {
+  /** A workout of three exercises, three sets each, on the card. */
+  async function cardFor(name = 'Monday squats') {
+    await seedSchedule({ A: { weekday: undefined, intensity: 'heavy', name } });
+    await seedWorkout('A', ['bb_back_squat', 'bb_rdl', 'sm_calf_raise']);
+    await openProgram();
+    return workoutCard(name);
+  }
+
+  const entries = (targetSets = 3): BlockExercise[] =>
+    ['bb_back_squat', 'bb_rdl', 'sm_calf_raise'].map((exerciseId, order) => ({
+      blockId: BLOCK_ID,
+      exerciseId,
+      daySlot: 'A' as const,
+      targetSets,
+      repRangeLow: 8,
+      repRangeHigh: 10,
+      order,
+    }));
+
+  it('says what the day adds up to', async () => {
+    /* Computed since the first generator and shown nowhere, so the question
+       you actually ask before starting — have I got time for this — was the
+       one the card could not answer. */
+    const card = await cardFor();
+    const minutes = sessionMinutes(entries(), exercisesById);
+    await within(card).findByText(`3 exercises · 9 sets · about ${minutes} min`);
+  });
+
+  it('scales it by what sessions really take, not what the model assumes', async () => {
+    /* Three real sessions at 70% of estimate, which is what the log said: a
+       40-minute budget was buying 28 minutes. The number on the card has to
+       be the one the clock will show. */
+    const each = sessionMinutes([entries(3)[0] as BlockExercise], exercisesById);
+    for (const day of [0, 1, 2]) {
+      const id = `past_${day}`;
+      await db.session.put({
+        id,
+        blockId: BLOCK_ID,
+        daySlot: 'A',
+        daySlotName: 'Lower',
+        date: shiftIso(todayIso(), -7 - day),
+        durationMin: Math.round(each * 0.7),
+      });
+      await db.setLog.bulkPut(
+        [1, 2, 3].map((setNo) => ({
+          sessionId: id,
+          exerciseId: 'bb_back_squat',
+          setNo,
+          reps: 8,
+          weightKg: 60,
+          effectiveKg: 60,
+        })),
+      );
+    }
+
+    const card = await cardFor();
+    const estimate = sessionMinutes(entries(), exercisesById);
+    /* Through the library's own two functions, so what the card shows and what
+       the generator built to cannot drift apart. */
+    const factor = timeFactor(
+      [0, 1, 2].map(() => ({ estimateMinutes: each, actualMinutes: Math.round(each * 0.7) })),
+    );
+    const expected = realMinutes(estimate, factor);
+    await waitFor(() =>
+      expect(card.textContent).toContain(`3 exercises · 9 sets · about ${expected} min`),
+    );
+    // And that is genuinely shorter than the model's own guess.
+    expect(expected).toBeLessThan(estimate);
   });
 });
 

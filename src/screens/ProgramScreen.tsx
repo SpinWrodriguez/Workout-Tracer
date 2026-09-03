@@ -9,6 +9,7 @@ import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import { balanceSets, generateDay, type DayPlan } from '../lib/blockBuilder';
 import {
   gripAllowed,
+  sessionMinutes as estimateMinutes,
   severityOf,
   validateBlock,
   type Fix,
@@ -64,7 +65,7 @@ import { ExerciseDetail } from '../components/ExerciseDetail';
 import { Card, Empty, Label, Screen } from '../components/Layout';
 import { WeekStrip, type WeekStripDay } from '../components/WeekStrip';
 import { shiftIso, weekStart } from '../lib/format';
-import { budgetMinutes, readTimeFactor } from '../lib/timeModel';
+import { budgetMinutes, readTimeFactor, realMinutes } from '../lib/timeModel';
 import { fairShare } from '../lib/volume';
 
 const DAY_SLOTS = SLOTS;
@@ -1115,6 +1116,9 @@ export function ProgramScreen({
             weekday={date !== undefined ? weekdayOf(date) : undefined}
             entries={list}
             exercisesById={byId}
+            /* Real minutes, not the model's: the same learned factor that
+               sized the budget this day was built to. */
+            minutes={list.length > 0 ? realMinutes(estimateMinutes(list, byId), timeFactor) : undefined}
             editing={isEditing}
             isToday={date === todayIso()}
             intensity={scheduled?.intensity ?? 'heavy'}

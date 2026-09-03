@@ -14,11 +14,19 @@ import '../test/dom';
 
 import { screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { WEEKLY_SET_TARGET } from '../lib/blockValidation';
+import { WEEKLY_SET_TARGET, sessionMinutes } from '../lib/blockValidation';
 import { readTraining, writeTraining } from '../db/settings';
 import { db } from '../db/db';
 import { shiftIso, todayIso, weekStart } from '../lib/format';
-import { BLOCK_ID, draw, exercises, seedPlan, seedSchedule, seedWorkout } from '../test/dom';
+import {
+  BLOCK_ID,
+  draw,
+  exercises,
+  exercisesById,
+  seedPlan,
+  seedSchedule,
+  seedWorkout,
+} from '../test/dom';
 import { DashboardScreen } from './DashboardScreen';
 
 function openDashboard() {
@@ -194,5 +202,24 @@ describe('mobility work', () => {
     // Back squat's six muscles. The hip switch adds none.
     await waitFor(async () => expect((await ring('Muscles')).target).toBe(6));
     expect((await ring('Exercises')).target).toBe(1);
+  });
+});
+
+describe('how long each day of the week takes', () => {
+  it('says it on the row, next to what the day is', async () => {
+    /* The week you look at before you train, and the one thing it could not
+       tell you was whether there was time for it. */
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Lower body' } });
+    await seedWorkout('A', ['bb_back_squat', 'bb_rdl']);
+    await seedPlan({ [weekStart(todayIso())]: 'A' });
+
+    openDashboard();
+
+    const minutes = sessionMinutes(
+      await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray(),
+      exercisesById,
+    );
+    const row = (await screen.findByText('Lower body')).closest('div') as HTMLElement;
+    await waitFor(() => expect(row.textContent).toContain(`${minutes} min`));
   });
 });

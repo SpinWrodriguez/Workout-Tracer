@@ -8,6 +8,7 @@ import {
   FACTOR_LOW,
   MIN_SESSIONS,
   budgetMinutes,
+  realMinutes,
   estimateOf,
   readTimeFactor,
   timeFactor,
@@ -91,6 +92,27 @@ describe('spending the budget', () => {
   it('leaves the budget alone with nothing learned yet', () => {
     expect(budgetMinutes(40, undefined)).toBe(40);
     expect(budgetMinutes(40, 0)).toBe(40);
+  });
+});
+
+describe('what to put on a card', () => {
+  it('turns an estimate into minutes on the clock', () => {
+    // 44 estimate-minutes at 91% is the 40 real minutes that were asked for.
+    expect(realMinutes(44, 0.91)).toBe(40);
+    expect(realMinutes(31, 1.3)).toBe(40);
+  });
+
+  it('shows the estimate as-is with nothing learned yet', () => {
+    expect(realMinutes(40, undefined)).toBe(40);
+    expect(realMinutes(40, 0)).toBe(40);
+  });
+
+  it('round-trips the budget it sized', () => {
+    /* The two directions have to agree, or a card says 34 minutes for a day
+       built to a 40-minute budget. */
+    for (const factor of [0.7, 0.91, 1, 1.25, 1.6]) {
+      expect(Math.abs(realMinutes(budgetMinutes(40, factor), factor) - 40)).toBeLessThanOrEqual(1);
+    }
   });
 });
 
