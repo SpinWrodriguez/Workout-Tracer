@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   API_KEY_STORAGE_KEY,
   MODEL,
+  PRICE_PER_MTOK,
   availableTransport,
   edgeUnavailable,
   readApiKey,
@@ -97,20 +98,18 @@ export function AiInstructionsEditor() {
 }
 
 /*
- * Sonnet 5 list prices, per million tokens. Four rates, not two: a cached read
- * is a tenth of a fresh input token and a cache write is a quarter more, so
- * charging everything at the input rate would misreport the one number this
- * card exists to tell the truth about. `input_tokens` from the API already
- * excludes what was read from cache, so these four do not double count.
+ * The prices belong to the model, so they live with it: PRICE_PER_MTOK is
+ * looked up by MODEL and the lookup is typed, which is what stops this card
+ * quoting Sonnet's rates over Opus's tokens after somebody changes one line in
+ * askModel.ts. `input_tokens` from the API already excludes what was read from
+ * cache, so the four rates do not double count.
  */
-const PER_MTOK = { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 };
-
 function centsFor(call: LastModelCall): string {
   const dollars =
-    ((call.inputTokens ?? 0) * PER_MTOK.input +
-      (call.outputTokens ?? 0) * PER_MTOK.output +
-      (call.cacheWriteTokens ?? 0) * PER_MTOK.cacheWrite +
-      (call.cacheReadTokens ?? 0) * PER_MTOK.cacheRead) /
+    ((call.inputTokens ?? 0) * PRICE_PER_MTOK.input +
+      (call.outputTokens ?? 0) * PRICE_PER_MTOK.output +
+      (call.cacheWriteTokens ?? 0) * PRICE_PER_MTOK.cacheWrite +
+      (call.cacheReadTokens ?? 0) * PRICE_PER_MTOK.cacheRead) /
     1_000_000;
   return `${(dollars * 100).toFixed(1)}c`;
 }

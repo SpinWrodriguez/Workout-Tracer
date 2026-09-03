@@ -20,6 +20,7 @@ vi.mock('./supabaseSource', () => ({
 import {
   ANTHROPIC_VERSION,
   MODEL,
+  PRICE_PER_MTOK,
   askModel,
   buildConversationRequest,
   streamConversation,
@@ -201,6 +202,18 @@ describe('the model the app asks for', () => {
 
   it('is sent on the request rather than left to the relay to choose', () => {
     expect(buildRequest(options).model).toBe(MODEL);
+  });
+
+  it('has prices of its own, so the settings card cannot quote another model', () => {
+    /* The rates were written into the settings card as a bare object labelled
+       "Sonnet 5 list prices". Changing MODEL would have left it reporting the
+       cost of a call it did not make. They are now keyed by typeof MODEL, so
+       that change does not compile without prices to go with it. */
+    expect(PRICE_PER_MTOK.input).toBeGreaterThan(0);
+    expect(PRICE_PER_MTOK.output).toBeGreaterThan(PRICE_PER_MTOK.input);
+    // A cache write costs a quarter more than fresh input; a read a tenth.
+    expect(PRICE_PER_MTOK.cacheWrite).toBeCloseTo(PRICE_PER_MTOK.input * 1.25);
+    expect(PRICE_PER_MTOK.cacheRead).toBeCloseTo(PRICE_PER_MTOK.input * 0.1);
   });
 
   it('is asked for a JSON reply with adaptive thinking and no token budget', () => {

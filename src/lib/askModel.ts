@@ -34,6 +34,31 @@ import { sseEvents } from './sse';
  * relay rejects the request. askModel.test.ts asserts the two agree.
  */
 export const MODEL = 'claude-sonnet-5';
+/** List price per million tokens, for one model. */
+export interface TokenPrices {
+  input: number;
+  output: number;
+  cacheWrite: number;
+  cacheRead: number;
+}
+
+/*
+ * Prices by model, so the settings card cannot quote one model's rates for
+ * another's tokens. Keyed by `typeof MODEL`: changing the model above without
+ * adding its prices here does not compile, which is the only way a number
+ * nobody looks at stays true.
+ *
+ * Four rates, not two: a cached read is a tenth of a fresh input token and a
+ * cache write a quarter more. Nothing sends cache_control any more — it was a
+ * measured net loss on this traffic — but old rows still carry those counts
+ * and still have to be priced correctly.
+ */
+const PRICES: Record<typeof MODEL, TokenPrices> = {
+  'claude-sonnet-5': { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 },
+};
+
+export const PRICE_PER_MTOK: TokenPrices = PRICES[MODEL];
+
 export const ANTHROPIC_VERSION = '2023-06-01';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const EDGE_FUNCTION = 'ask-model';
