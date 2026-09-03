@@ -106,6 +106,18 @@ describe('reading it without seeing the colours', () => {
     expect(titles).toContain('Biceps — 1 set');
   });
 
+  it('samples the ramp finely enough to read a difference off it', () => {
+    /* The fills are continuous; the key is what a reader compares against, so
+       too few swatches and two genuinely different weeks look like one tone. */
+    const { container } = render({});
+    const swatches = [...container.querySelectorAll('span[style*="color-mix"], span[style*="surface-2"]')]
+      .map((node) => node.getAttribute('style') ?? '')
+      .filter((style) => style.includes('background'));
+    expect(swatches.length).toBeGreaterThanOrEqual(8);
+    // Every step a distinct tone: a key with repeats is a key with fewer steps.
+    expect(new Set(swatches).size).toBe(swatches.length);
+  });
+
   it('says which figure is which, and what the ramp means', () => {
     const { container } = render({});
     const text = container.textContent ?? '';

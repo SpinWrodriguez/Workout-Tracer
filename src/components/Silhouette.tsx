@@ -114,9 +114,20 @@ function View({
   );
 }
 
-/** Five steps of the same ramp, so the colours have a stated meaning. */
+/**
+ * Swatches in the legend. The fills themselves are continuous — every value
+ * between the minimum tint and full colour is reachable — so this number only
+ * decides how finely the key samples that ramp. Eight is what fits the row at
+ * a 12px swatch on the narrowest phone this targets.
+ */
+const LEGEND_STEPS = 8;
+
+/** The ramp sampled evenly, so the colours have a stated meaning. */
 function Legend() {
-  const steps = [0, HEAT_FULL * 0.25, HEAT_FULL * 0.5, HEAT_FULL * 0.75, HEAT_FULL];
+  const steps = Array.from(
+    { length: LEGEND_STEPS },
+    (_, i) => (HEAT_FULL * i) / (LEGEND_STEPS - 1),
+  );
   return (
     <div className="mt-2 flex items-center justify-center gap-2">
       <span className="text-[11px] font-medium text-text-faint">none</span>
