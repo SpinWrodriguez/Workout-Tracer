@@ -12,7 +12,6 @@ import {
   clearDaySlot,
   daysUntilWeekday,
   draftFromPlan,
-  configFromSchedule,
   normalisePlan,
   planDate,
   setUsualWeekday,
@@ -408,38 +407,12 @@ describe('remembering which days came from the generator', () => {
   });
 });
 
-describe('reading the setup controls back out of the program', () => {
-  it('reports the sessions and heavy days that are actually scheduled', () => {
-    const config = configFromSchedule({
-      A: { weekday: 1, intensity: 'heavy' },
-      B: { weekday: 2, intensity: 'heavy' },
-      C: { weekday: 4, intensity: 'light' },
-    });
-    expect(config).toEqual({ sessionsPerWeek: 3, heavyWeekdays: [1, 2] });
-  });
-
-  it('follows days that were dragged elsewhere', () => {
-    // Heavy days are wherever they ended up, not wherever the template put
-    // them — the schedule is the program.
-    const config = configFromSchedule({
-      A: { weekday: 4, intensity: 'heavy' },
-      B: { weekday: 7, intensity: 'heavy' },
-    });
-    expect(config).toEqual({ sessionsPerWeek: 2, heavyWeekdays: [4, 7] });
-  });
-
-  it('reports an all-light week as no heavy days rather than defaulting to two', () => {
-    const config = configFromSchedule({
-      A: { weekday: 1, intensity: 'light' },
-      B: { weekday: 3, intensity: 'light' },
-    });
-    expect(config).toEqual({ sessionsPerWeek: 2, heavyWeekdays: [] });
-  });
-
-  it('has nothing to say about a program that does not exist yet', () => {
-    expect(configFromSchedule({})).toBeUndefined();
-  });
-});
+/*
+ * configFromSchedule was tested here: it read the setup controls — how many
+ * sessions, which are heavy — back out of the schedule so the Program screen
+ * could show them. Those controls went with the starter week, and the function
+ * followed them here: nothing in the app had called it since.
+ */
 
 describe('prescribing a hold', () => {
   it('lets a plank run past a minute', async () => {
