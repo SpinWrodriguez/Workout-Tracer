@@ -17,7 +17,10 @@ export interface PlatePair {
 export interface Inventory {
   /** Plates, counted in pairs — a bar takes one of each pair per side. */
   plates: PlatePair[];
-  /** Fixed implements: kettlebells, dumbbells. Loaded as-is, not stacked. */
+  /**
+   * Fixed implements you hold: kettlebells, dumbbells. Loaded as-is, never
+   * stacked. Plate weights are hand-held loads too — see handHeldWeights.
+   */
   kettlebells: number[];
   /** Bar weights by station, overriding the seeded Exercise.barWeight. */
   barWeights: { free_bar: number; smith: number };
@@ -34,8 +37,9 @@ export const DEFAULT_INVENTORY: Inventory = {
     { kg: 5, pairs: 1 },
     { kg: 1.5, pairs: 2 },
   ],
-  // "Kettlebells: 10 kg (confirm others)" — add the rest in Settings.
-  kettlebells: [10],
+  /* None in this garage: the plates have grips, so a hand-held load is one
+     plate. Add real bells here in Settings if there ever are any. */
+  kettlebells: [],
   barWeights: { free_bar: 20, smith: 18 },
   cableStackKg: 70,
   cableStepKg: 5,
@@ -84,6 +88,24 @@ export function cableStackWeights(stackKg: number, stepKg: number): number[] {
   return out;
 }
 
+/**
+ * What a hand can hold: one implement, not a bar's worth of plates.
+ *
+ * This used to run the plate maths with a bar of zero, which is the symmetric
+ * pair logic — one plate per side — and it offered a Swing every rung up to
+ * 86 kg. Nobody swings the whole rack. A gripped plate is held singly, so the
+ * rungs are the plate weights themselves plus any real bells.
+ *
+ * No sums: two plates on one grip is not a thing this rack does, and offering
+ * 15 kg for a 10 and a 5 would be inventing a load that cannot be picked up.
+ */
+export function handHeldWeights(plates: PlatePair[], kettlebells: number[]): number[] {
+  return dedupeSorted([
+    ...plates.filter((plate) => plate.pairs > 0 && plate.kg > 0).map((plate) => plate.kg),
+    ...kettlebells.filter((kg) => kg > 0),
+  ]);
+}
+
 /* --- per-exercise ladder -------------------------------------------------- */
 
 const cache = new Map<string, number[]>();
@@ -127,11 +149,7 @@ export function ladderFor(exercise: Exercise, inventory: Inventory): number[] {
   } else if (bar !== undefined) {
     ladder = loadableWeights(bar, inventory.plates);
   } else {
-    // Hand-held: whatever a plate stack can make, plus the fixed implements.
-    ladder = dedupeSorted([
-      ...loadableWeights(0, inventory.plates),
-      ...inventory.kettlebells.filter((kg) => kg > 0),
-    ]);
+    ladder = handHeldWeights(inventory.plates, inventory.kettlebells);
   }
 
   cache.set(key, ladder);

@@ -195,18 +195,20 @@ describe('what the model is shown', () => {
     expect(system).toContain('Say nothing about the calendar');
   });
 
-  it('puts the library in the cached prefix and the goal after it', () => {
+  it('puts the library in the system prompt and the goal after it', () => {
     const request = buildRequest({
       system: buildSystem(EXERCISES),
       user: buildUser('tired today', []),
       schema: WORKOUT_SCHEMA,
     });
     expect(request.model).toBe(MODEL);
-    const system = request.system as { cache_control?: unknown }[];
-    expect(system[0]?.cache_control).toEqual({ type: 'ephemeral' });
+    /* This used to assert a cache breakpoint on the system block. Caching is
+       gone — it was writing a cache nothing read, at 1.25x input — but the
+       split it enforced is still right: the rules and the library are stable
+       and the goal is not, so they stay in different parts of the request. */
+    expect(JSON.stringify(request.system)).not.toContain('cache_control');
     expect(JSON.stringify(request.messages)).toContain('tired today');
-    // The volatile goal must not be inside the cached block.
-    expect(JSON.stringify(system)).not.toContain('tired today');
+    expect(JSON.stringify(request.system)).not.toContain('tired today');
   });
 });
 

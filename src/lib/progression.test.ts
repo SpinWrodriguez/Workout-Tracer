@@ -23,21 +23,47 @@ function session(id: string, date: string, sets: Partial<HistorySet>[]): History
 }
 
 describe('Phase 2 acceptance — progression suggestion', () => {
-  it('takes a 20 kg goblet squat at 3×10 RIR 3 to 23 kg, not 22 or 24', () => {
+  /*
+   * These two used to expect 20 kg -> 23 kg with a microplate note, on a
+   * hand-held ladder built from the symmetric pair maths. That ladder was
+   * wrong: the plates in this garage have grips, so a hand holds one plate and
+   * the rungs are 1.5, 5, 10, 20. The interesting cases changed with it.
+   */
+  it('says a 20 kg goblet squat has nowhere heavier to go', () => {
     const history = session('s1', '2026-08-30', [
       { weightKg: 20, reps: 10, rir: 3 },
       { weightKg: 20, reps: 10, rir: 3 },
       { weightKg: 20, reps: 10, rir: 3 },
     ]);
     const result = suggestProgression({ ladder: GOBLET, history, repRangeLow: 8, repRangeHigh: 10 });
-    expect(result.outcome).toBe('increase');
-    expect(result.suggestedKg).toBe(23);
+    /* Three sets of ten with three reps left is exactly when the app should
+       add load — and it cannot, because 20 is the heaviest plate. Saying so is
+       the useful answer; inventing 23 kg was not. */
+    expect(result.outcome).toBe('ceiling');
+    expect(result.suggestedKg).toBe(20);
+    expect(result.reason).toMatch(/heaviest loadable weight/);
   });
 
-  it('warns about microplates on that jump, which is 15%', () => {
-    const history = session('s1', '2026-08-30', [{ weightKg: 20, reps: 10, rir: 3 }]);
+  it('warns that the next hand-held rung is a doubling', () => {
+    const history = session('s1', '2026-08-30', [{ weightKg: 10, reps: 10, rir: 3 }]);
     const result = suggestProgression({ ladder: GOBLET, history, repRangeLow: 8, repRangeHigh: 10 });
-    expect(result.microplateNote).toMatch(/15% — consider microplates/);
+    /* 10 to 20 with nothing in between. The note is the honest reading of a
+       rack whose hand-held loads are 1.5, 5, 10, 20 — load progression on
+       these lifts is coarse, and reps are the lever. */
+    expect(result.suggestedKg).toBe(20);
+    expect(result.microplateNote).toMatch(/100%/);
+  });
+
+  it('still moves a barbell lift one real rung, not to a made-up number', () => {
+    const history = session('s1', '2026-08-30', [
+      { weightKg: 20, reps: 10, rir: 3 },
+      { weightKg: 20, reps: 10, rir: 3 },
+      { weightKg: 20, reps: 10, rir: 3 },
+    ]);
+    const result = suggestProgression({ ladder: FREE_BAR, history, repRangeLow: 8, repRangeHigh: 10 });
+    // Bar plus a pair of 1.5s. Not 22, not 24: those cannot be built.
+    expect(result.outcome).toBe('increase');
+    expect(result.suggestedKg).toBe(23);
   });
 });
 

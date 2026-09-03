@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EXERCISES } from '../db/seed/exercises';
+import type { Exercise } from '../db/types';
 import { effectiveKg } from './load';
 import {
   DEFAULT_INVENTORY,
@@ -12,6 +13,9 @@ import {
   nextRung,
   prevRung,
   snapToLadder,
+  handHeldWeights,
+  clearLadderCache,
+  type Inventory,
 } from './loadable';
 
 const find = (id: string) => {
@@ -91,8 +95,12 @@ describe('ladderFor', () => {
   });
 
   it('uses the hand-held ladder for kettlebell and loaded bodyweight work', () => {
+    /* This used to expect [3, 6, 10, 13, 16, 20, 23, 26...] — the symmetric
+       pair maths, as though the plates were going on a bar, running all the
+       way up to 86 kg for a swing. The expectation encoded the bug. A hand
+       holds one plate. */
     const goblet = ladderFor(find('kb_goblet_squat'), DEFAULT_INVENTORY);
-    expect(goblet.slice(0, 8)).toEqual([3, 6, 10, 13, 16, 20, 23, 26]);
+    expect(goblet).toEqual([1.5, 5, 10, 20]);
     expect(ladderFor(find('bw_split_squat'), DEFAULT_INVENTORY)).toEqual(goblet);
   });
 
@@ -144,5 +152,65 @@ describe('microplate hint', () => {
     expect(microplateHint(26, FREE_BAR_LADDER)).toMatch(/15%/);
     expect(microplateHint(33, FREE_BAR_LADDER)).toBeUndefined(); // 9%
     expect(microplateHint(96, FREE_BAR_LADDER)).toBeUndefined(); // at the ceiling
+  });
+});
+
+describe('what a hand can hold', () => {
+  /* Real inventory from the app's owner: no kettlebells at all, and plates
+     with grips on them. */
+  const gripped: Inventory = {
+    plates: [
+      { kg: 20, pairs: 1 },
+      { kg: 10, pairs: 1 },
+      { kg: 5, pairs: 2 },
+      { kg: 1.5, pairs: 2 },
+    ],
+    kettlebells: [],
+    barWeights: { free_bar: 20, smith: 18 },
+    cableStackKg: 65,
+    cableStepKg: 5,
+  };
+
+  it('offers the plates themselves, not a bar loaded with them', () => {
+    /* The bug: this ran the plate maths with a bar of zero, which is the
+       symmetric one-per-side logic, and offered a Swing every rung up to
+       86 kg. */
+    expect(handHeldWeights(gripped.plates, gripped.kettlebells)).toEqual([1.5, 5, 10, 20]);
+  });
+
+  it('offers no sum of two plates, because one grip holds one plate', () => {
+    const rungs = handHeldWeights(gripped.plates, gripped.kettlebells);
+    expect(rungs).not.toContain(15);
+    expect(rungs).not.toContain(30);
+    expect(Math.max(...rungs)).toBe(20);
+  });
+
+  it('still takes real bells where there are some', () => {
+    expect(handHeldWeights([{ kg: 10, pairs: 1 }], [16, 24])).toEqual([10, 16, 24]);
+  });
+
+  it('ignores a plate nobody owns and a bell of zero', () => {
+    expect(handHeldWeights([{ kg: 25, pairs: 0 }, { kg: 10, pairs: 1 }], [0])).toEqual([10]);
+  });
+
+  it('gives a swing and a carry the same short ladder', () => {
+    clearLadderCache();
+    const swing = EXERCISES.find((e) => e.id === 'kb_swing');
+    const carry = EXERCISES.find((e) => e.id === 'kb_suitcase_carry');
+    expect(ladderFor(swing as Exercise, gripped)).toEqual([1.5, 5, 10, 20]);
+    /* A two-handed carry logs what is in each hand, so 10 each side is the
+       10 rung — the number you can actually pick up. */
+    expect(ladderFor(carry as Exercise, gripped)).toContain(10);
+  });
+
+  it('leaves a barbell lift alone — that one really is a bar and pairs', () => {
+    clearLadderCache();
+    const squat = EXERCISES.find((e) => e.id === 'bb_back_squat');
+    const rungs = ladderFor(squat as Exercise, gripped);
+    expect(rungs[0]).toBe(20);
+    expect(rungs).toContain(40);
+    /* 20 kg bar + 2x20 + 2x10 + 4x5 + 4x1.5 = 106, which is the whole rack on
+       one bar — right for a squat, absurd for a swing. */
+    expect(Math.max(...rungs)).toBe(106);
   });
 });

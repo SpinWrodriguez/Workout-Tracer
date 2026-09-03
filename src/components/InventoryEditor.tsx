@@ -202,8 +202,8 @@ export function InventoryEditor() {
 
       <Card title="Kettlebells and hand-held" className="mt-3" collapsible>
         <p className="text-[13px] text-text-dim">
-          Goblet squats, carries and loaded split squats snap to these plus anything the plates can
-          make.
+          Goblet squats, carries and loaded split squats snap to these plus your plate weights, one
+          plate at a time — a gripped 20 is a 20, not half of a 40.
         </p>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {inventory.kettlebells

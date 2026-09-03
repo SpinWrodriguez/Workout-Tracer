@@ -149,7 +149,7 @@ export function buildRequest(options: AskOptions): Record<string, unknown> {
        */
       format: { type: 'json_schema', schema: options.schema },
     },
-    system: cachedSystem(options.system),
+    system: plainSystem(options.system),
     messages: [
       { role: 'user', content: options.user },
       ...(options.priorTurns ?? []).map((turn) => ({ role: turn.role, content: turn.content })),
@@ -163,12 +163,21 @@ function shared(maxTokens: number): Record<string, unknown> {
 }
 
 /*
- * The cache breakpoint. Everything before it is identical between calls of the
- * same kind, so a second question in the same minute reads the rules back at a
- * tenth of the price instead of paying for them again.
+ * The system prompt, uncached on purpose.
+ *
+ * It used to carry a cache breakpoint, on the theory that a second call within
+ * the window would read the rules back at a tenth of the price. Measured on
+ * real use, that second call almost never came: one generation showed 10,637
+ * tokens written to the cache and 0 read. A cache write costs 1.25x input, so
+ * caching was making every generation about 25% MORE expensive than not
+ * caching at all — a discount on a call that never happened.
+ *
+ * The prefix is also less stable than it looked: the library is sliced to the
+ * focus being generated and the coach's context carries today's data, so
+ * consecutive calls rarely share a prefix even when they are close together.
  */
-function cachedSystem(text: string): unknown[] {
-  return [{ type: 'text', text, cache_control: { type: 'ephemeral' } }];
+function plainSystem(text: string): unknown[] {
+  return [{ type: 'text', text }];
 }
 
 /**
@@ -205,7 +214,7 @@ export function buildConversationRequest(options: ConversationOptions): Record<s
      * applies — it is thinking depth, not output shape.
      */
     output_config: { effort: 'low' },
-    system: cachedSystem(options.system),
+    system: plainSystem(options.system),
     tools: options.tools,
     messages: options.messages,
   };

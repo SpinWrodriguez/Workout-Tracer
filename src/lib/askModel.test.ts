@@ -21,6 +21,7 @@ import {
   ANTHROPIC_VERSION,
   MODEL,
   askModel,
+  buildConversationRequest,
   streamConversation,
   availableTransport,
   buildRequest,
@@ -42,6 +43,8 @@ const options = {
   user: 'a goal',
   schema: { type: 'object' },
 };
+
+const conversation = { system: 'rules', messages: [], tools: [] };
 
 /*
  * localStorage does not exist in node. A shim keeps these tests here rather
@@ -177,6 +180,17 @@ describe('what the relay said when it refused', () => {
   });
 });
 
+describe('prompt caching', () => {
+  it('is not asked for, on either shape of request', () => {
+    /* Measured, not assumed: one real generation wrote 10,637 tokens to the
+       cache and read 0. A write costs 1.25x input, so the cache was a 25%
+       surcharge for a discount on a second call that never came. */
+    const json = JSON.stringify([buildRequest(options), buildConversationRequest(conversation)]);
+    expect(json).not.toContain('cache_control');
+    expect(json).not.toContain('ephemeral');
+  });
+});
+
 describe('the model the app asks for', () => {
   it('is one the Edge Function will relay', () => {
     const allowed = EDGE_SOURCE.match(/ALLOWED_MODELS = new Set\(\[([^\]]*)\]\)/)?.[1];
@@ -239,8 +253,6 @@ const sseFetch = (events: unknown[]) =>
       }),
       text: async () => '',
     }) as unknown as Response) as unknown as typeof fetch;
-
-const conversation = { system: 'rules', messages: [], tools: [] };
 
 describe('a streamed turn', () => {
   beforeEach(() => {

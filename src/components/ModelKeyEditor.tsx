@@ -248,8 +248,12 @@ export function ModelKeyEditor() {
             <span className="text-[13px] font-semibold">{centsFor(last)}</span>
           </div>
           <p className="mt-1 text-[12px] font-medium text-text-dim">
-            {last.inputTokens ?? 0} in · {last.outputTokens ?? 0} out ·{' '}
-            {last.cacheReadTokens ? `${last.cacheReadTokens} cached` : 'nothing cached'}
+            {last.inputTokens ?? 0} in · {last.outputTokens ?? 0} out
+            {/* Only worth a word when there is one. Prompt caching is off —
+                it was writing a cache nothing read, which costs more than not
+                caching — so a nonzero figure here means an older build. */}
+            {last.cacheReadTokens ? ` · ${last.cacheReadTokens} cached` : ''}
+            {last.cacheWriteTokens ? ` · ${last.cacheWriteTokens} written to cache` : ''}
           </p>
         </div>
       )}
