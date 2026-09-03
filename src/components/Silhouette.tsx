@@ -1,7 +1,7 @@
 import { MUSCLE_BY_ID } from '../db/seed/muscles';
 import type { MuscleId } from '../db/types';
 import { BACK_VIEW, FRONT_VIEW, type BodyView } from '../lib/bodyGeometry';
-import { VOLUME_HIGH, VOLUME_LOW, volumeHeat, type MuscleVolume } from '../lib/volume';
+import { HEAT_FULL, VOLUME_HIGH, volumeHeat, type MuscleVolume } from '../lib/volume';
 
 /* -------------------------------------------------------------------------- */
 /*  Body heat map — spec Phase 4.                                             */
@@ -15,6 +15,10 @@ import { VOLUME_HIGH, VOLUME_LOW, volumeHeat, type MuscleVolume } from '../lib/v
 /*  makes it work in both themes without a second palette: "cold" is whatever  */
 /*  the card sits on, so the anchor flips with the theme and the steps stay    */
 /*  monotonic in lightness either way.                                        */
+/*                                                                            */
+/*  The ramp tops out at HEAT_FULL, a full week's work for one muscle, rather   */
+/*  than at the 8-set floor: saturating at the floor made a muscle on 8 and a  */
+/*  muscle on 15 the same colour, and that gap is the one worth seeing.        */
 /*                                                                            */
 /*  Over the ceiling is a different claim from "more" — it means back off —    */
 /*  so it is not another step on the ramp. It gets an outline, and the "Worth  */
@@ -36,12 +40,12 @@ const CAPTION = 12;
  * it half a set fades in from nothing, and "trained a little" is exactly the
  * state the map exists to distinguish from "not trained".
  */
-const HEAT_FLOOR = 22;
+const MIN_TINT = 22;
 
-/** Untrained reads as the card's own elevated grey; the floor as full volume. */
+/** Untrained reads as the card's own elevated grey; HEAT_FULL as full volume. */
 function heatFill(sets: number): string {
   if (sets <= 0) return 'var(--color-surface-2)';
-  const pct = Math.round(HEAT_FLOOR + volumeHeat(sets) * (100 - HEAT_FLOOR));
+  const pct = Math.round(MIN_TINT + volumeHeat(sets) * (100 - MIN_TINT));
   return `color-mix(in oklab, var(--color-volume) ${pct}%, var(--color-surface-2))`;
 }
 
@@ -112,7 +116,7 @@ function View({
 
 /** Five steps of the same ramp, so the colours have a stated meaning. */
 function Legend() {
-  const steps = [0, VOLUME_LOW * 0.25, VOLUME_LOW * 0.5, VOLUME_LOW * 0.75, VOLUME_LOW];
+  const steps = [0, HEAT_FULL * 0.25, HEAT_FULL * 0.5, HEAT_FULL * 0.75, HEAT_FULL];
   return (
     <div className="mt-2 flex items-center justify-center gap-2">
       <span className="text-[11px] font-medium text-text-faint">none</span>
@@ -126,7 +130,7 @@ function Legend() {
         ))}
       </span>
       <span className="text-[11px] font-medium text-text-faint">
-        {VOLUME_LOW}+ sets a week
+        {HEAT_FULL}+ sets a week
       </span>
     </div>
   );

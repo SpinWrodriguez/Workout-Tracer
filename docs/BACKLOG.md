@@ -205,8 +205,11 @@ middle, inner half anterior.
 **As a heat map.** One hue — `--color-volume`, the same orange the set counts
 beside it use — mixed toward `--surface-2`, so cold is whatever the card sits
 on and the ramp's anchor flips with the theme instead of needing a second
-palette. It climbs to `VOLUME_LOW`, not to the ceiling: measured against 20, a
-real three-day week reads almost entirely cold. Over the ceiling is a different
+palette. It tops out at `HEAT_FULL`, 15 sets, which is neither of the two
+numbers that already mean something and deliberately so: against the ceiling of
+20 a real three-day week reads almost entirely cold, and against the floor of 8
+it saturates so early that clearing the floor and having a genuinely full week
+are the same colour. Over the ceiling is a different
 claim from "more" and is not another step on the ramp — it takes an outline,
 and "Worth a look" names the muscle, because a status must never be colour
 alone. Each shape carries a `<title>` with its name and set count, and a

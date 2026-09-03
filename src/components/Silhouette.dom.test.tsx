@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { draw } from '../test/dom';
 import { MUSCLES } from '../db/seed/muscles';
 import type { MuscleId } from '../db/types';
-import { VOLUME_HIGH, VOLUME_LOW, type MuscleVolume } from '../lib/volume';
+import { HEAT_FULL, VOLUME_HIGH, VOLUME_LOW, type MuscleVolume } from '../lib/volume';
 import { Silhouette } from './Silhouette';
 
 /** A volume record with everything at zero except what a test names. */
@@ -40,10 +40,10 @@ describe('what the colour says', () => {
 
   it('warms a muscle in proportion to the sets it got', () => {
     /* The ramp is one hue mixed toward the surface, so the percentage IS the
-       reading. Half the weekly floor has to land visibly short of the floor,
-       or the map cannot tell "a bit" from "enough" — which is its whole job. */
-    const half = render({ chest: VOLUME_LOW / 2 });
-    const full = render({ chest: VOLUME_LOW });
+       reading. Half a full week has to land visibly short of a full one, or
+       the map cannot tell "a bit" from "enough" — which is its whole job. */
+    const half = render({ chest: HEAT_FULL / 2 });
+    const full = render({ chest: HEAT_FULL });
     const pct = (view: HTMLElement) =>
       Number(/(\d+)%/.exec(shapeFor(view, 'chest').getAttribute('fill') ?? '')?.[1]);
 
@@ -60,9 +60,20 @@ describe('what the colour says', () => {
     expect(Number(/(\d+)%/.exec(fill)?.[1])).toBeGreaterThanOrEqual(20);
   });
 
-  it('stops climbing at the floor, so past it the colour is not the claim', () => {
+  it('keeps the floor visibly short of a full week, which is the point of 15', () => {
+    /* Saturating at 8 made clearing the floor and having a genuinely full week
+       the same colour. They are different weeks and now they look it. */
     const atFloor = render({ chest: VOLUME_LOW });
-    const wayOver = render({ chest: VOLUME_LOW * 4 });
+    const full = render({ chest: HEAT_FULL });
+    const pct = (view: HTMLElement) =>
+      Number(/(\d+)%/.exec(shapeFor(view, 'chest').getAttribute('fill') ?? '')?.[1]);
+    expect(pct(atFloor.container)).toBeLessThan(pct(full.container));
+    expect(pct(atFloor.container)).toBeGreaterThan(50);
+  });
+
+  it('stops climbing at the top, so past it the colour is not the claim', () => {
+    const atFloor = render({ chest: HEAT_FULL });
+    const wayOver = render({ chest: HEAT_FULL * 4 });
     const pct = (view: HTMLElement) =>
       /(\d+)%/.exec(shapeFor(view, 'chest').getAttribute('fill') ?? '')?.[1];
     expect(pct(wayOver.container)).toBe(pct(atFloor.container));
@@ -100,7 +111,7 @@ describe('reading it without seeing the colours', () => {
     const text = container.textContent ?? '';
     expect(text).toContain('front');
     expect(text).toContain('back');
-    expect(text).toContain(`${VOLUME_LOW}+ sets a week`);
+    expect(text).toContain(`${HEAT_FULL}+ sets a week`);
     expect(text).toContain('none');
   });
 

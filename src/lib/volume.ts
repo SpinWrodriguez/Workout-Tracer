@@ -151,16 +151,27 @@ export function volumeRows(volume: MuscleVolume): MuscleVolumeRow[] {
 }
 
 /**
- * How hot a muscle reads on the body map: 0 untrained, 1 at the weekly floor.
+/**
+ * Where the body map's colour tops out.
  *
- * Anchored on VOLUME_LOW, not the ceiling. The ceiling is where MORE becomes a
- * problem, not where the colour should stop climbing — measured against 20, a
- * real three-day week reads almost entirely cold, because almost nothing gets
- * near 20 sets. The screen's flags answer the other question, "is this muscle
- * short of what the week can give it", against fairShare.
+ * Between the two numbers that already mean something, and deliberately
+ * neither of them. At the ceiling of 20 a real three-day week reads almost
+ * entirely cold, because almost nothing in it gets near 20 sets. At the floor
+ * of 8 the ramp saturates so early that a muscle on 8 and a muscle on 15 look
+ * identical — and the difference between clearing the floor and having had a
+ * genuinely full week is the thing worth seeing. So: full colour at a week's
+ * real work, with the ceiling left to mean what it means.
+ */
+export const HEAT_FULL = 15;
+
+/**
+ * How hot a muscle reads on the body map: 0 untrained, 1 at HEAT_FULL.
+ *
+ * The screen's flags answer a different question — "is this muscle short of
+ * what the week can give it" — against fairShare, which is smaller again.
  */
 export function volumeHeat(sets: number): number {
   if (sets <= 0) return 0;
-  return Math.min(1, sets / VOLUME_LOW);
+  return Math.min(1, sets / HEAT_FULL);
 }
 

@@ -7,6 +7,7 @@ import {
   fairShare,
   weightedPerSet,
   setsPerMuscle,
+  HEAT_FULL,
   volumeHeat,
   volumeRows,
   volumeStatus,
@@ -278,18 +279,24 @@ describe('a fair share of the week the lifter asked for', () => {
 });
 
 describe('how hot a muscle reads on the body map', () => {
-  it('is cold at nothing and full at the weekly floor', () => {
+  it('is cold at nothing and full at a full week of work', () => {
     expect(volumeHeat(0)).toBe(0);
-    expect(volumeHeat(VOLUME_LOW)).toBe(1);
+    expect(volumeHeat(HEAT_FULL)).toBe(1);
   });
 
-  it('climbs to the floor, not to the ceiling', () => {
-    /* Measured against 20 a real three-day week reads almost entirely cold,
-       because almost nothing gets near 20 sets in it. Half the floor has to
-       read as half. */
-    expect(volumeHeat(VOLUME_LOW / 2)).toBe(0.5);
-    // The same eight sets read as 8/20 against the ceiling, and as full here.
+  it('tops out between the floor and the ceiling, not at either', () => {
+    /* Against the ceiling a real three-day week reads almost entirely cold.
+       Against the floor it saturates so early that clearing 8 and having a
+       genuinely full week are the same colour, which is the gap worth
+       seeing. */
+    expect(HEAT_FULL).toBeGreaterThan(VOLUME_LOW);
+    expect(HEAT_FULL).toBeLessThan(VOLUME_HIGH);
+    expect(volumeHeat(VOLUME_LOW)).toBeLessThan(1);
     expect(volumeHeat(VOLUME_LOW)).toBeGreaterThan(VOLUME_LOW / VOLUME_HIGH);
+  });
+
+  it('reads half a full week as half', () => {
+    expect(volumeHeat(HEAT_FULL / 2)).toBe(0.5);
   });
 
   it('stops at the top rather than running away with a big number', () => {
