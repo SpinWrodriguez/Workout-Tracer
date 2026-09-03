@@ -25,7 +25,7 @@ import { streamConversation, type AskUsage } from './askModel';
 import { COACH_TOOLS, runCoachTool } from './coachTools';
 import { shiftIso, todayIso, weekStart } from './format';
 import { WEEKDAY_LABEL, weekdayOf } from './golf';
-import { setsPerMuscle, VOLUME_LOW } from './volume';
+import { fairShare, setsPerMuscle } from './volume';
 import { readWeekPlan } from './weekPlan';
 import { dayLabel } from './dayLabel';
 
@@ -59,7 +59,7 @@ Then:
 The app's own numbers, so you never have to guess where one came from:
 
 - weeklySetTarget is a whole-week total of working sets across all muscles. The lifter sets it themselves with a stepper in Settings, in steps of 3. Nothing derives it from their recovery, their history or their goals. The generator builds weeks within 20% of it, and the validator rejects a week outside that band.
-- musclesUnderTheFloor is a separate rule with fixed numbers, unrelated to weeklySetTarget: a muscle is flagged below 8 weighted sets in a week and above 20, where a set counts 1 for each muscle it trains directly and 0.5 for each it trains indirectly.
+- musclesUnderTheirShare is measured against fairSharePerMuscle, which is the weekly set target spread evenly over the 18 muscles — the share the week they asked for can actually give each one. A set counts 1 for each muscle it trains directly and 0.5 for each it trains indirectly. The training floor from the literature is 8 weighted sets a week per muscle and the ceiling is 20; clearing 8 on every muscle takes far more sets than a three-day week has, so the share is what a list of shortfalls is measured against and the floor is what to aim a priority muscle at. Say which of the two you mean.
 - Never explain one of the app's numbers by inventing how it was worked out. Say what it means and where it is set. Guessing at a derivation is the same mistake as guessing at a weight.
 
 Answering:
@@ -102,12 +102,12 @@ async function recentSessions(limit: number) {
 }
 
 /** Sets per muscle this week, worst first, keeping only the ones short. */
-function volumeSummary(sets: SetLog[], byId: Map<string, Exercise>) {
+function volumeSummary(sets: SetLog[], byId: Map<string, Exercise>, threshold: number) {
   const volume = setsPerMuscle(sets, byId);
   return (Object.keys(volume) as MuscleId[])
     .map((id) => ({ muscle: MUSCLE_BY_ID[id]?.name ?? id, sets: volume[id] ?? 0 }))
     .sort((a, b) => a.sets - b.sets || a.muscle.localeCompare(b.muscle))
-    .filter((row) => row.sets < VOLUME_LOW)
+    .filter((row) => row.sets < threshold)
     .slice(0, 8);
 }
 
@@ -141,6 +141,8 @@ export async function buildCoachContext(exercises: Exercise[]): Promise<CoachCon
     .anyOf(weekSessions.map((session) => session.id))
     .toArray();
 
+  const share = fairShare(training.weeklySetTarget, byId);
+
   return {
     payload: {
       today: `${WEEKDAY_LABEL[weekdayOf(today)]} ${today}`,
@@ -157,7 +159,8 @@ export async function buildCoachContext(exercises: Exercise[]): Promise<CoachCon
       },
       thisWeek: {
         setsLogged: thisWeeksSets.length,
-        musclesUnderTheFloor: volumeSummary(thisWeeksSets, byId),
+        fairSharePerMuscle: share,
+        musclesUnderTheirShare: volumeSummary(thisWeeksSets, byId, share),
         workouts: (plan?.all ?? []).map((day) => ({
           name: dayLabel({
             slot: day.slot,

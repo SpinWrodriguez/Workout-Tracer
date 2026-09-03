@@ -202,8 +202,7 @@ describe('what the coach is sent', () => {
     const system = sent[0]?.system[0]?.text ?? '';
     /* Roughly four characters to a token, so this is about 1,200 tokens of
        rules and context on an empty database — a fraction of one library, and
-       cached, so a second question in the same minute reads it back at a
-       tenth of the price. */
+       the whole reason a question costs a fraction of a cent. */
     expect(system.length).toBeLessThan(5200);
   });
 
@@ -244,7 +243,12 @@ describe('what the coach is sent', () => {
        Both were invented to fill a gap in what it had been told. */
     expect(system).toMatch(/lifter sets it themselves/);
     expect(system).toMatch(/Nothing derives it/);
-    expect(system).toMatch(/separate rule with fixed numbers/);
+    /* And the shortfall list is measured against a share of that target, not
+       the 8-set floor from the literature — two numbers that used to be one
+       sentence apart and got conflated. */
+    expect(system).toMatch(/musclesUnderTheirShare is measured against fairSharePerMuscle/);
+    expect(system).toMatch(/spread evenly over the 18 muscles/);
+    expect(system).toMatch(/floor from the literature is 8/);
     expect(system).toMatch(/Never explain one of the app's numbers by inventing/);
   });
 

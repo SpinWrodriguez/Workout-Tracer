@@ -13,9 +13,68 @@ import { MUSCLES } from '../db/seed/muscles';
 export const PRIMARY_WEIGHT = 1;
 export const SECONDARY_WEIGHT = 0.5;
 
-/** Spec Phase 4: flag a muscle below 8 or above 20 sets in a week. */
+/**
+ * Spec Phase 4: flag a muscle below 8 or above 20 weighted sets in a week.
+ *
+ * These are the evidence numbers, and they are kept as such — but 18 muscles
+ * times a floor of 8 is 144 weighted sets, and a set is worth about 2.8 of
+ * those, so clearing every muscle takes roughly 53 sets a week. A 36-set week
+ * cannot get there: ten muscles were flagged permanently, by arithmetic, which
+ * turns the one card meant to point at neglect into noise.
+ *
+ * So the floor is what a week SHOULD have, and `fairShare` below is what the
+ * week actually asked for can give. The screen flags against the share and
+ * says what the floor would need.
+ */
 export const VOLUME_LOW = 8;
 export const VOLUME_HIGH = 20;
+
+/**
+ * Weighted muscle-sets one working set is worth, averaged over the library.
+ *
+ * Measured, not guessed: a set counts 1 for each muscle it trains directly and
+ * 0.5 for each it trains indirectly, and the curated 70 non-mobility exercises
+ * average 2.81 of those. Computed from whatever exercise table is passed in,
+ * so adding exercises moves it.
+ */
+export function weightedPerSet(exercisesById: Map<string, Exercise>): number {
+  const rows = [...exercisesById.values()].filter((exercise) => !exercise.isMobility);
+  if (rows.length === 0) return 1;
+  const total = rows.reduce(
+    (sum, exercise) =>
+      sum + exercise.primaryMuscles.length + exercise.secondaryMuscles.length * SECONDARY_WEIGHT,
+    0,
+  );
+  return total / rows.length;
+}
+
+/**
+ * An even share of the week's set target, per muscle.
+ *
+ * What "enough" can mean for the week that was actually asked for: 36 sets is
+ * about 101 weighted sets, which across 18 muscles is 5.6 each. A muscle under
+ * its share is under-served RELATIVE TO THIS WEEK — a real thing to act on —
+ * where "under 8" was a verdict the target made unreachable.
+ *
+ * Never above the evidence floor: a 90-set week does not make 20 sets of
+ * biceps a shortfall.
+ */
+/**
+ * The weighted sets one muscle can expect from the week the lifter asked for.
+ *
+ * The target is a count of working sets; each one lands on about 2.81 weighted
+ * muscle-sets, spread over 18 muscles. At the 36-set default that is 5.5 a
+ * muscle — the floor of 8 everywhere would take about 53 sets a week, which is
+ * not a three-day week. Capped at the floor, because past that the literature
+ * has a real number and this arithmetic should get out of its way.
+ *
+ * Rounded to the half set, since that is the smallest amount a set can add.
+ */
+export function fairShare(weeklySetTarget: number, exercisesById: Map<string, Exercise>): number {
+  const weighted = weeklySetTarget * weightedPerSet(exercisesById);
+  const share = weighted / MUSCLES.length;
+  return Math.min(VOLUME_LOW, Math.round(share * 2) / 2);
+}
 
 export type VolumeStatus = 'none' | 'low' | 'ok' | 'high';
 

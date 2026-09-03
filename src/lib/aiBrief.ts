@@ -30,19 +30,26 @@ export interface UndertrainedMuscle {
 }
 
 /**
- * Muscles under the weekly floor, worst first. Untrained ones come first
- * because zero is the strongest signal there is; the rest are ranked by how
- * far short they fell.
+ * Muscles short of what this week can give them, worst first. Untrained ones
+ * come first because zero is the strongest signal there is; the rest are
+ * ranked by how far short they fell.
+ *
+ * The threshold is a fair share of the week's set target, not the evidence
+ * floor of 8. Against the floor this list was permanently long — 18 muscles
+ * times 8 needs about 53 sets a week and the target is 36 — so it told the
+ * generator that everything was short, which is the same as telling it
+ * nothing.
  */
 export function undertrained(
   logs: SetLog[],
   exercisesById: Map<string, Exercise>,
+  threshold: number,
   limit = 6,
 ): UndertrainedMuscle[] {
   const volume = setsPerMuscle(logs, exercisesById);
   return (Object.keys(volume) as MuscleId[])
     .map((id) => ({ id, name: MUSCLE_BY_ID[id]?.name ?? id, sets: volume[id] ?? 0 }))
-    .filter((row) => row.sets < VOLUME_LOW)
+    .filter((row) => row.sets < threshold)
     .sort((a, b) => a.sets - b.sets || a.name.localeCompare(b.name))
     .slice(0, limit);
 }
@@ -63,6 +70,8 @@ export interface DayConstraints {
 }
 
 export interface BriefInput {
+  /** The share of the week's target each muscle can expect — see fairShare. */
+  share?: number;
   /** What the lifter typed. Empty is normal and expected. */
   goal?: string;
   /** Standing instructions from Settings. */
@@ -161,7 +170,9 @@ export function briefPayload(brief: Brief, input: BriefInput): Record<string, un
           weeklyShortfall: input.undertrained.map((row) => ({
             muscle: row.name,
             setsThisWeek: row.sets,
-            weeklyFloor: VOLUME_LOW,
+            /* What this week can give it, not the evidence floor: a target the
+               week cannot reach is not a shortfall the generator can fix. */
+            fairShareThisWeek: input.share ?? VOLUME_LOW,
           })),
         }
       : {}),

@@ -65,6 +65,7 @@ import { Card, Empty, Label, Screen } from '../components/Layout';
 import { WeekStrip, type WeekStripDay } from '../components/WeekStrip';
 import { shiftIso, weekStart } from '../lib/format';
 import { budgetMinutes, readTimeFactor } from '../lib/timeModel';
+import { fairShare } from '../lib/volume';
 
 const DAY_SLOTS = SLOTS;
 
@@ -158,6 +159,10 @@ export function ProgramScreen({
    */
   const timeFactor = useLiveQuery(() => readTimeFactor(byId), [byId], undefined);
   const sessionMinutes = budgetMinutes(training.sessionMinutes, timeFactor);
+  /* What one muscle can expect from the week that was asked for. The evidence
+     floor of 8 is unreachable at this target, so telling the generator every
+     muscle is short tells it nothing. */
+  const share = fairShare(training.weeklySetTarget, byId);
   const shape = training.shape;
 
   const week: WeekStripDay[] = useMemo(() => {
@@ -580,8 +585,8 @@ export function ProgramScreen({
     if (want.intensity === 'light') constraints.noHighSpinal = true;
 
     const instructions = await readAiInstructions();
-    const short = undertrained(weekLogs, byId);
-    const brief = buildBrief({ goal: want.goal, instructions, undertrained: short, existing, constraints });
+    const short = undertrained(weekLogs, byId, share);
+    const brief = buildBrief({ share, goal: want.goal, instructions, undertrained: short, existing, constraints });
 
     /* The shape the day was ASKED for, which is what it is judged against. A
        forced focus is a requirement, so the model agreeing to it is not
@@ -797,8 +802,8 @@ export function ProgramScreen({
       const sessionIds = new Set(weekSessions.map((session) => session.id));
       const weekLogs = (await db.setLog.toArray()).filter((log) => sessionIds.has(log.sessionId));
       const instructions = await readAiInstructions();
-      const short = undertrained(weekLogs, byId);
-      const brief = buildBrief({ goal: note, instructions, undertrained: short, existing });
+      const short = undertrained(weekLogs, byId, share);
+      const brief = buildBrief({ share, goal: note, instructions, undertrained: short, existing });
 
       const outcome = await generateAiWeek({
         slots: requests,

@@ -2,13 +2,16 @@ import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { MUSCLES } from '../db/seed/muscles';
+import { readTraining } from '../db/settings';
 import type { Exercise } from '../db/types';
 import { friendlyDate, shiftIso, todayIso, weekStart } from '../lib/format';
 import {
   VOLUME_HIGH,
   VOLUME_LOW,
+  fairShare,
   perWeek,
   setsPerMuscle,
+  weightedPerSet,
   volumeRows,
   type MuscleVolumeRow,
 } from '../lib/volume';
@@ -57,6 +60,15 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
   const from = shiftIso(to, -7 * weeks);
 
   const byId = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
+  /*
+   * The share this week can actually give each muscle, from the set target in
+   * Settings. Flagging against the evidence floor of 8 meant ten muscles were
+   * short every week whatever was trained, because 18 x 8 needs about 53 sets
+   * and the target is 36.
+   */
+  const training = useLiveQuery(() => readTraining(), [], undefined);
+  const share = training ? fairShare(training.weeklySetTarget, byId) : VOLUME_LOW;
+  const floorNeeds = Math.ceil((MUSCLES.length * VOLUME_LOW) / weightedPerSet(byId));
 
   const volume = useLiveQuery(async () => {
     const sessions = await db.session.where('date').between(from, to, true, false).toArray();
@@ -90,8 +102,7 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
    * card that exists to point at neglected muscles.
    */
   const flagged = rows.filter(
-    (row) =>
-      row.status === 'high' || (wasTouched.has(row.muscleId) && row.sets < VOLUME_LOW),
+    (row) => row.status === 'high' || (wasTouched.has(row.muscleId) && row.sets < share),
   );
   const untouched = rows.filter((row) => !wasTouched.has(row.muscleId));
   const trained = rows.filter((row) => wasTouched.has(row.muscleId));
@@ -146,12 +157,12 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
               <span className="text-[14px] font-medium">{row.name}</span>
               <Label className="text-right">
                 {row.sets} {row.sets === 1 ? 'set' : 'sets'} —{' '}
-                {row.status === 'low' ? `under ${VOLUME_LOW}` : `over ${VOLUME_HIGH}`}
+                {row.status === 'high' ? `over ${VOLUME_HIGH}` : `under its share of ${share}`}
               </Label>
             </div>
           ))}
           {flagged.length > 6 && (
-            <Label className="mt-1 block">+{flagged.length - 6} more under {VOLUME_LOW}</Label>
+            <Label className="mt-1 block">+{flagged.length - 6} more under {share}</Label>
           )}
           {untouched.length > 0 && (
             <p className="mt-2 text-[13px] font-medium text-text-dim">
@@ -160,8 +171,11 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
             </p>
           )}
           <p className="mt-2 text-[12px] font-medium text-text-dim">
-            Counted as 1 set per primary muscle and 0.5 per secondary. Two sessions a week will
-            leave plenty of these low; the flags are a prompt, not a verdict.
+            Counted as 1 set per primary muscle and 0.5 per secondary. The share is your{' '}
+            {training?.weeklySetTarget ?? '--'} weekly sets spread evenly over{' '}
+            {MUSCLES.length} muscles — {share} each. Clearing the {VOLUME_LOW}-set training floor
+            on every muscle would take about {floorNeeds} sets a week, so the flags are a
+            priority order, not a verdict.
           </p>
         </Card>
       )}

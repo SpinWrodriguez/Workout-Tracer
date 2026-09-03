@@ -4,6 +4,8 @@ import type { SetLog } from '../db/types';
 import {
   VOLUME_HIGH,
   VOLUME_LOW,
+  fairShare,
+  weightedPerSet,
   setsPerMuscle,
   volumeIntensity,
   volumeRows,
@@ -249,5 +251,34 @@ describe('a muscle that averages to nothing', () => {
     expect(quarter.quads).toBe(0);
     // Which is why the screen cannot read "trained" off the average alone.
     expect(volumeStatus(quarter.quads)).toBe('none');
+  });
+});
+
+describe('a fair share of the week the lifter asked for', () => {
+  it('is well under the evidence floor at a realistic target', () => {
+    /* The number that started this: 36 sets a week over 18 muscles cannot
+       give any of them 8. Flagging against 8 flagged nearly everything, which
+       told the screen and the generator nothing. */
+    expect(fairShare(36, byId)).toBeLessThan(VOLUME_LOW);
+    expect(fairShare(36, byId)).toBeGreaterThan(4);
+  });
+
+  it('rises with the target and stops at the floor', () => {
+    expect(fairShare(24, byId)).toBeLessThan(fairShare(36, byId));
+    // Past the floor the literature has a real number; this arithmetic stops.
+    expect(fairShare(200, byId)).toBe(VOLUME_LOW);
+  });
+
+  it('lands on the half set, the smallest a set can add', () => {
+    for (const target of [12, 15, 18, 21, 24, 27, 30, 33, 36]) {
+      expect((fairShare(target, byId) * 2) % 1).toBe(0);
+    }
+  });
+
+  it('counts a set as more than one muscle-set, because it is', () => {
+    // Measured over the library, not assumed: about 2.8 as it stands.
+    expect(weightedPerSet(byId)).toBeGreaterThan(2);
+    expect(weightedPerSet(byId)).toBeLessThan(4);
+    expect(weightedPerSet(new Map())).toBe(1);
   });
 });

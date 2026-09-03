@@ -18,7 +18,7 @@ const sets = (exerciseId: string, count: number): SetLog[] =>
 
 describe('reading the shortfall off the week', () => {
   it('finds nothing trained when nothing was logged', () => {
-    const short = undertrained([], byId, 100);
+    const short = undertrained([], byId, VOLUME_LOW, 100);
     // Every muscle is at zero, so every muscle is short.
     expect(short.length).toBeGreaterThan(10);
     expect(short.every((row) => row.sets === 0)).toBe(true);
@@ -26,7 +26,7 @@ describe('reading the shortfall off the week', () => {
 
   it('ranks untrained muscles above merely light ones', () => {
     // 20 sets of bench: chest is well over the floor, legs untouched.
-    const short = undertrained(sets('bb_bench_press', 20), byId, 100);
+    const short = undertrained(sets('bb_bench_press', 20), byId, VOLUME_LOW, 100);
     expect(short.map((row) => row.id)).not.toContain('chest');
     expect(short[0]?.sets).toBe(0);
     for (let i = 1; i < short.length; i += 1) {
@@ -34,8 +34,17 @@ describe('reading the shortfall off the week', () => {
     }
   });
 
+  it('measures against the threshold it was given, not the floor', () => {
+    /* The screen passes a fair share of the week's target, which is under the
+       floor. A muscle between the two is not short of what the week can give
+       it, and a list that says it is is a list of everything. */
+    const logs = sets('bb_back_squat', 6);
+    expect(undertrained(logs, byId, VOLUME_LOW, 100).map((row) => row.id)).toContain('quads');
+    expect(undertrained(logs, byId, 5, 100).map((row) => row.id)).not.toContain('quads');
+  });
+
   it('leaves out anything at or above the weekly floor', () => {
-    const short = undertrained(sets('bb_back_squat', 10), byId, 100);
+    const short = undertrained(sets('bb_back_squat', 10), byId, VOLUME_LOW, 100);
     for (const row of short) expect(row.sets).toBeLessThan(VOLUME_LOW);
     expect(short.map((row) => row.id)).not.toContain('quads');
   });
