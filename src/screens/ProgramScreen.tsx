@@ -64,6 +64,7 @@ import { ExerciseDetail } from '../components/ExerciseDetail';
 import { Card, Empty, Label, Screen } from '../components/Layout';
 import { WeekStrip, type WeekStripDay } from '../components/WeekStrip';
 import { shiftIso, weekStart } from '../lib/format';
+import { budgetMinutes, readTimeFactor } from '../lib/timeModel';
 
 const DAY_SLOTS = SLOTS;
 
@@ -149,7 +150,14 @@ export function ProgramScreen({
   /* Session length and split shape are training preferences, edited in
      Settings. They were on this screen as part of the starter week, which put
      two program-wide settings inside a shortcut nobody had to use. */
-  const sessionMinutes = training.sessionMinutes;
+  /*
+   * The budget the generator builds to, in ESTIMATE minutes. Scaled by what
+   * sessions actually take: the model over-estimates a lifting day badly
+   * enough that a 40-minute budget was buying 28 real minutes. Unscaled until
+   * there are a few sessions to measure — see src/lib/timeModel.ts.
+   */
+  const timeFactor = useLiveQuery(() => readTimeFactor(byId), [byId], undefined);
+  const sessionMinutes = budgetMinutes(training.sessionMinutes, timeFactor);
   const shape = training.shape;
 
   const week: WeekStripDay[] = useMemo(() => {

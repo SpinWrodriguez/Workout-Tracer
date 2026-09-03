@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../db/db';
+import { budgetMinutes, readTimeFactor } from '../lib/timeModel';
 import {
   DEFAULT_TRAINING,
   readTraining,
@@ -28,6 +31,10 @@ const SESSION_LENGTH_LABEL = { '30': '30 min', '40': '40 min', '60': '60 min' };
 
 export function TrainingPrefsEditor() {
   const [prefs, setPrefs] = useState<TrainingPrefs | null>(null);
+  const factor = useLiveQuery(async () => {
+    const exercises = await db.exercise.toArray();
+    return readTimeFactor(new Map(exercises.map((row) => [row.id, row])));
+  }, [], undefined);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -88,6 +95,13 @@ export function TrainingPrefsEditor() {
           labels={SESSION_LENGTH_LABEL}
         />
       </div>
+      {/* What the app has learned about your pace, said out loud. A budget
+          silently scaled by a hidden number is worse than no scaling. */}
+      <Label className="mt-2 block">
+        {factor === undefined
+          ? 'Your sessions are timed against an estimate of 40s a set plus rest. After three logged workouts it starts using your real pace instead.'
+          : `Your sessions run at ${Math.round(factor * 100)}% of the estimate, so workouts are built to ${budgetMinutes(prefs.sessionMinutes, factor)} estimate-minutes to land on ${prefs.sessionMinutes}.`}
+      </Label>
 
       <Label className="mt-4 block">Split</Label>
       <div className="mt-1.5">
