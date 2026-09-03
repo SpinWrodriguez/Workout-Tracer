@@ -61,6 +61,28 @@ export function gripConflictOn(dateIso: string, golfDates: string[]): GripConfli
   return best;
 }
 
+/**
+ * The rule in a sentence, for a date that falls in a buffer — or undefined for
+ * one that does not.
+ *
+ * The buffer was silent everywhere it acted. Asking for a Thursday workout two
+ * days before a Saturday round quietly produced a session with no pulling in
+ * it, and nothing on any screen said why: the constraint reaches the model as
+ * a bare prohibition, deliberately, because a model told the reason starts
+ * reasoning about the calendar. The lifter is not a model.
+ */
+export function gripBufferNote(dateIso: string, golfDates: string[]): string | undefined {
+  const conflict = gripConflictOn(dateIso, golfDates);
+  if (!conflict) return undefined;
+  const when =
+    conflict.daysBefore === 0
+      ? 'Golf today'
+      : conflict.daysBefore === 1
+        ? 'Golf tomorrow'
+        : `Golf in ${conflict.daysBefore} days`;
+  return `${when} (${WEEKDAY_LABEL[weekdayOf(conflict.golfDate)]}) — no grip, lat or forearm work.`;
+}
+
 export function isGripSafe(dateIso: string, golfDates: string[]): boolean {
   return gripConflictOn(dateIso, golfDates) === undefined;
 }

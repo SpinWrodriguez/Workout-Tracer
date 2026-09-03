@@ -1,6 +1,6 @@
 import type { DaySlot, GolfDay } from '../db/types';
 import { longDate } from '../lib/format';
-import { WEEKDAY_LABEL, weekdayOf } from '../lib/golf';
+import { WEEKDAY_LABEL, gripBufferNote, weekdayOf } from '../lib/golf';
 
 import { useState } from 'react';
 
@@ -14,6 +14,7 @@ import { Label } from './Layout';
 
 export function DayEditor({
   date,
+  golfDates,
   slots,
   labelFor,
   onSetUsual,
@@ -29,6 +30,8 @@ export function DayEditor({
   askError,
 }: {
   date: string;
+  /** Every date a round is on, so this day can say what it is close to. */
+  golfDates: string[];
   /** Slots the block actually defines, so we never offer an empty day. */
   slots: DaySlot[];
   /** What each slot is called, resolved by the screen that owns the block. */
@@ -52,6 +55,9 @@ export function DayEditor({
   askError?: string;
 }) {
   const weekday = weekdayOf(date);
+  /* Why a workout built for this day will come back without pulling in it.
+     The rule used to act here and say nothing. */
+  const note = gripBufferNote(date, golfDates);
   const [goal, setGoal] = useState('');
   const [expanded, setExpanded] = useState(false);
 
@@ -80,6 +86,15 @@ export function DayEditor({
       >
         <h3 className="card-title">{WEEKDAY_LABEL[weekday]}</h3>
         <Label className="mt-0.5 block">{longDate(date)}</Label>
+
+        {note && (
+          <p
+            className="mt-2.5 rounded-xl px-3 py-2 text-[12px] leading-snug font-medium"
+            style={{ background: 'var(--color-surface-2)', color: 'var(--color-warn)' }}
+          >
+            {note}
+          </p>
+        )}
 
         <Label className="mt-4 mb-1.5 block">Gym</Label>
         <div className="flex flex-col gap-1.5">

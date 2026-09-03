@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { EXERCISES } from '../db/seed/exercises';
 import type { GolfDay } from '../db/types';
+import { shiftIso } from './format';
 import {
   GRIP_BUFFER_DAYS,
   buildWeek,
+  gripBufferNote,
   gripConflictOn,
   gripSafeWeekdays,
   golfWeekdaysFrom,
@@ -84,6 +86,33 @@ describe('the buffer window', () => {
     expect(weekdayOf(MON)).toBe(1);
     expect(weekdayOf(SAT)).toBe(6);
     expect(weekdayOf('2026-08-30')).toBe(7);
+  });
+});
+
+describe('saying the buffer out loud', () => {
+  /* The rule acted and said nothing: a Thursday workout came back with no
+     pulling in it and no screen explained why. The model is still told the
+     bare prohibition — it reasons badly about calendars — but the lifter is
+     not a model. */
+  it('names the round and what it costs', () => {
+    expect(gripBufferNote(THU, [SAT])).toBe('Golf in 2 days (Sat) — no grip, lat or forearm work.');
+    expect(gripBufferNote(FRI, [SAT])).toBe('Golf tomorrow (Sat) — no grip, lat or forearm work.');
+    expect(gripBufferNote(SAT, [SAT])).toBe('Golf today (Sat) — no grip, lat or forearm work.');
+  });
+
+  it('says nothing on a day the rule does not touch', () => {
+    expect(gripBufferNote(TUE, [SAT])).toBeUndefined();
+    expect(gripBufferNote(MON, [SAT])).toBeUndefined();
+    // The day after a round is free: the rule is one-directional.
+    expect(gripBufferNote('2026-08-30', [SAT])).toBeUndefined();
+    expect(gripBufferNote(THU, [])).toBeUndefined();
+  });
+
+  it('agrees with the rule it is describing, on every day of a fortnight', () => {
+    for (let offset = -7; offset <= 7; offset += 1) {
+      const date = shiftIso(SAT, offset);
+      expect(gripBufferNote(date, [SAT]) === undefined, date).toBe(isGripSafe(date, [SAT]));
+    }
   });
 });
 

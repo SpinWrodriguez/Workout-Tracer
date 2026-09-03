@@ -78,6 +78,7 @@ export function DaySlotCard({
   entries,
   exercisesById,
   minutes,
+  note,
   editing,
   isToday,
   onToggleEdit,
@@ -102,6 +103,12 @@ export function DaySlotCard({
    * sessions actually took. Undefined while there is nothing to say.
    */
   minutes?: number;
+  /**
+   * One line about a rule that acted on this day — the golf grip buffer, which
+   * strips pulling from anything built in the three days before a round and
+   * used to do it silently.
+   */
+  note?: string;
   editing: boolean;
   isToday: boolean;
   onToggleEdit: () => void;
@@ -169,6 +176,15 @@ export function DaySlotCard({
         </span>
       }
     >
+      {note && (
+        <p
+          className="mb-1 rounded-xl px-3 py-2 text-[12px] leading-snug font-medium"
+          style={{ background: 'var(--color-surface-2)', color: 'var(--color-warn)' }}
+        >
+          {note}
+        </p>
+      )}
+
       {/* The only draw offered on a card, and only when there is nothing to
           lose. Shuffle and Regenerate used to sit here too, both re-rolling
           the same deterministic selector: they replaced a workout you had

@@ -491,6 +491,38 @@ describe('picking and unpicking an exercise', () => {
   });
 });
 
+describe('the golf buffer, said out loud', () => {
+  it('tells the card why its workout has no pulling in it', async () => {
+    /* The rule stripped grip work from anything built in the three days
+       before a round and no screen mentioned it, so a Thursday session came
+       back with no pulling and looked like a bad generator. */
+    const saturday = dayOfThisWeek(5);
+    await db.golfDay.put({ date: saturday, status: 'planned', holes: 18 });
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Thursday push' } });
+    await seedWorkout('A', ['bb_bench_press']);
+    await seedPlan({ [THURSDAY]: 'A' });
+
+    await openProgram();
+
+    const card = await workoutCard('Thursday push');
+    await waitFor(() =>
+      expect(card.textContent).toContain('Golf in 2 days (Sat) — no grip, lat or forearm work.'),
+    );
+  });
+
+  it('says nothing on a day the rule does not touch', async () => {
+    await db.golfDay.put({ date: dayOfThisWeek(5), status: 'planned', holes: 18 });
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedPlan({ [MONDAY]: 'A' });
+
+    await openProgram();
+
+    const card = await workoutCard('Monday squats');
+    expect(card.textContent).not.toContain('no grip, lat or forearm work');
+  });
+});
+
 describe('how long the workout takes', () => {
   /** A workout of three exercises, three sets each, on the card. */
   async function cardFor(name = 'Monday squats') {

@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { DaySlot, Exercise, GolfDay } from '../db/types';
 import { friendlyDate, longDate, todayIso } from '../lib/format';
-import { WEEKDAY_LABEL, buildWeek, weekdayOf, type Weekday } from '../lib/golf';
+import { WEEKDAY_LABEL, buildWeek, gripBufferNote, weekdayOf, type Weekday } from '../lib/golf';
 import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import { balanceSets, generateDay, type DayPlan } from '../lib/blockBuilder';
@@ -117,6 +117,9 @@ export function ProgramScreen({
 
   const block = useLiveQuery(() => db.block.orderBy('startDate').reverse().first(), [], undefined);
   const golfDays = useLiveQuery(() => db.golfDay.toArray(), [], undefined);
+  /* Every round, in date order. `gripConflictOn` only looks forward, so a
+     round already played constrains nothing. */
+  const golfDateList = (golfDays ?? []).map((day) => day.date);
   const slots = useLiveQuery(
     async () => (block ? db.blockExercise.where('blockId').equals(block.id).toArray() : []),
     [block?.id],
@@ -273,9 +276,12 @@ export function ProgramScreen({
         date: day.date,
         golf: day.golf !== undefined,
         taken: day.plannedSlot !== undefined ? labelFor(day.plannedSlot) : undefined,
+        /* What the rule will do to a workout built for this date, said before
+           it happens rather than never. */
+        note: gripBufferNote(day.date, golfDateList),
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [week, schedule, slots],
+    [week, schedule, slots, golfDays],
   );
 
   /** The workouts on the visible week, in the order they are trained. */
@@ -1116,6 +1122,8 @@ export function ProgramScreen({
             weekday={date !== undefined ? weekdayOf(date) : undefined}
             entries={list}
             exercisesById={byId}
+            /* Why this day has no pulling in it, where the rule acted. */
+            note={date === undefined ? undefined : gripBufferNote(date, golfDateList)}
             /* Real minutes, not the model's: the same learned factor that
                sized the budget this day was built to. */
             minutes={list.length > 0 ? realMinutes(estimateMinutes(list, byId), timeFactor) : undefined}
@@ -1239,6 +1247,7 @@ export function ProgramScreen({
       {editingDate && (
         <DayEditor
           date={editingDate}
+          golfDates={golfDateList}
           slots={definedSlots}
           labelFor={labelFor}
           onAsk={(goal) => void askForWorkout(goal, editingDate)}

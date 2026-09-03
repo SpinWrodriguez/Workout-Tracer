@@ -38,6 +38,8 @@ export interface WeekPlanDay {
   golf: boolean;
   /** A workout is already planned here; generating would be a second one. */
   taken?: string;
+  /** A rule that will shape whatever is built here — the golf grip buffer. */
+  note?: string;
 }
 
 const INTENSITIES: Intensity[] = ['heavy', 'light'];
@@ -182,6 +184,15 @@ export function WeekPlanSheet({
                         : 'rest'}
                 </span>
               </button>
+
+              {active && day.note && (
+                <p
+                  className="mt-1.5 text-[11px] leading-snug font-medium"
+                  style={{ color: 'var(--color-warn)' }}
+                >
+                  {day.note}
+                </p>
+              )}
 
               {active && (
                 <>
