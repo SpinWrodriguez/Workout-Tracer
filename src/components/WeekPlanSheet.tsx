@@ -9,6 +9,7 @@ import {
   type WorkoutFocus,
 } from '../lib/weekTemplate';
 import { Sheet } from './Sheet';
+import { HapticTick } from './HapticTick';
 import { Label } from './Layout';
 
 /* -------------------------------------------------------------------------- */
@@ -134,13 +135,14 @@ export function WeekPlanSheet({
           type="button"
           disabled={asking || picked.length === 0}
           onClick={() => onBuild(picked, note)}
-          className="h-cta w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
+          className="h-cta relative w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
         >
           {asking
             ? `Building${progress ? ` ${progress}` : ''}…`
             : picked.length === 0
               ? 'Pick your training days'
               : `Build ${picked.length} workout${picked.length === 1 ? '' : 's'}`}
+          <HapticTick />
         </button>
       }
     >
