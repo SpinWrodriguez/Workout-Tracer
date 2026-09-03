@@ -6,6 +6,7 @@ import { linearTrend, rollingAverage, type DatedPoint } from '../lib/stats';
 import { WEEKDAY_LABEL } from '../lib/golf';
 import { readWeekPlan } from '../lib/weekPlan';
 import { WEEKLY_SET_TARGET } from '../lib/blockValidation';
+import { readTraining } from '../db/settings';
 import { Card, Empty, Label, Screen } from '../components/Layout';
 import { BodyWeightChart } from '../components/LazyCharts';
 import { ThemeToggleButton } from '../components/ThemePicker';
@@ -14,11 +15,15 @@ import { SyncWarning } from '../components/SyncWarning';
 import { dayLabel, slotFallback } from '../lib/dayLabel';
 
 /**
- * Weekly targets for a realistic two-session week (spec §1): ~6 exercises a
- * session at 3 sets. Editable targets are a Settings concern for a later
- * phase; hard-coding them now keeps Phase 1 honest about what it computes.
+ * Exercise and muscle targets for a realistic two-session week (spec §1):
+ * ~6 exercises a session at 3 sets. Neither is a setting, so both stay here.
+ *
+ * The set target is NOT here. It became a Settings control — the stepper the
+ * generator builds weeks to and the validator enforces — and this ring went on
+ * printing the constant, so moving the target to 39 left the dashboard saying
+ * 33 and nothing in the app agreeing with anything else.
  */
-const WEEKLY_TARGET = { sets: WEEKLY_SET_TARGET, exercises: 12, muscles: 10 };
+const WEEKLY_TARGET = { exercises: 12, muscles: 10 };
 
 /** Height of the ring row, and the diameter of the emphasised centre ring. */
 const RING_ROW = 112;
@@ -34,6 +39,14 @@ export function DashboardScreen({
   onStartDay: (slot?: DaySlot) => void;
   onOpenSettings: () => void;
 }) {
+  /*
+   * The set target, live. Read through useLiveQuery rather than once on mount
+   * so pressing Save training updates the ring behind it — the settings row is
+   * the only thing between the two screens.
+   */
+  const training = useLiveQuery(() => readTraining(), [], undefined);
+  const setTarget = training?.weeklySetTarget ?? WEEKLY_SET_TARGET;
+
   /*
    * The whole block's week, not just today. Answering only "what is today"
    * hid the other days entirely on a rest day, which reads as though the
@@ -217,7 +230,7 @@ export function DashboardScreen({
           />
           <Ring
             value={week?.setCount ?? 0}
-            target={WEEKLY_TARGET.sets}
+            target={setTarget}
             label="Sets"
             color="var(--color-volume)"
             size={RING_ROW}

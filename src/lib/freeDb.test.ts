@@ -189,6 +189,29 @@ describe('fetch and store', () => {
     expect((await getRecord('Barbell_Squat'))?.instructions).toEqual(['Set the bar.', 'Squat.']);
   });
 
+  it('drops a cached record the mapping no longer points at', async () => {
+    /* Found on a phone reporting "62 of 61 cached". Four near-matches were
+       unmapped and an exercise was removed, and their records stayed behind:
+       bulkPut adds and updates but never removes. One of them was a photo
+       nothing in the app could reach any more. */
+    // Cable_Kickback is the trap — upstream's is glutes, ours is triceps, so
+    // it takes the dumbbell record and this one is unreachable. Ab_Roller is
+    // the removed exercise. Pullups is still owned by the pull-up: it stays.
+    await db.freeDbCache.put({ id: 'Cable_Kickback', json: { id: 'Cable_Kickback' } });
+    await db.freeDbCache.put({ id: 'Ab_Roller', json: { id: 'Ab_Roller' } });
+    await db.freeDbCache.put({ id: 'Pullups', json: { id: 'Pullups' } });
+
+    const report = await fetchAndStoreFreeDb(okFetch(upstream));
+
+    expect(report.pruned).toBe(2);
+    expect(await db.freeDbCache.get('Cable_Kickback')).toBeUndefined();
+    expect(await db.freeDbCache.get('Ab_Roller')).toBeUndefined();
+    // Still mapped, so still cached — a prune that took this would lose a photo.
+    expect(await db.freeDbCache.get('Pullups')).toBeDefined();
+    // Never more cached than the mapping asks for, which is what the count said.
+    expect(await db.freeDbCache.count()).toBeLessThanOrEqual(mappedIds().length);
+  });
+
   it('throws a readable error on a bad response', async () => {
     const bad = vi.fn(async () => new Response('nope', { status: 503, statusText: 'Unavailable' }));
     await expect(fetchAndStoreFreeDb(bad as unknown as typeof fetch)).rejects.toThrow(/503/);

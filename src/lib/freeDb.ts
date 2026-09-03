@@ -83,6 +83,8 @@ export interface EnrichReport {
   /** Curated exercises with a freeDbId. */
   requested: number;
   stored: number;
+  /** Cached records the mapping no longer points at, deleted on the way past. */
+  pruned: number;
   /** Hand-mapped ids that upstream does not have — a mapping bug, not a miss. */
   unknownIds: string[];
   /** Curated exercises deliberately left unmapped; they fall back to a cue. */
@@ -125,6 +127,7 @@ export async function fetchAndStoreFreeDb(
   const { records, unknownIds } = selectRecords(raw);
 
   // Merge rather than replace: cached image blobs must survive a refetch.
+  let pruned = 0;
   await db.transaction('rw', db.freeDbCache, async () => {
     const existing = await db.freeDbCache.bulkGet(records.map((r) => r.id));
     const blobsById = new Map(
@@ -139,12 +142,27 @@ export async function fetchAndStoreFreeDb(
         imageBlobs: blobsById.get(record.id),
       })),
     );
+
+    /*
+     * And drop what the mapping no longer points at. bulkPut adds and updates
+     * but never removes, so a remapped or unmapped exercise left its old
+     * record behind — which is how a device came to report "62 of 61 cached",
+     * one of them a photo nothing could reach. Same lesson as the seed prune:
+     * merging is not reconciling.
+     */
+    const wanted = new Set(mappedIds());
+    const stale = (await db.freeDbCache.toCollection().primaryKeys()).filter(
+      (id) => !wanted.has(String(id)),
+    );
+    if (stale.length > 0) await db.freeDbCache.bulkDelete(stale);
+    pruned = stale.length;
   });
 
   return {
     scanned,
     requested: mappedIds().length,
     stored: records.length,
+    pruned,
     unknownIds,
     unmappedExercises: EXERCISES.filter((e) => !e.freeDbId).length,
   };
