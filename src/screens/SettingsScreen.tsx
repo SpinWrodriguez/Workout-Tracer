@@ -5,6 +5,7 @@ import { downloadBackup, importBackup, type ImportReport } from '../lib/backup';
 import { Card, Label, Screen } from '../components/Layout';
 import { InventoryEditor } from '../components/InventoryEditor';
 import { ThemePicker } from '../components/ThemePicker';
+import { HapticsPicker } from '../components/HapticsPicker';
 import { AiInstructionsEditor, ModelKeyEditor } from '../components/ModelKeyEditor';
 import { TrainingPrefsEditor } from '../components/TrainingPrefsEditor';
 import { NutritionSync } from '../components/NutritionSync';
@@ -70,6 +71,10 @@ export function SettingsScreen() {
   return (
     <Screen title="Settings">
       <ThemePicker />
+
+      <div className="mt-3">
+        <HapticsPicker />
+      </div>
 
       <div className="mt-3">
         <NutritionSync />

@@ -3,6 +3,8 @@
 /*  slot is a white circular FAB (+) that floats above the bar.                */
 /* -------------------------------------------------------------------------- */
 
+import { tap } from '../lib/haptics';
+
 export type Tab = 'dashboard' | 'levels' | 'program' | 'history' | 'settings';
 
 const ICONS: Record<Tab, string> = {
@@ -81,7 +83,10 @@ export function BottomNav({
         <div className="w-16 shrink-0" aria-hidden="true" />
         <button
           type="button"
-          onClick={onNewSession}
+          onClick={() => {
+            tap();
+            onNewSession();
+          }}
           aria-label="Start a session"
           className="absolute -top-6 left-1/2 flex size-14 -translate-x-1/2 items-center justify-center rounded-full bg-cta text-3xl leading-none font-light text-bg"
         >
