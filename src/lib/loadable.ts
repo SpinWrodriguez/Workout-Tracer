@@ -135,10 +135,17 @@ export function ladderFor(exercise: Exercise, inventory: Inventory): number[] {
   if (exercise.loadMode !== 'weight') return [];
 
   const bar = barWeightFor(exercise, inventory);
+  /*
+   * `bar ?? 0` collapsed two different ladders onto one key: a hand-held
+   * exercise has no bar, and the bar-weight field in Settings accepts 0. It
+   * did not matter while both branches ran the same plate maths; now that a
+   * hand holds one plate, whichever was computed first would be served to the
+   * other — a swing inheriting the 106 kg bar ladder, or a squat capped at 20.
+   */
   const key =
     exercise.station === 'cable'
       ? `cable|${inventoryKey(inventory)}`
-      : `${bar ?? 0}|${inventoryKey(inventory)}`;
+      : `${bar === undefined ? 'hand' : bar}|${inventoryKey(inventory)}`;
 
   const hit = cache.get(key);
   if (hit) return hit;

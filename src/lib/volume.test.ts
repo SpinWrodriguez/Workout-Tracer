@@ -230,3 +230,24 @@ describe('averaging a longer window', () => {
     expect(volume.calves).toBe(0);
   });
 });
+
+describe('a muscle that averages to nothing', () => {
+  it('is still distinguishable from one never trained', () => {
+    /* Levels reads both: the average for the bars and the raw total for "was
+       this trained at all". A muscle with three weighted sets over thirteen
+       weeks averages to 0.1, rounds to zero, and had fallen out of the
+       flagged list and the untrained list at once. */
+    const logs = Array.from({ length: 3 }, (_, i) => ({
+      sessionId: 's',
+      exerciseId: 'bb_back_squat',
+      setNo: i + 1,
+      reps: 8,
+    }));
+    const raw = setsPerMuscle(logs, byId);
+    const quarter = perWeek(raw, 13);
+    expect(raw.quads).toBeGreaterThan(0);
+    expect(quarter.quads).toBe(0);
+    // Which is why the screen cannot read "trained" off the average alone.
+    expect(volumeStatus(quarter.quads)).toBe('none');
+  });
+});

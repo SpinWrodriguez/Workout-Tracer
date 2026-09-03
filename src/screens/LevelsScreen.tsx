@@ -82,8 +82,16 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
      untrained muscle is technically "under 8", which drowns out the signal —
      and the full list below already shows them as `--`. */
   const wasTouched = new Set(volume?.touched ?? []);
+  /*
+   * Under the floor by the number shown, not by its status: over 13 weeks a
+   * muscle with three weighted sets averages to 0.1 and rounds to zero, whose
+   * status is "none" rather than "low". It was touched, so it is not in the
+   * untrained list either — and it fell out of both, vanishing from the one
+   * card that exists to point at neglected muscles.
+   */
   const flagged = rows.filter(
-    (row) => row.status === 'high' || (row.status === 'low' && wasTouched.has(row.muscleId)),
+    (row) =>
+      row.status === 'high' || (wasTouched.has(row.muscleId) && row.sets < VOLUME_LOW),
   );
   const untouched = rows.filter((row) => !wasTouched.has(row.muscleId));
   const trained = rows.filter((row) => wasTouched.has(row.muscleId));

@@ -13,21 +13,23 @@ import { WEEKDAY_LABEL, gripSafeWeekdays, type Weekday } from './golf';
 /*    Mon  A  heavy   full effort, all grip-heavy work lives here             */
 /*    Tue  B  heavy   full effort                                             */
 /*    Wed  C  light   optional, ~25 min, sub-maximal, no grip-heavy work      */
-/*    Thu     rest    (or the light day, if preferred)                        */
-/*    Fri     rest    never scheduled                                         */
-/*    Sat     golf                                                            */
-/*    Sun     golf, or the light day when no round is played                  */
+/*                                                                           */
+/*  That layout is history: nothing here chooses a weekday any more. The      */
+/*  lifter makes a workout and drops it on a date, and this module answers    */
+/*  one question about the day it landed on — what it trains, how hard, what  */
+/*  the calendar excludes. The sketch above survives only as the shape the    */
+/*  defaults still assume.                                                   */
 /* -------------------------------------------------------------------------- */
 
 export type Intensity = 'heavy' | 'light';
 
-export const MONDAY: Weekday = 1;
-
-/** Days a session may never land on, whatever else is true. */
-
-/** Candidate weekdays for sessions beyond the heavy pair, in preference order. */
-
-/** Mon and Tue plus the three usable remaining days. */
+/*
+ * The stand-in weekday for a workout that has not been placed yet. Monday
+ * because something has to be passed and Monday excludes nothing: an unplaced
+ * workout has no calendar around it, so it must not inherit one day's
+ * exclusions. See workoutTemplate below.
+ */
+const UNPLACED: Weekday = 1;
 
 export interface TemplateDay {
   slot: DaySlot;
@@ -124,8 +126,8 @@ export function workoutTemplate({
   const patterns = FOCUS_PATTERNS[focus];
   const base =
     intensity === 'light'
-      ? lightDay(slot, MONDAY)
-      : heavyDay(slot, MONDAY, patterns, minutesPerSession, []);
+      ? lightDay(slot, UNPLACED)
+      : heavyDay(slot, UNPLACED, patterns, minutesPerSession, []);
   return {
     ...base,
     patterns,

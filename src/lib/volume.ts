@@ -63,7 +63,6 @@ export interface MuscleVolumeRow {
   status: VolumeStatus;
 }
 
-/** Sorted heaviest first, so the list reads as a ranking. */
 /**
  * The same volume, divided by the number of weeks it covers.
  *
@@ -81,6 +80,7 @@ export function perWeek(volume: MuscleVolume, weeks: number): MuscleVolume {
   return out;
 }
 
+/** Sorted heaviest first, so the list reads as a ranking. */
 export function volumeRows(volume: MuscleVolume): MuscleVolumeRow[] {
   return MUSCLES.map((muscle) => ({
     muscleId: muscle.id,

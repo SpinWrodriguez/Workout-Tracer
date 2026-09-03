@@ -242,7 +242,10 @@ describe('time estimate (defect 5)', () => {
     ]);
     for (const e of p.days[0]!.exercises) e.targetSets = 5;
     const found = validateBlock(p, CONTEXT).find((v) => v.code === 'over_time_budget');
-    expect(found?.message).toMatch(/over the 40 min budget/);
+    /* The overshoot, not the budget: the Program screen scales the budget by
+       how long sessions really take, so quoting it named a number the lifter
+       never set. How much too long is true in either currency. */
+    expect(found?.message).toMatch(/min more than it has room for/);
   });
 });
 

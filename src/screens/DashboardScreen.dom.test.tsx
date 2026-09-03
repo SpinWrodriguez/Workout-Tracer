@@ -157,3 +157,42 @@ describe('the exercises ring', () => {
     expect((await ring('Muscles')).target).toBe(10);
   });
 });
+
+describe('what counts as this week', () => {
+  it('ignores a session dated after this week', async () => {
+    /* The date on a session is editable, and the query was open-ended above:
+       one session typed with next month's date sat in "This week" until next
+       month arrived, against a target that comes from this week's plan. */
+    await logSession('now', todayIso(), ['bb_back_squat']);
+    await logSession('later', shiftIso(weekStart(todayIso()), 9), ['bb_bench_press', 'bb_curl']);
+
+    openDashboard();
+
+    await waitFor(async () => expect((await ring('Sets')).value).toBe(1));
+    expect((await ring('Exercises')).value).toBe(1);
+  });
+
+  it('ignores a session from last week', async () => {
+    await logSession('old', shiftIso(weekStart(todayIso()), -3), ['bb_back_squat']);
+    openDashboard();
+    await waitFor(async () => expect((await ring('Sets')).value).toBe(0));
+  });
+});
+
+describe('mobility work', () => {
+  it('is left out of the muscles target, because it is left out of the count', async () => {
+    /* setsPerMuscle refuses to count a warm-up as training, so counting it in
+       the denominator made a target the numerator could never reach. The
+       picker will add one by hand, so this is reachable rather than
+       theoretical. */
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Lower body' } });
+    await seedWorkout('A', ['bb_back_squat', 'mb_90_90']);
+    await seedPlan({ [weekStart(todayIso())]: 'A' });
+
+    openDashboard();
+
+    // Back squat's six muscles. The hip switch adds none.
+    await waitFor(async () => expect((await ring('Muscles')).target).toBe(6));
+    expect((await ring('Exercises')).target).toBe(1);
+  });
+});

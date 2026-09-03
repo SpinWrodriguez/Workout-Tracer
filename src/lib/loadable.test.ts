@@ -203,6 +203,19 @@ describe('what a hand can hold', () => {
     expect(ladderFor(carry as Exercise, gripped)).toContain(10);
   });
 
+  it('does not serve a swing the bar ladder when the bar weight is zero', () => {
+    /* The cache key was `bar ?? 0`, and the bar-weight field in Settings
+       accepts 0 — so a hand-held exercise and a 0 kg barbell shared a key and
+       whichever was computed first was served to both. */
+    clearLadderCache();
+    const zeroBar: Inventory = { ...gripped, barWeights: { free_bar: 0, smith: 0 } };
+    const squat = ladderFor(EXERCISES.find((e) => e.id === 'bb_back_squat') as Exercise, zeroBar);
+    const swing = ladderFor(EXERCISES.find((e) => e.id === 'kb_swing') as Exercise, zeroBar);
+    expect(swing).toEqual([1.5, 5, 10, 20]);
+    expect(squat).not.toEqual(swing);
+    expect(Math.max(...squat)).toBe(86);
+  });
+
   it('leaves a barbell lift alone — that one really is a bar and pairs', () => {
     clearLadderCache();
     const squat = EXERCISES.find((e) => e.id === 'bb_back_squat');

@@ -1,7 +1,16 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { DaySlot, Exercise, MuscleId } from '../db/types';
-import { EM_WEIGHT, friendlyDate, fromIsoDate, kg, rate, todayIso, weekStart } from '../lib/format';
+import {
+  EM_WEIGHT,
+  friendlyDate,
+  fromIsoDate,
+  kg,
+  rate,
+  shiftIso,
+  todayIso,
+  weekStart,
+} from '../lib/format';
 import { linearTrend, rollingAverage, type DatedPoint } from '../lib/stats';
 import { WEEKDAY_LABEL } from '../lib/golf';
 import { readWeekPlan } from '../lib/weekPlan';
@@ -63,7 +72,14 @@ export function DashboardScreen({
 
   const week = useLiveQuery(async () => {
     const from = weekStart(todayIso());
-    const sessions = await db.session.where('date').aboveOrEqual(from).toArray();
+    /*
+     * Bounded at both ends. `aboveOrEqual` counted anything dated after this
+     * week too, and the date on a session is editable — so one session typed
+     * with next month's date sat in "This week" until next month, against
+     * targets that come from the week's own plan.
+     */
+    const to = shiftIso(from, 7);
+    const sessions = await db.session.where('date').between(from, to, true, false).toArray();
     const ids = new Set(sessions.map((s) => s.id));
     const logs = (await db.setLog.toArray()).filter((l) => ids.has(l.sessionId));
     const byId = new Map(exercises.map((e) => [e.id, e]));
@@ -116,12 +132,21 @@ export function DashboardScreen({
    * every other number in the app — and it moves when the week does, which a
    * constant never did.
    */
+  const byId = new Map(exercises.map((exercise) => [exercise.id, exercise]));
+  /*
+   * Warm-up mobility is skipped, because `setsPerMuscle` skips it: a 90/90 hip
+   * switch is not a set of training. Counting it here and not there made a
+   * target the numerator could never reach — and the picker will happily add
+   * one, so this is reachable by hand rather than theoretical.
+   */
   const plannedExercises = new Set(
-    programDays.flatMap((day) => day.entries.map((entry) => entry.exerciseId)),
+    programDays
+      .flatMap((day) => day.entries.map((entry) => entry.exerciseId))
+      .filter((id) => byId.get(id)?.isMobility === false),
   );
   const plannedMuscles = new Set<MuscleId>();
   for (const id of plannedExercises) {
-    const exercise = exercises.find((row) => row.id === id);
+    const exercise = byId.get(id);
     for (const muscle of exercise?.primaryMuscles ?? []) plannedMuscles.add(muscle);
     for (const muscle of exercise?.secondaryMuscles ?? []) plannedMuscles.add(muscle);
   }

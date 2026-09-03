@@ -37,15 +37,21 @@ function useExercisePhoto(exercise: Exercise): string | undefined {
     let cancelled = false;
     let objectUrl: string | undefined;
     void (async () => {
-      const record = await getRecord(freeDbId);
-      const path = record?.images[0];
-      if (cancelled || !path) return;
-      const blob = await loadImageBlob(freeDbId, path);
-      /* jsdom has no object URLs, and a thumbnail is not worth a crash in a
-         test that is about something else. */
-      if (cancelled || !blob || typeof URL.createObjectURL !== 'function') return;
-      objectUrl = URL.createObjectURL(blob);
-      setFetched({ id, url: objectUrl });
+      try {
+        const record = await getRecord(freeDbId);
+        const path = record?.images[0];
+        if (cancelled || !path) return;
+        const blob = await loadImageBlob(freeDbId, path);
+        /* jsdom has no object URLs, and a thumbnail is not worth a crash in a
+           test that is about something else. */
+        if (cancelled || !blob || typeof URL.createObjectURL !== 'function') return;
+        objectUrl = URL.createObjectURL(blob);
+        setFetched({ id, url: objectUrl });
+      } catch {
+        /* A picture is decoration. Blocked storage or a database mid-upgrade
+           should leave the initials showing, not raise an unhandled rejection
+           from a component nobody was looking at. */
+      }
     })();
 
     return () => {

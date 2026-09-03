@@ -125,9 +125,9 @@ export function isModelAvailable(): boolean {
  * The request body, shared by both transports so the Edge Function is a pure
  * relay and cannot drift from what the device path sends.
  *
- * Ordering is load-bearing for prompt caching: `system` holds the rules and the
- * whole exercise library, identical on every call, and carries the cache
- * breakpoint. The goal and the current block go in `messages`, after it.
+ * The split is still load-bearing, though not for caching any more: `system`
+ * holds the rules and the exercise library, and the goal and the current block
+ * go in `messages` after it. Stable content first, volatile content last.
  */
 export function buildRequest(options: AskOptions): Record<string, unknown> {
   return {
@@ -190,7 +190,7 @@ function plainSystem(text: string): unknown[] {
  * carried a `name` the API rejected outright.
  */
 export interface ConversationOptions {
-  /** Cached prefix: the rules and what the app already knows. */
+  /** Stable prefix: the rules and what the app already knows. */
   system: string;
   /**
    * The whole conversation so far, wire-shaped: assistant turns are the

@@ -445,7 +445,11 @@ export function validateBlock(
       violations.push({
         code: 'over_time_budget',
         slot: day.slot,
-        message: `${nameOf(day)} needs ${minutes} min including rest, over the ${budget} min budget. Drop an accessory or cut a set.`,
+        /* The budget here is in ESTIMATE minutes, which the Program screen
+           scales by how long sessions really take — so quoting it said "over
+           the 44 min budget" to someone whose Settings stepper reads 40. The
+           overshoot is the honest number: it is true in either currency. */
+        message: `${nameOf(day)} needs ${minutes - budget} min more than it has room for, including rest. Drop an accessory or cut a set.`,
       });
     }
   }
