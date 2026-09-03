@@ -344,3 +344,66 @@ describe('taking an exercise back out of a session', () => {
     );
   });
 });
+
+describe('the rest timer', () => {
+  /* The strip button for an exercise. By its text rather than a regex: the
+     names carry brackets, which a regex reads as a group. */
+  const stripButton = (exerciseId: string) =>
+    screen.getByRole('button', {
+      name: (accessible: string) => accessible.includes(named(exerciseId)),
+    });
+
+  /** A session of one exercise, opened and ready to log. */
+  async function openWith(exerciseId: string) {
+    await seedBlock();
+    await seedSchedule({ A: { weekday: 1, intensity: 'heavy' } });
+    await seedWorkout('A', [exerciseId], 3);
+    const view = draw(<SessionScreen daySlot="A" exercises={exercises} onExit={vi.fn()} />);
+    await screen.findByRole('button', { name: 'Set 1 weight' });
+    return { view, ui: user() };
+  }
+
+  it('counts the rest the exercise asks for, not a flat two minutes', async () => {
+    /* Every exercise carries a restSeconds and the timer ignored all of it,
+       so a band walk and a heavy squat both rested for 120. */
+    await openWith('bb_back_squat');
+    // 180 seconds on the back squat.
+    expect(screen.getByText('3:00')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '180s' })).toBeTruthy();
+  });
+
+  it("offers the exercise's own rest as a chip even when it is not a preset", async () => {
+    // 45 seconds on a band lateral walk, which no preset has.
+    await openWith('bd_lateral_walk');
+    expect(screen.getByText('0:45')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '45s' })).toBeTruthy();
+  });
+
+  it('lets a tapped duration win for as long as you are on that exercise', async () => {
+    const { ui } = await openWith('bb_back_squat');
+    await ui.click(screen.getByRole('button', { name: '120s' }));
+    await waitFor(() => expect(screen.getByText('2:00')).toBeTruthy());
+  });
+
+  it('drops the tapped one on the way to another exercise', async () => {
+    /* It was a choice about that lift, not a setting: carrying 60 seconds
+       from a curl onto a heavy squat is the bug the flat 120 already was. */
+    await seedBlock();
+    await seedSchedule({ A: { weekday: 1, intensity: 'heavy' } });
+    await seedWorkout('A', ['bb_back_squat', 'cb_bicep_curl'], 3);
+    draw(<SessionScreen daySlot="A" exercises={exercises} onExit={vi.fn()} />);
+    await screen.findByRole('button', { name: 'Set 1 weight' });
+    const ui = user();
+
+    await ui.click(screen.getByRole('button', { name: '90s' }));
+    await waitFor(() => expect(screen.getByText('1:30')).toBeTruthy());
+
+    // Over to the curl, whose own rest is 60 seconds.
+    await ui.click(stripButton('cb_bicep_curl'));
+    await waitFor(() => expect(screen.getByText('1:00')).toBeTruthy());
+
+    // And back: the squat is its own 180 again, not the 90 that was tapped.
+    await ui.click(stripButton('bb_back_squat'));
+    await waitFor(() => expect(screen.getByText('3:00')).toBeTruthy());
+  });
+});

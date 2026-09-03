@@ -49,7 +49,7 @@ import { ExerciseStrip } from '../components/ExerciseStrip';
 import { EffortPicker } from '../components/EffortPicker';
 import { NumberPad, type PadTarget } from '../components/NumberPad';
 import { RestTimerBar } from '../components/RestTimer';
-import { useRestTimer } from '../lib/restTimer';
+import { restChoices, useRestTimer } from '../lib/restTimer';
 import { SetRow, type CellField } from '../components/SetRow';
 import { dayLabel } from '../lib/dayLabel';
 import { isTimed, rangeLabel, repUnitWord, stepFor } from '../lib/repUnit';
@@ -128,7 +128,11 @@ export function SessionScreen({
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [targets, setTargets] = useState<Record<string, BlockExercise>>({});
   const [saving, setSaving] = useState(false);
-  const timer = useRestTimer();
+  /* The rest comes from the exercise being logged: 30 seconds for a band walk,
+     180 for a heavy deadlift. The timer counted 120 for all of it. */
+  const timer = useRestTimer(
+    activeId ? exercisesById.get(activeId)?.restSeconds : undefined,
+  );
 
   /* --- load or create the draft ----------------------------------------- */
   useEffect(() => {
@@ -664,7 +668,14 @@ export function SessionScreen({
                 <p className="mt-0.5 text-[14px] font-medium">{effortCue}</p>
               </div>
             )}
-            <RestTimerBar timer={timer} onPresetChange={timer.setDuration} />
+            <RestTimerBar
+              timer={timer}
+              /* The exercise's own rest, first among the chips: the timer
+                 counted 120 for everything, so a band walk and a heavy triple
+                 got the same two minutes. */
+              presets={restChoices(activeExercise?.restSeconds)}
+              onPresetChange={timer.setDuration}
+            />
             <ExerciseStrip
               exercises={stripExercises}
               activeId={activeId}

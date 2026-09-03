@@ -1,12 +1,15 @@
 import { clock } from '../lib/format';
-import { REST_PRESETS, type RestTimer } from '../lib/restTimer';
+import { type RestTimer } from '../lib/restTimer';
 
 /** Countdown plus progress bar, pinned in the session header. */
 export function RestTimerBar({
   timer,
+  presets,
   onPresetChange,
 }: {
   timer: RestTimer;
+  /** The durations to offer, which now include the exercise's own rest. */
+  presets: number[];
   onPresetChange: (sec: number) => void;
 }) {
   const { running, remainingSec, durationSec, elapsedFraction } = timer;
@@ -20,7 +23,7 @@ export function RestTimerBar({
           <span className="label whitespace-nowrap">{running ? 'rest' : 'target'}</span>
         </div>
         <div className="flex gap-1">
-          {REST_PRESETS.map((sec) => (
+          {presets.map((sec) => (
             <button
               key={sec}
               type="button"
