@@ -3,6 +3,8 @@ import { effectiveKg, hasLoadTranslation, rirToken } from '../lib/load';
 import type { DraftSet } from '../lib/sessions';
 import { kg } from '../lib/format';
 import { repUnitShort } from '../lib/repUnit';
+import { tap } from '../lib/haptics';
+import { HapticTick } from './HapticTick';
 
 /* -------------------------------------------------------------------------- */
 /*  Set row — spec §4.                                                        */
@@ -137,13 +139,19 @@ export function SetRow({
 
       <button
         type="button"
-        onClick={onToggleDone}
-        className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${
+        onClick={() => {
+          /* Synchronous, before anything else: on iOS the tick only fires
+             inside the real gesture. */
+          tap();
+          onToggleDone();
+        }}
+        className={`relative flex size-8 shrink-0 items-center justify-center rounded-lg ${
           done ? 'bg-cta text-bg' : 'bg-surface-2 text-text-faint'
         }`}
         aria-label={done ? 'Mark set incomplete' : 'Mark set complete'}
       >
         {done ? '✓' : ''}
+        <HapticTick radius={8} />
       </button>
 
     </div>

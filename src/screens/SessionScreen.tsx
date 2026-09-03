@@ -3,6 +3,8 @@ import { db } from '../db/db';
 import type { BlockExercise, DaySlot, Exercise, SetLog } from '../db/types';
 import { CABLE_STACK_KG, STATION_LABEL } from '../db/seed/exercises';
 import { DEFAULT_BLOCK_ID } from '../db/seed';
+import { tap } from '../lib/haptics';
+import { HapticTick } from '../components/HapticTick';
 import {
   draftFromPlan,
   emptyDraft,
@@ -962,11 +964,15 @@ export function SessionScreen({
         {dirty && loggedSets > 0 && (
           <button
             type="button"
-            onClick={() => void handleSave()}
+            onClick={() => {
+              tap();
+              void handleSave();
+            }}
             disabled={saving}
-            className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
+            className="h-cta relative mt-3 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
           >
             {saving ? 'Saving…' : `Save · ${loggedSets} set${loggedSets === 1 ? '' : 's'}`}
+            <HapticTick />
           </button>
         )}
       </Screen>

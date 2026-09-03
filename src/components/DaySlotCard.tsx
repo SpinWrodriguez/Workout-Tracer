@@ -4,6 +4,7 @@ import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
 
 import { Card, Empty, Label } from './Layout';
 import { SortableRows } from './SortableRows';
+import { HapticTick } from './HapticTick';
 import { formatDuration, isTimed, prescription, repUnitWord, stepFor } from '../lib/repUnit';
 
 /* -------------------------------------------------------------------------- */
@@ -150,11 +151,12 @@ export function DaySlotCard({
             <button
               type="button"
               onClick={onStart}
-              className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold ${
+              className={`relative rounded-full px-3.5 py-1.5 text-[12px] font-semibold ${
                 isToday ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
               }`}
             >
               Start
+              <HapticTick />
             </button>
           )}
         </span>
@@ -172,9 +174,10 @@ export function DaySlotCard({
           <button
             type="button"
             onClick={onGenerate}
-            className="mt-3 h-11 w-full rounded-full bg-cta font-semibold text-bg"
+            className="relative mt-3 h-11 w-full rounded-full bg-cta font-semibold text-bg"
           >
             Build this workout
+            <HapticTick />
           </button>
         </>
       )}

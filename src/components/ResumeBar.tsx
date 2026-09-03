@@ -6,6 +6,8 @@
 /*  disk, but nothing on screen says so.                                     */
 /* -------------------------------------------------------------------------- */
 
+import { HapticTick } from './HapticTick';
+
 export function ResumeBar({
   label,
   onResume,
@@ -30,6 +32,7 @@ export function ResumeBar({
         </span>
       </span>
       <span className="shrink-0 text-[13px] font-semibold text-bg">Resume</span>
+      <HapticTick />
     </button>
   );
 }

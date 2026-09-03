@@ -6,6 +6,7 @@ import {
   type WorkoutFocus,
 } from '../lib/weekTemplate';
 import { Sheet } from './Sheet';
+import { HapticTick } from './HapticTick';
 import { Label } from './Layout';
 
 /* -------------------------------------------------------------------------- */
@@ -91,9 +92,10 @@ export function NewWorkoutSheet({
           <button
             type="button"
             onClick={() => onCreate(focus, intensity)}
-            className="h-11 flex-[2] rounded-full bg-cta font-semibold text-bg"
+            className="relative h-11 flex-[2] rounded-full bg-cta font-semibold text-bg"
           >
             Build it
+            <HapticTick />
           </button>
         </div>
       }

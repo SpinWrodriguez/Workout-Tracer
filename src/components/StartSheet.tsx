@@ -3,6 +3,7 @@ import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
 import { friendlyDate } from '../lib/format';
 import { Sheet } from './Sheet';
 import { Label } from './Layout';
+import { HapticTick } from './HapticTick';
 
 /* -------------------------------------------------------------------------- */
 /*  What are we doing today?                                                  */
@@ -43,7 +44,7 @@ function Row({
     <button
       type="button"
       onClick={onClick}
-      className={`mt-2 flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left ${
+      className={`relative mt-2 flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left ${
         tone === 'primary' ? 'bg-cta text-bg' : 'bg-surface'
       }`}
     >
@@ -73,6 +74,7 @@ function Row({
       <span className={`text-[18px] ${tone === 'primary' ? 'text-bg/70' : 'text-text-faint'}`}>
         ›
       </span>
+      <HapticTick radius={16} />
     </button>
   );
 }

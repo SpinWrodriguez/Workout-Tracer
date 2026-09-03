@@ -3,6 +3,7 @@ import type { Exercise } from '../db/types';
 import { STATION_LABEL } from '../db/seed/exercises';
 import { muscleName } from '../db/seed/muscles';
 import { cueFor, stepsFor } from '../db/seed/cues';
+import { photosFor } from '../db/seed/photos';
 import { getRecord, loadImageBlob, type FreeDbRecord } from '../lib/freeDb';
 import { hasLoadTranslation } from '../lib/load';
 import { Chip, Label } from './Layout';
@@ -67,6 +68,7 @@ export function ExerciseDetail({
 
   const cue = cueFor(exercise.id);
   const steps = stepsFor(exercise.id);
+  const illustrations = photosFor(exercise.id);
 
   return (
     <Sheet title={exercise.name} onClose={onClose}>
@@ -158,6 +160,28 @@ export function ExerciseDetail({
       {steps && (
         <div className="mt-3 rounded-2xl bg-surface p-4">
           <Label>How it is performed</Label>
+
+          {/* Ours, for the movements nothing upstream illustrates. Two
+              frames, start and finish, on the white they were drawn on so
+              the cut-out figure does not float on a dark card. */}
+          {illustrations.length > 0 && (
+            <div className="mt-2 flex gap-2">
+              {illustrations.map((src, index) => (
+                <div
+                  key={src}
+                  className="aspect-4/3 flex-1 overflow-hidden rounded-xl"
+                  style={{ background: '#ffffff' }}
+                >
+                  <img
+                    src={src}
+                    alt={`${exercise.name}, ${index === 0 ? 'start' : 'finish'}`}
+                    loading="lazy"
+                    className="size-full object-contain"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
           <ol className="mt-2">
             {steps.map((step, i) => (
               <li key={step} className="flex gap-2.5 py-1">

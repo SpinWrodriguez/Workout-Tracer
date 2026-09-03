@@ -4,7 +4,9 @@ import { db } from '../db/db';
 import { seedDatabase } from '../db/seed';
 import { EXERCISES } from '../db/seed/exercises';
 import { FREE_DB_IDS } from '../db/seed/freeDbIds';
+import { existsSync, statSync } from 'node:fs';
 import { CUES, STEPS } from '../db/seed/cues';
+import { ILLUSTRATED } from '../db/seed/photos';
 import {
   FREE_DB_IMAGE_BASE,
   fetchAndStoreFreeDb,
@@ -76,6 +78,42 @@ describe('hand-mapped freeDbId values (spec §9)', () => {
       const steps = STEPS[exercise.id];
       expect(steps, `${exercise.id} has no steps`).toBeTruthy();
       expect(steps?.length, `${exercise.id} has too few steps`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('illustrates every one of them, since no photo is coming from upstream', () => {
+    /*
+     * Drawn for this app because nothing licensable exists: the only stock
+     * for these movements is watermarked or share-alike, and a picture of a
+     * near-enough exercise teaches the wrong one. Two frames each, start and
+     * finish.
+     */
+    for (const exercise of EXERCISES.filter((e) => !e.freeDbId)) {
+      expect(ILLUSTRATED, `${exercise.id} has no illustrations`).toContain(exercise.id);
+    }
+  });
+
+  it('has both frames on disk for every exercise that claims them', () => {
+    /* The filename is the contract — photosFor builds the URL from the id, so
+       a typo here is a broken image on the phone and nothing anywhere else. */
+    for (const id of ILLUSTRATED) {
+      for (const frame of [1, 2]) {
+        const file = `public/exercise-photos/${id}-${frame}.webp`;
+        expect(existsSync(file), `${file} is missing`).toBe(true);
+      }
+    }
+  });
+
+  it('keeps them small enough to precache', () => {
+    /* They ship inside the service worker precache, so every kilobyte is one
+       the phone downloads before the app will open offline. The sources are
+       ~1.2 MB each; scripts/photos-optimise.mjs is what stands between those
+       and this. */
+    for (const id of ILLUSTRATED) {
+      for (const frame of [1, 2]) {
+        const file = `public/exercise-photos/${id}-${frame}.webp`;
+        expect(statSync(file).size, `${file} is too big`).toBeLessThan(60 * 1024);
+      }
     }
   });
 
