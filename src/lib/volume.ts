@@ -64,6 +64,23 @@ export interface MuscleVolumeRow {
 }
 
 /** Sorted heaviest first, so the list reads as a ranking. */
+/**
+ * The same volume, divided by the number of weeks it covers.
+ *
+ * The floor and the ceiling are WEEKLY numbers, so a three-month window has
+ * to be averaged before it can be judged against them: 60 sets of abs is a
+ * problem over one week and light over thirteen. Rounded to a half, which is
+ * the smallest amount a set can be worth.
+ */
+export function perWeek(volume: MuscleVolume, weeks: number): MuscleVolume {
+  if (weeks <= 1) return volume;
+  const out = {} as MuscleVolume;
+  for (const muscle of MUSCLES) {
+    out[muscle.id] = Math.round(((volume[muscle.id] ?? 0) / weeks) * 2) / 2;
+  }
+  return out;
+}
+
 export function volumeRows(volume: MuscleVolume): MuscleVolumeRow[] {
   return MUSCLES.map((muscle) => ({
     muscleId: muscle.id,

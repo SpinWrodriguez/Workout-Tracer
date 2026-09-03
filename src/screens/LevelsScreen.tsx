@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
+import { MUSCLES } from '../db/seed/muscles';
 import type { Exercise } from '../db/types';
 import { friendlyDate, shiftIso, todayIso, weekStart } from '../lib/format';
 import {
   VOLUME_HIGH,
   VOLUME_LOW,
+  perWeek,
   setsPerMuscle,
   volumeRows,
   type MuscleVolumeRow,
@@ -29,12 +31,30 @@ function statusColor(status: MuscleVolumeRow['status']): string | undefined {
   }
 }
 
+/*
+ * The windows, in whole weeks.
+ *
+ * Whole weeks because the floor and the ceiling are weekly numbers and the
+ * longer windows are shown as a weekly average: 4 and 13 divide cleanly, where
+ * "30 days" and "91 days" would put a part-week in the divisor and make every
+ * average slightly wrong in a way nobody could see.
+ */
+const SPANS = ['1W', '1M', '3M'] as const;
+type Span = (typeof SPANS)[number];
+const SPAN_WEEKS: Record<Span, number> = { '1W': 1, '1M': 4, '3M': 13 };
+const SPAN_LABEL: Record<Span, string> = { '1W': 'Week', '1M': 'Month', '3M': '3 months' };
+
 export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [region, setRegion] = useState<Region>('all');
+  const [span, setSpan] = useState<Span>('1W');
 
-  const from = shiftIso(weekStart(todayIso()), weekOffset * 7);
-  const to = shiftIso(from, 7);
+  const weeks = SPAN_WEEKS[span];
+  /* The window ends with the week being viewed and runs back from there, so
+     the arrows keep working on every span — a month back from four weeks ago
+     is a question worth being able to ask. */
+  const to = shiftIso(weekStart(todayIso()), (weekOffset + 1) * 7);
+  const from = shiftIso(to, -7 * weeks);
 
   const byId = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
 
@@ -42,19 +62,31 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
     const sessions = await db.session.where('date').between(from, to, true, false).toArray();
     const ids = new Set(sessions.map((s) => s.id));
     const logs = (await db.setLog.toArray()).filter((l) => ids.has(l.sessionId));
-    return { volume: setsPerMuscle(logs, byId), sessionCount: sessions.length, setCount: logs.length };
-  }, [from, to, byId]);
+    const raw = setsPerMuscle(logs, byId);
+    return {
+      /* Averaged before it is judged: the thresholds below are per week. */
+      volume: perWeek(raw, weeks),
+      /* And kept unaveraged, because "did I train this at all in the window"
+         is a different question. Over thirteen weeks a muscle with three
+         weighted sets averages to 0.1 and rounds to nothing — reporting it as
+         untrained would be the average lying about the log. */
+      touched: MUSCLES.filter((muscle) => (raw[muscle.id] ?? 0) > 0).map((muscle) => muscle.id),
+      sessionCount: sessions.length,
+      setCount: logs.length,
+    };
+  }, [from, to, byId, weeks]);
 
   const rows = volume ? volumeRows(volume.volume) : [];
   const shown = rows.filter((row) => region === 'all' || row.region === region);
   /* Only flag muscles that were actually trained. After a light week every
      untrained muscle is technically "under 8", which drowns out the signal —
      and the full list below already shows them as `--`. */
+  const wasTouched = new Set(volume?.touched ?? []);
   const flagged = rows.filter(
-    (row) => row.status === 'high' || (row.status === 'low' && row.sets > 0),
+    (row) => row.status === 'high' || (row.status === 'low' && wasTouched.has(row.muscleId)),
   );
-  const untouched = rows.filter((row) => row.sets === 0);
-  const trained = rows.filter((row) => row.sets > 0);
+  const untouched = rows.filter((row) => !wasTouched.has(row.muscleId));
+  const trained = rows.filter((row) => wasTouched.has(row.muscleId));
 
   return (
     <Screen
@@ -74,7 +106,7 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
             onClick={() => setWeekOffset(0)}
             className="rounded-lg bg-surface-2 px-2.5 py-1 text-[12px] font-medium text-text-dim"
           >
-            {weekOffset === 0 ? 'This week' : friendlyDate(from)}
+            {weekOffset === 0 && weeks === 1 ? 'This week' : friendlyDate(from)}
           </button>
           <button
             type="button"
@@ -94,7 +126,7 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
           {volume && volume.setCount > 0
             ? `${volume.setCount} sets over ${volume.sessionCount} session${
                 volume.sessionCount === 1 ? '' : 's'
-              } · ${trained.length} muscles trained`
+              }${weeks > 1 ? ` in ${weeks} weeks` : ''} · ${trained.length} muscles trained`
             : '--- sets'}
         </p>
       </Card>
@@ -115,7 +147,8 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
           )}
           {untouched.length > 0 && (
             <p className="mt-2 text-[13px] font-medium text-text-dim">
-              Untrained this week: {untouched.map((row) => row.name).join(', ')}.
+              {weeks === 1 ? 'Untrained this week' : `Untrained in ${SPAN_LABEL[span].toLowerCase()}`}
+              : {untouched.map((row) => row.name).join(', ')}.
             </p>
           )}
           <p className="mt-2 text-[12px] font-medium text-text-dim">
@@ -125,7 +158,16 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
         </Card>
       )}
 
-      <Card title="Weekly sets per muscle" className="mt-3">
+      <Card
+        title="Weekly sets per muscle"
+        className="mt-3"
+        trailing={
+          weeks > 1 ? <Label>average over {weeks} weeks</Label> : undefined
+        }
+      >
+        <div className="mb-3">
+          <SegmentedToggle options={SPANS} value={span} onChange={setSpan} labels={SPAN_LABEL} />
+        </div>
         <div className="mb-3">
           <SegmentedToggle
             options={REGIONS}

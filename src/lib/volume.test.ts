@@ -8,6 +8,7 @@ import {
   volumeIntensity,
   volumeRows,
   volumeStatus,
+  perWeek,
 } from './volume';
 import { estimate1RM, linearTrend, rollingAverage, timeframeCutoff } from './stats';
 import { rate } from './format';
@@ -182,5 +183,50 @@ describe('rate formatting', () => {
     expect(rate(0.35)).toBe('+0.35');
     expect(rate(0)).toBe('0.00');
     expect(rate(undefined)).toBe('--');
+  });
+});
+
+describe('averaging a longer window', () => {
+  it('leaves a single week alone', () => {
+    const volume = setsPerMuscle(
+      [{ sessionId: 's', exerciseId: 'bb_back_squat', setNo: 1, reps: 8 }],
+      byId,
+    );
+    expect(perWeek(volume, 1)).toBe(volume);
+  });
+
+  it('divides by the weeks, so the floor still means what it means', () => {
+    /* 13 sets of squats over 13 weeks is one a week — light. The same 13 in
+       one week is not. Judging a quarter against a weekly floor without
+       dividing first is the bug this exists to prevent. */
+    const logs = Array.from({ length: 13 }, (_, i) => ({
+      sessionId: 's',
+      exerciseId: 'bb_back_squat',
+      setNo: i + 1,
+      reps: 8,
+    }));
+    const quarter = perWeek(setsPerMuscle(logs, byId), 13);
+    expect(quarter.quads).toBe(1);
+    expect(volumeStatus(quarter.quads)).toBe('low');
+    expect(volumeStatus(setsPerMuscle(logs, byId).quads)).toBe('ok');
+  });
+
+  it('keeps halves, because half a set is a real amount here', () => {
+    const logs = Array.from({ length: 6 }, (_, i) => ({
+      sessionId: 's',
+      exerciseId: 'bb_back_squat',
+      setNo: i + 1,
+      reps: 8,
+    }));
+    /* Six sets over four weeks is 1.5 a week, and 1.5 is exactly what a
+       secondary muscle earns from one set — so rounding it to 2 would print a
+       number the log cannot produce. */
+    expect(perWeek(setsPerMuscle(logs, byId), 4).quads).toBe(1.5);
+  });
+
+  it('keeps every muscle in the result, including the untrained ones', () => {
+    const volume = perWeek(setsPerMuscle([], byId), 13);
+    expect(Object.keys(volume)).toHaveLength(18);
+    expect(volume.calves).toBe(0);
   });
 });
