@@ -30,6 +30,9 @@ export default function App() {
   const [route, setRoute] = useState<Route>({ kind: 'tab', tab: 'dashboard' });
   const [starting, setStarting] = useState(false);
   const [asking, setAsking] = useState(false);
+  /* A question handed over by another screen — a session from History — asked
+     the moment the sheet opens. */
+  const [askAbout, setAskAbout] = useState<string | undefined>(undefined);
   const exercises = useLiveQuery(() => db.exercise.orderBy('name').toArray(), [], undefined);
   /*
    * A workout left running. Keyed on the settings row so it appears the moment
@@ -127,7 +130,20 @@ export default function App() {
       )}
       {route.tab === 'levels' && <LevelsScreen exercises={exercises} />}
       {route.tab === 'history' && (
-        <HistoryScreen exercises={exercises} onOpen={openSession} />
+        <HistoryScreen
+          exercises={exercises}
+          onOpen={openSession}
+          /* Only where something can answer it, the same condition as the
+             floating button. */
+          onAsk={
+            isModelAvailable()
+              ? (question) => {
+                  setAskAbout(question);
+                  setAsking(true);
+                }
+              : undefined
+          }
+        />
       )}
       {route.tab === 'program' && (
         <ProgramScreen exercises={exercises} onStartDay={startSession} />
@@ -157,7 +173,16 @@ export default function App() {
         onNewSession={() => setStarting(true)}
       />
 
-      {asking && <CoachSheet exercises={exercises} onClose={() => setAsking(false)} />}
+      {asking && (
+        <CoachSheet
+          exercises={exercises}
+          initialQuestion={askAbout}
+          onClose={() => {
+            setAsking(false);
+            setAskAbout(undefined);
+          }}
+        />
+      )}
 
       {starting && (
         <StartSheet

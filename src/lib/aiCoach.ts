@@ -215,10 +215,63 @@ function addUsage(total: AskUsage, next: AskUsage | undefined): AskUsage {
   };
 }
 
+/**
+ * How many turns of the conversation are kept and replayed.
+ *
+ * The thread is remembered across app opens now, so without a cap it would
+ * grow until every question re-billed a fortnight of chat. Four exchanges is
+ * enough for "what about the other one" to mean something, and each turn is
+ * only the text plus the assistant blocks — no tool results, which is where
+ * the tokens are.
+ */
+export const MEMORY_TURNS = 8;
+
+/**
+ * The last `keep` turns, and how many were dropped so a caller can re-key
+ * anything it holds by index.
+ *
+ * Never starts on an assistant turn: the API rejects a message list that does,
+ * and a reply with the question it answered cut away is not much use to a
+ * reader either.
+ */
+export function trimTurns(
+  turns: CoachTurn[],
+  keep = MEMORY_TURNS,
+): { turns: CoachTurn[]; dropped: number } {
+  if (turns.length <= keep) return { turns, dropped: 0 };
+  let dropped = turns.length - keep;
+  while (dropped < turns.length && turns[dropped]?.role !== 'user') dropped += 1;
+  return { turns: turns.slice(dropped), dropped };
+}
+
+/**
+ * Turns read back from storage, keeping only what is actually a turn. Stored
+ * JSON is not a type: a half-written row, or one from an older build, has to
+ * come back as a shorter conversation rather than as a crash in the sheet.
+ */
+export function parseTurns(value: unknown): CoachTurn[] {
+  if (!Array.isArray(value)) return [];
+  const out: CoachTurn[] = [];
+  for (const row of value) {
+    if (typeof row !== 'object' || row === null) continue;
+    const turn = row as Record<string, unknown>;
+    if (typeof turn.text !== 'string' || !turn.text) continue;
+    if (turn.role === 'user') out.push({ role: 'user', text: turn.text });
+    /* An assistant turn is replayed to the model as its own content blocks, so
+       one without them cannot be replayed at all. */
+    else if (turn.role === 'assistant' && Array.isArray(turn.content)) {
+      out.push({ role: 'assistant', text: turn.text, content: turn.content });
+    }
+  }
+  // And never lead with a reply, for the same reason trimTurns does not.
+  const lead = out.findIndex((turn) => turn.role === 'user');
+  return lead <= 0 ? out : out.slice(lead);
+}
+
 /** The conversation so far, wire-shaped. Assistant turns replay unchanged. */
 function wireMessages(turns: CoachTurn[], question: string): unknown[] {
   return [
-    ...turns.map((turn) =>
+    ...trimTurns(turns).turns.map((turn) =>
       turn.role === 'user'
         ? { role: 'user', content: turn.text }
         : { role: 'assistant', content: turn.content },

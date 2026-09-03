@@ -28,9 +28,15 @@ const METRIC_LABEL: Record<ExerciseMetric, string> = {
 export function HistoryScreen({
   exercises,
   onOpen,
+  onAsk,
 }: {
   exercises: Exercise[];
   onOpen: (sessionId: string) => void;
+  /**
+   * Hands one session to the coach as a question. Absent when there is no
+   * model to answer it, so the chip is not offered where nothing can.
+   */
+  onAsk?: (question: string) => void;
 }) {
   const [exerciseId, setExerciseId] = useState<string | undefined>(undefined);
   const [picking, setPicking] = useState(false);
@@ -205,11 +211,34 @@ export function HistoryScreen({
             </Label>
             <div className="overflow-hidden rounded-2xl bg-surface">
               {list.map((summary, i) => (
-                <button
+                <div
                   key={summary.session.id}
+                  className={`relative ${i > 0 ? 'border-t border-border' : ''}`}
+                >
+                {/* Its own button rather than something inside the row: a
+                    button inside a button is not a thing a browser will
+                    render, and the row already means "open it". */}
+                {onAsk && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onAsk(
+                        `About my ${
+                          summary.session.daySlotName ?? slotFallback(summary.session.daySlot)
+                        } session on ${summary.session.date}: how did it go, and what should I change next time?`,
+                      )
+                    }
+                    aria-label={`Ask about ${friendlyDate(summary.session.date)}`}
+                    className="absolute right-3 bottom-2.5 z-10 rounded-full px-3 py-1 text-[11px] font-semibold"
+                    style={{ background: 'var(--color-bodyweight)', color: 'var(--color-bg)' }}
+                  >
+                    Ask
+                  </button>
+                )}
+                <button
                   type="button"
                   onClick={() => onOpen(summary.session.id)}
-                  className={`w-full px-4 py-3.5 text-left ${i > 0 ? 'border-t border-border' : ''}`}
+                  className="w-full px-4 py-3.5 pr-16 text-left"
                 >
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="card-title">
@@ -251,6 +280,7 @@ export function HistoryScreen({
                     {summary.session.durationMin ? ` · ${summary.session.durationMin} min` : ''}
                   </p>
                 </button>
+                </div>
               ))}
             </div>
           </div>

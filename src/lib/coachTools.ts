@@ -104,9 +104,30 @@ export const COACH_TOOLS: unknown[] = [
       required: ['exerciseId'],
     },
   },
+  {
+    name: 'session_detail',
+    description:
+      'One logged session, set by set: what was done, at what weight, for how many reps, ' +
+      'at what RIR, plus what was programmed and never started. Identify it by date ' +
+      '(YYYY-MM-DD, as given in recentSessions) or by id. Use it whenever the question ' +
+      'is about a particular workout — how it went, what to change next time — rather ' +
+      'than about one exercise over time.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'The session date, YYYY-MM-DD.' },
+        sessionId: { type: 'string' },
+      },
+    },
+  },
 ];
 
-export const COACH_TOOL_NAMES = ['search_exercises', 'exercise_detail', 'exercise_history'];
+export const COACH_TOOL_NAMES = [
+  'search_exercises',
+  'exercise_detail',
+  'exercise_history',
+  'session_detail',
+];
 
 const muscleName = (id: MuscleId): string => MUSCLE_BY_ID[id]?.name ?? id;
 
@@ -251,6 +272,74 @@ async function exerciseHistory(exercises: Exercise[], input: unknown): Promise<u
   };
 }
 
+/**
+ * One session, set by set.
+ *
+ * The set rows are what the lifter actually did; `plannedSets` is what the
+ * workout asked for, and the difference between them is the one thing no set
+ * log can tell you — a workout planned and never started leaves no row at all.
+ */
+async function sessionDetail(exercises: Exercise[], input: unknown): Promise<unknown> {
+  const args = asRecord(input);
+  const id = typeof args.sessionId === 'string' ? args.sessionId : undefined;
+  const date = typeof args.date === 'string' ? args.date.slice(0, 10) : undefined;
+
+  const session = id
+    ? await db.session.get(id)
+    : date
+      ? (await db.session.where('date').equals(date).toArray()).sort((a, b) =>
+          a.id.localeCompare(b.id),
+        )[0]
+      : undefined;
+  if (!session) {
+    return { error: `No session ${id ?? date ?? '(nothing asked for)'}. Dates are YYYY-MM-DD.` };
+  }
+
+  const sets = await db.setLog.where('sessionId').equals(session.id).toArray();
+  const byExercise = new Map<string, SetLog[]>();
+  for (const set of sets) {
+    const rows = byExercise.get(set.exerciseId);
+    if (rows) rows.push(set);
+    else byExercise.set(set.exerciseId, [set]);
+  }
+
+  const planned = session.plannedSets ?? {};
+  /* Programmed and never touched. Reported by name, because an id is not a
+     thing the lifter would recognise in an answer. */
+  const untouched = Object.keys(planned)
+    .filter((exerciseId) => !byExercise.has(exerciseId))
+    .map((exerciseId) => exercises.find((row) => row.id === exerciseId)?.name ?? exerciseId);
+
+  return {
+    id: session.id,
+    date: session.date,
+    workout: session.daySlotName,
+    minutes: session.durationMin,
+    setsDone: sets.length,
+    setsPlanned:
+      Object.values(planned).reduce((sum, n) => sum + n, 0) || undefined,
+    notStarted: untouched.length > 0 ? untouched : undefined,
+    exercises: [...byExercise].map(([exerciseId, rows]) => {
+      const exercise = exercises.find((row) => row.id === exerciseId);
+      const ordered = [...rows].sort((a, b) => a.setNo - b.setNo);
+      return {
+        name: exercise?.name ?? exerciseId,
+        exerciseId,
+        unit: exercise && isTimed(exercise) ? 'seconds' : 'reps',
+        plannedSets: planned[exerciseId],
+        sets: ordered.map((set) => ({
+          weightKg: set.weightKg,
+          /* What it actually loaded: a single cable pulley moves half the
+             stack, so the number on the machine is not the number that counts. */
+          effectiveKg: exercise ? (effectiveKg(exercise, set.weightKg) ?? set.effectiveKg) : set.effectiveKg,
+          reps: set.reps,
+          rir: set.rir,
+        })),
+      };
+    }),
+  };
+}
+
 /* --- the seam the loop calls ---------------------------------------------- */
 
 export interface ToolOutcome {
@@ -278,6 +367,9 @@ export async function runCoachTool(
     }
     if (name === 'exercise_history') {
       return { content: JSON.stringify(await exerciseHistory(exercises, input)), isError: false };
+    }
+    if (name === 'session_detail') {
+      return { content: JSON.stringify(await sessionDetail(exercises, input)), isError: false };
     }
     return { content: JSON.stringify({ error: `No tool named ${name}.` }), isError: true };
   } catch (cause) {

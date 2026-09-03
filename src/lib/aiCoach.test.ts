@@ -12,7 +12,15 @@ import { db } from '../db/db';
 import { seedDatabase } from '../db/seed';
 import { EXERCISES } from '../db/seed/exercises';
 import { writeApiKey } from './askModel';
-import { MAX_TOOL_ROUNDS, askCoach, buildCoachContext } from './aiCoach';
+import {
+  MAX_TOOL_ROUNDS,
+  MEMORY_TURNS,
+  askCoach,
+  buildCoachContext,
+  parseTurns,
+  trimTurns,
+  type CoachTurn,
+} from './aiCoach';
 
 /*
  * The loop, and the promise the whole feature rests on: the exercise library
@@ -220,12 +228,13 @@ describe('what the coach is sent', () => {
     expect(system).toMatch(/Never use the Program screen, or anything else in the app, as a reason not to answer/);
   });
 
-  it('offers the three tools and no output schema', async () => {
+  it('offers every lookup and no output schema', async () => {
     const { sent } = await ask([says('ok')]);
     expect(sent[0]?.tools.map((tool) => tool.name)).toEqual([
       'search_exercises',
       'exercise_detail',
       'exercise_history',
+      'session_detail',
     ]);
     /* A schema would bar the tool_use blocks this shape exists for. `effort`
        is thinking depth and still applies. */
@@ -404,5 +413,69 @@ describe('when the model cannot be reached', () => {
     expect(answer.text).toBeUndefined();
     // The failed question is not written into the history it would replay.
     expect(answer.turns).toEqual([{ role: 'user', text: 'earlier' }]);
+  });
+});
+
+describe('a conversation that is kept', () => {
+  const said = (text: string): CoachTurn => ({
+    role: 'assistant',
+    text,
+    content: [{ type: 'text', text }],
+  });
+  const asked = (text: string): CoachTurn => ({ role: 'user', text });
+
+  /** n exchanges: a question and its answer, numbered. */
+  const thread = (n: number): CoachTurn[] =>
+    Array.from({ length: n }, (_, i) => [asked(`q${i}`), said(`a${i}`)]).flat();
+
+  it('keeps the recent end of a long thread', () => {
+    /* The thread outlives the sheet now, so without a cap every question
+       would re-bill a fortnight of chat. */
+    const { turns, dropped } = trimTurns(thread(10));
+    expect(turns).toHaveLength(MEMORY_TURNS);
+    expect(dropped).toBe(20 - MEMORY_TURNS);
+    expect(turns[turns.length - 1]?.text).toBe('a9');
+  });
+
+  it('never starts on a reply, which the API rejects outright', () => {
+    for (let length = 1; length <= 12; length += 1) {
+      const { turns } = trimTurns(thread(6).slice(0, length), 3);
+      if (turns.length > 0) expect(turns[0]?.role, `length ${length}`).toBe('user');
+    }
+  });
+
+  it('leaves a short thread exactly as it is', () => {
+    const short = thread(2);
+    expect(trimTurns(short)).toEqual({ turns: short, dropped: 0 });
+  });
+
+  it('reads back only what is actually a turn', () => {
+    /* Stored JSON is not a type. A row from an older build has to come back
+       as a shorter conversation, not as a crash in the sheet. */
+    expect(parseTurns(parseTurns(thread(2)))).toEqual(thread(2));
+    expect(parseTurns(undefined)).toEqual([]);
+    expect(parseTurns([null, 7, 'hello'])).toEqual([]);
+    // A question with no text, and a reply with no blocks to replay.
+    expect(parseTurns([{ role: 'user' }, { role: 'assistant', text: 'a' }])).toEqual([]);
+  });
+
+  it('drops a leading reply on the way back in', () => {
+    const stored = [said('a0'), asked('q1'), said('a1')];
+    expect(parseTurns(stored).map((turn) => turn.text)).toEqual(['q1', 'a1']);
+  });
+
+  it('replays the trimmed thread, not the whole of it', async () => {
+    const { fetchImpl, sent } = transport([says('ok')]);
+    const context = await buildCoachContext(EXERCISES);
+    await askCoach({
+      question: 'and the other one?',
+      turns: thread(10),
+      exercises: EXERCISES,
+      context,
+      fetchImpl,
+    });
+    // The trimmed thread plus the new question, starting on a question.
+    expect(sent[0]?.messages).toHaveLength(MEMORY_TURNS + 1);
+    expect(sent[0]?.messages[0]?.role).toBe('user');
   });
 });

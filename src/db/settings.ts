@@ -248,3 +248,48 @@ export async function writeActiveSession(
 export async function clearActiveSession(): Promise<void> {
   await db.settings.delete(ACTIVE_SESSION_KEY);
 }
+
+/* -------------------------------------------------------------------------- */
+/*  The coach conversation.                                                   */
+/*                                                                            */
+/*  It lived in component state, so closing the sheet — or the PWA being       */
+/*  reloaded, which iOS does whenever it feels like it — threw away the        */
+/*  thread. Every follow-up then started from nothing, which is the one thing  */
+/*  a conversation cannot survive: "what about the other one" has no referent. */
+/*                                                                            */
+/*  One row, like the active session, and stored opaquely for the same reason: */
+/*  the shape of a turn belongs to aiCoach.ts, and a second copy of it here    */
+/*  would be a second thing to keep in step.                                   */
+/* -------------------------------------------------------------------------- */
+
+export const COACH_CHAT_KEY = 'coachChat';
+
+export interface StoredCoachChat {
+  /** CoachTurn[], opaque here: this module stores it, it does not read it. */
+  turns: unknown[];
+  /** The footnote for each assistant turn, so a resumed one keeps its sources. */
+  notes?: unknown;
+  savedAt: string;
+}
+
+export async function readCoachChat(): Promise<StoredCoachChat | undefined> {
+  const row = await db.settings.get(COACH_CHAT_KEY);
+  const value = row?.value;
+  if (!isRecord(value) || !Array.isArray(value.turns)) return undefined;
+  return {
+    turns: value.turns,
+    notes: value.notes,
+    savedAt: typeof value.savedAt === 'string' ? value.savedAt : new Date().toISOString(),
+  };
+}
+
+export async function writeCoachChat(chat: Omit<StoredCoachChat, 'savedAt'>): Promise<void> {
+  await db.settings.put({
+    key: COACH_CHAT_KEY,
+    value: { ...chat, savedAt: new Date().toISOString() },
+  });
+}
+
+export async function clearCoachChat(): Promise<void> {
+  await db.settings.delete(COACH_CHAT_KEY);
+}

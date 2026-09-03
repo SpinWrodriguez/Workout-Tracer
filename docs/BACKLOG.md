@@ -220,7 +220,7 @@ before writing another DOM test:
 ## 10. Ask the AI about my training (floating button) — done
 
 Built in `src/lib/aiCoach.ts` (context + loop), `src/lib/coachTools.ts` (the
-three local tools) and `src/components/CoachSheet.tsx`. `askModel.ts` grew a
+four local tools) and `src/components/CoachSheet.tsx`. `askModel.ts` grew a
 second entry point, `askConversation`, for the tool shape.
 
 **Measured:** the library serialises to 29,745 characters, about 7,400 tokens.
@@ -234,9 +234,23 @@ signatures and tool arguments included, both of which arrive in pieces — and
 the relay pipes the upstream body through instead of buffering it, which needs
 a redeploy. See `docs/EDGE-FUNCTION.md`.
 
-**What is left:** nothing planned. Worth considering only if it gets used
-enough to want it: remembering conversations across app opens, and a way to ask
-about a specific session from the History screen rather than describing it.
+**Remembered across app opens.** The thread lived in component state, so
+closing the sheet ended it — and so did iOS reloading the PWA, which it does
+whenever it likes. Every follow-up then started from nothing, and "what about
+the other one" had no referent. It is now one row in `settings` (`coachChat`),
+kept for three days, capped at the last eight turns by `trimTurns` so a long
+thread cannot re-bill itself on every question, and read back through
+`parseTurns` because stored JSON is not a type. **New** clears it. It is left
+out of a backup: a chat log carrying the model's own content blocks is neither
+a training fact nor a device fact.
+
+**One session at a time.** Every row in History has an **Ask** chip that hands
+that workout to the coach as a question, and a fourth tool — `session_detail` —
+reads it set by set: weight, reps, RIR, what it actually loaded, and what was
+programmed and never started. That last one is the only thing no set log can
+say, because there is no row for it.
+
+**What is left:** nothing planned.
 
 ### Original notes
 

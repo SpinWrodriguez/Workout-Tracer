@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Exercise } from '../db/types';
-import { askCoach, buildCoachContext, type CoachTurn } from '../lib/aiCoach';
+import { clearCoachChat, readCoachChat, writeCoachChat } from '../db/settings';
+import {
+  askCoach,
+  buildCoachContext,
+  parseTurns,
+  trimTurns,
+  type CoachTurn,
+} from '../lib/aiCoach';
 
 /* -------------------------------------------------------------------------- */
 /*  Ask about your own training.                                             */
@@ -27,10 +34,40 @@ const TOOL_LABEL: Record<string, string> = {
   search_exercises: 'searched your exercises',
   exercise_detail: 'read an exercise',
   exercise_history: 'read your logged sets',
+  session_detail: 'read that session',
 };
 
+/** What one answer looked at, kept beside the turn it belongs to. */
+interface Note {
+  tools: string[];
+  ms: number;
+  tokens?: number;
+}
+type Notes = Record<number, Note>;
+
+/**
+ * How long a remembered conversation is worth resuming.
+ *
+ * The context is this week and the last few sessions, so a thread from a
+ * fortnight ago would read as continuing a conversation about a week that no
+ * longer exists. Three days keeps "what about the other one" working across a
+ * reload and a night's sleep without pretending to remember a training block.
+ */
+const MEMORY_DAYS = 3;
+
+/** Notes re-keyed after the front of the conversation was dropped. */
+function shift(notes: Notes, dropped: number): Notes {
+  if (dropped === 0) return notes;
+  const out: Notes = {};
+  for (const [index, note] of Object.entries(notes)) {
+    const moved = Number(index) - dropped;
+    if (moved >= 0) out[moved] = note;
+  }
+  return out;
+}
+
 /** What it looked at, and what the answer cost, in one line. */
-function Footnote({ tools, ms, tokens }: { tools: string[]; ms: number; tokens?: number }) {
+function Footnote({ tools, ms, tokens }: Note) {
   const looked = [...new Set(tools)].map((tool) => TOOL_LABEL[tool] ?? tool);
   return (
     <p className="mt-1.5 text-[11px] text-text-faint">
@@ -44,9 +81,15 @@ function Footnote({ tools, ms, tokens }: { tools: string[]; ms: number; tokens?:
 
 export function CoachSheet({
   exercises,
+  initialQuestion,
   onClose,
 }: {
   exercises: Exercise[];
+  /**
+   * Asked as soon as the sheet opens. How History hands over a session: the
+   * question names the workout, and the coach reads it with session_detail.
+   */
+  initialQuestion?: string;
   onClose: () => void;
 }) {
   const [turns, setTurns] = useState<CoachTurn[]>([]);
@@ -56,13 +99,47 @@ export function CoachSheet({
      yet: nothing may replay a half-finished reply back to the model. */
   const [streaming, setStreaming] = useState('');
   const [error, setError] = useState<string | undefined>(undefined);
-  const [notes, setNotes] = useState<Record<number, { tools: string[]; ms: number; tokens?: number }>>({});
+  const [notes, setNotes] = useState<Notes>({});
   const foot = useRef<HTMLDivElement | null>(null);
+  /* The conversation is remembered, so the first render must not race a
+     question typed into an empty-looking sheet. */
+  const [loaded, setLoaded] = useState(false);
+  const started = useRef(false);
 
   // Keep the newest turn in view, the way any message list behaves.
   useEffect(() => {
     foot.current?.scrollIntoView({ block: 'end' });
   }, [turns, pending, streaming]);
+
+  /* Pick the thread back up. Closing the sheet used to end the conversation,
+     and so did iOS reloading the PWA — after which every follow-up started
+     from nothing and "what about the other one" meant nothing at all. */
+  useEffect(() => {
+    let cancelled = false;
+    void readCoachChat().then((stored) => {
+      if (cancelled) return;
+      const age = stored ? Date.now() - new Date(stored.savedAt).getTime() : 0;
+      if (stored && age <= MEMORY_DAYS * 86_400_000) {
+        setTurns(parseTurns(stored.turns));
+        const notes = stored.notes;
+        if (typeof notes === 'object' && notes !== null) setNotes(notes as Notes);
+      } else if (stored) {
+        void clearCoachChat();
+      }
+      setLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* The question History handed over, asked once the stored thread is in. */
+  useEffect(() => {
+    if (!loaded || !initialQuestion || started.current) return;
+    started.current = true;
+    void ask(initialQuestion);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, initialQuestion]);
 
   const ask = async (text: string) => {
     const asked = text.trim();
@@ -88,15 +165,29 @@ export function CoachSheet({
       setError(answer.error);
       return;
     }
-    setTurns(answer.turns);
-    setNotes((previous) => ({
-      ...previous,
-      [answer.turns.length - 1]: {
+    /* Trimmed here rather than on the way to the model, so what is kept, what
+       is shown and what is replayed are all the same conversation. */
+    const { turns: kept, dropped } = trimTurns(answer.turns);
+    const nextNotes: Notes = {
+      ...shift(notes, dropped),
+      [kept.length - 1]: {
         tools: answer.toolCalls,
         ms: answer.ms,
         tokens: answer.usage.outputTokens,
       },
-    }));
+    };
+    setTurns(kept);
+    setNotes(nextNotes);
+    await writeCoachChat({ turns: kept, notes: nextNotes });
+  };
+
+  /* Start again. The only way to drop a thread that has gone somewhere you did
+     not mean, now that closing the sheet no longer does it. */
+  const startOver = () => {
+    setTurns([]);
+    setNotes({});
+    setError(undefined);
+    void clearCoachChat();
   };
 
   return (
@@ -104,6 +195,16 @@ export function CoachSheet({
       <div className="px-4 pt-[calc(env(safe-area-inset-top)+16px)]">
         <div className="flex items-center justify-between gap-3">
           <h2 className="screen-title text-[22px]">Ask</h2>
+          <span className="flex items-center gap-2">
+          {turns.length > 0 && (
+            <button
+              type="button"
+              onClick={startOver}
+              className="rounded-full bg-surface-2 px-3.5 py-1.5 text-[13px] font-medium text-text-dim"
+            >
+              New
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -111,14 +212,16 @@ export function CoachSheet({
           >
             Close
           </button>
+          </span>
         </div>
         <p className="mt-1 text-[13px] text-text-dim">
-          Answers come from your own logged sets and this week's plan.
+          Answers come from your own logged sets and this week's plan. The thread is kept
+          for {MEMORY_DAYS} days, so you can come back to it.
         </p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4">
-        {turns.length === 0 && !pending && (
+        {loaded && turns.length === 0 && !pending && (
           <div className="mt-2">
             {STARTERS.map((starter) => (
               <button

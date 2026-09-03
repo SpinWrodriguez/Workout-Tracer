@@ -1,5 +1,5 @@
 import { BACKUP_VERSION, db } from '../db/db';
-import { LAST_SYNC_KEY } from '../db/settings';
+import { COACH_CHAT_KEY, LAST_SYNC_KEY } from '../db/settings';
 import type {
   Activity,
   Block,
@@ -431,8 +431,11 @@ export async function buildBackup(): Promise<BackupV3> {
       setLog,
       // The remote config holds an API key; a backup file is not the place
       // for a credential, and it is device-local anyway.
-      // A device fact, not a training fact.
-      settings: settings.filter((row) => row.key !== LAST_SYNC_KEY),
+      // A device fact, not a training fact — and the coach conversation is a
+      // chat log with the model's own content blocks in it, which is neither.
+      settings: settings.filter(
+        (row) => row.key !== LAST_SYNC_KEY && row.key !== COACH_CHAT_KEY,
+      ),
       golfDay: golfDay.sort((a, b) => a.date.localeCompare(b.date)),
     },
   };

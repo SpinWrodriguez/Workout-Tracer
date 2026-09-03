@@ -50,7 +50,7 @@ describe('the tools the coach is offered', () => {
       const row = tool as { name: string; description: string };
       expect(row.description.length).toBeGreaterThan(60);
       // Named for what it does to the data, not "get" or "info".
-      expect(row.name).toMatch(/^(search|exercise)_/);
+      expect(row.name).toMatch(/^(search|exercise|session)_/);
     }
   });
 });
@@ -164,5 +164,64 @@ describe('a tool that does not exist', () => {
     const outcome = await runCoachTool('delete_everything', {}, EXERCISES);
     expect(outcome.isError).toBe(true);
     expect(JSON.parse(outcome.content).error).toContain('delete_everything');
+  });
+});
+
+describe('reading one session', () => {
+  /** A session with a planned count, so "never started" is answerable. */
+  async function logPlanned() {
+    await db.session.put({
+      id: 's_mon',
+      blockId: 'block_1',
+      daySlot: 'A',
+      daySlotName: 'Lower body',
+      date: '2026-08-31',
+      durationMin: 35,
+      plannedSets: { bb_back_squat: 3, bb_rdl: 3, bw_pull_up: 3 },
+    });
+    await db.setLog.bulkPut([
+      { sessionId: 's_mon', exerciseId: 'bb_back_squat', setNo: 1, reps: 8, weightKg: 80, effectiveKg: 80, rir: 2 },
+      { sessionId: 's_mon', exerciseId: 'bb_back_squat', setNo: 2, reps: 8, weightKg: 85, effectiveKg: 85, rir: 1 },
+      { sessionId: 's_mon', exerciseId: 'bb_rdl', setNo: 1, reps: 10, weightKg: 70, effectiveKg: 70 },
+    ]);
+  }
+
+  it('finds it by date and reports it set by set', async () => {
+    await logPlanned();
+    const result = await call('session_detail', { date: '2026-08-31' });
+    expect(result).toMatchObject({ date: '2026-08-31', workout: 'Lower body', minutes: 35 });
+    expect(result.setsDone).toBe(3);
+    expect(result.setsPlanned).toBe(9);
+
+    const lifts = result.exercises as { name: string; sets: unknown[] }[];
+    const squat = lifts.find((row) => row.name === 'Back squat');
+    expect(squat?.sets).toHaveLength(2);
+    expect(squat?.sets[1]).toMatchObject({ weightKg: 85, reps: 8, rir: 1 });
+  });
+
+  it('names what was programmed and never started', async () => {
+    await logPlanned();
+    const result = await call('session_detail', { date: '2026-08-31' });
+    // The one thing a set log cannot say: there is no row for it.
+    expect(result.notStarted).toEqual(['Pull-up']);
+  });
+
+  it('reports what a lift actually loaded, not just what was on it', async () => {
+    /* A single cable pulley moves about half the stack, and comparing the
+       number on the machine across stations is how a PR appears from nothing. */
+    await logSession('s_cable', '2026-09-01', [
+      { exerciseId: 'cb_single_arm_row', setNo: 1, reps: 12, weightKg: 40 },
+    ]);
+    const result = await call('session_detail', { date: '2026-09-01' });
+    const [lift] = result.exercises as { sets: { weightKg: number; effectiveKg?: number }[] }[];
+    expect(lift?.sets[0]?.weightKg).toBe(40);
+    expect(lift?.sets[0]?.effectiveKg).toBeCloseTo(40 * CABLE_SINGLE_PULLEY, 5);
+  });
+
+  it('comes back as an error the model can read, not a crash', async () => {
+    const missing = await call('session_detail', { date: '2019-01-01' });
+    expect(String(missing.error)).toMatch(/No session/);
+    // Nothing asked for at all is the same: an answer, not an exception.
+    expect(String((await call('session_detail', {})).error)).toMatch(/No session/);
   });
 });

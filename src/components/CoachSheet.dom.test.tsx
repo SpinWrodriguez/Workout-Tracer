@@ -11,7 +11,7 @@
 
 import '../test/dom';
 
-import { screen, waitFor } from '@testing-library/react';
+import { cleanup, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/supabaseSource', () => ({
@@ -20,6 +20,7 @@ vi.mock('../lib/supabaseSource', () => ({
 }));
 
 import { db } from '../db/db';
+import { COACH_CHAT_KEY, writeCoachChat } from '../db/settings';
 import { exercises, draw, user } from '../test/dom';
 import { resetTransportProbe, writeApiKey } from '../lib/askModel';
 import { CoachSheet } from './CoachSheet';
@@ -68,10 +69,25 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const openSheet = () => {
-  draw(<CoachSheet exercises={exercises} onClose={() => {}} />);
+const openSheet = (initialQuestion?: string) => {
+  draw(<CoachSheet exercises={exercises} initialQuestion={initialQuestion} onClose={() => {}} />);
   return user();
 };
+
+/** Runs one whole answer through the held stream and closes it. */
+function answerWith(text: string, outputTokens = 44) {
+  held.push({ type: 'message_start', message: { usage: { input_tokens: 900 } } });
+  held.push({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } });
+  held.push({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } });
+  held.push({ type: 'content_block_stop', index: 0 });
+  held.push({
+    type: 'message_delta',
+    delta: { stop_reason: 'end_turn' },
+    usage: { output_tokens: outputTokens },
+  });
+  held.push({ type: 'message_stop' });
+  held.close();
+}
 
 describe('an answer arriving a piece at a time', () => {
   it('shows the first words while the rest is still coming', async () => {
@@ -131,5 +147,114 @@ describe('an answer arriving a piece at a time', () => {
     /* Half an answer is not an answer, and replaying it as a turn would put
        words in the model's mouth on the next question. */
     expect(screen.queryByText('Your squat')).toBeNull();
+  });
+});
+
+describe('a conversation that survives the sheet closing', () => {
+  it('is there again on the next open, footnote and all', async () => {
+    /* It lived in component state, so closing the sheet ended the thread —
+       and so did iOS reloading the PWA. Every follow-up then started from
+       nothing, which is the one thing a conversation cannot survive. */
+    const ui = openSheet();
+    await ui.click(await screen.findByRole('button', { name: /Is my squat/ }));
+    answerWith('Yes — up 5kg in three weeks.');
+    await waitFor(() => expect(screen.getByText(/44 tokens out/)).toBeTruthy());
+
+    cleanup();
+    held = heldStream();
+    openSheet();
+
+    await waitFor(() =>
+      expect(screen.getByText('Yes — up 5kg in three weeks.')).toBeTruthy(),
+    );
+    // The question it answered, and where the answer came from.
+    expect(screen.getByText('Is my squat actually moving?')).toBeTruthy();
+    expect(screen.getByText(/44 tokens out/)).toBeTruthy();
+  });
+
+  it('is replayed to the model, so a follow-up has a referent', async () => {
+    const ui = openSheet();
+    await ui.click(await screen.findByRole('button', { name: /Is my squat/ }));
+    answerWith('Yes — up 5kg.');
+    await waitFor(() => expect(screen.getByText('Yes — up 5kg.')).toBeTruthy());
+
+    cleanup();
+    held = heldStream();
+    const next = openSheet();
+    await waitFor(() => expect(screen.getByText('Yes — up 5kg.')).toBeTruthy());
+
+    await next.type(screen.getByLabelText('Ask about your training'), 'what about the bench?');
+    await next.click(screen.getByRole('button', { name: 'Ask' }));
+
+    await waitFor(() => {
+      const calls = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+      const init = calls[calls.length - 1]?.[1] as { body: string } | undefined;
+      expect(init).toBeDefined();
+      const body = JSON.parse(init?.body ?? '{}') as {
+        messages: { role: string; content: unknown }[];
+      };
+      // question, answer, question — not one message with no history behind it.
+      expect(body.messages.map((message) => message.role)).toEqual([
+        'user',
+        'assistant',
+        'user',
+      ]);
+    });
+  });
+
+  it('drops it on New, which is the only way to now', async () => {
+    const ui = openSheet();
+    await ui.click(await screen.findByRole('button', { name: /Is my squat/ }));
+    answerWith('Yes — up 5kg.');
+    await waitFor(() => expect(screen.getByText('Yes — up 5kg.')).toBeTruthy());
+
+    await ui.click(screen.getByRole('button', { name: 'New' }));
+    await waitFor(() => expect(screen.queryByText('Yes — up 5kg.')).toBeNull());
+    // And it stays dropped: the stored row went with it.
+    cleanup();
+    held = heldStream();
+    openSheet();
+    await screen.findByRole('button', { name: /Is my squat/ });
+    expect(screen.queryByText('Yes — up 5kg.')).toBeNull();
+  });
+
+  it('forgets a thread older than a few days rather than resuming it cold', async () => {
+    /* The context is this week and the last few sessions, so a fortnight-old
+       thread would be continuing a conversation about a week that is gone. */
+    await writeCoachChat({
+      turns: [
+        { role: 'user', text: 'from a fortnight ago' },
+        { role: 'assistant', text: 'an old answer', content: [{ type: 'text', text: 'an old answer' }] },
+      ],
+    });
+    const row = await db.settings.get(COACH_CHAT_KEY);
+    await db.settings.put({
+      key: COACH_CHAT_KEY,
+      value: {
+        ...(row?.value as object),
+        savedAt: new Date(Date.now() - 14 * 86_400_000).toISOString(),
+      },
+    });
+
+    openSheet();
+
+    await screen.findByRole('button', { name: /Is my squat/ });
+    expect(screen.queryByText('an old answer')).toBeNull();
+    // Cleared, not just ignored.
+    await waitFor(async () => expect(await db.settings.get(COACH_CHAT_KEY)).toBeUndefined());
+  });
+});
+
+describe('a question handed over by another screen', () => {
+  it('is asked as soon as the sheet opens', async () => {
+    // How History gives the coach one session to look at.
+    openSheet('About my Lower session on 2026-08-26: how did it go?');
+    await waitFor(() =>
+      expect(screen.getByText('About my Lower session on 2026-08-26: how did it go?')).toBeTruthy(),
+    );
+    answerWith('Three sets of squats, and you stopped there.');
+    await waitFor(() =>
+      expect(screen.getByText('Three sets of squats, and you stopped there.')).toBeTruthy(),
+    );
   });
 });

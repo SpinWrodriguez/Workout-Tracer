@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../db/db';
 import { seedDatabase } from '../db/seed';
+import { COACH_CHAT_KEY, writeCoachChat } from '../db/settings';
 import { EXERCISES } from '../db/seed/exercises';
 import { buildBackup, importBackup, normaliseGoals } from './backup';
 import { loadDraft, saveSession, type SessionDraft } from './sessions';
@@ -412,5 +413,21 @@ describe('goals the nutrition app never dated', () => {
     });
     expect(report.counts.goals).toBe(1);
     expect((await db.sharedGoals.get('2026-08-31'))?.protein).toBe(170);
+  });
+});
+
+describe('what a backup leaves out', () => {
+  it('does not carry the coach conversation', async () => {
+    /* A chat log with the model's own content blocks in it is neither a
+       training fact nor a device fact, and it would be the biggest thing in
+       the file. */
+    await writeCoachChat({
+      turns: [{ role: 'user', text: 'is my squat moving?' }],
+      notes: { 1: { tools: ['exercise_history'], ms: 900 } },
+    });
+    const backup = await buildBackup();
+    const keys = backup.workout.settings.map((row) => row.key);
+    expect(keys).not.toContain(COACH_CHAT_KEY);
+    expect(JSON.stringify(backup)).not.toContain('is my squat moving?');
   });
 });
