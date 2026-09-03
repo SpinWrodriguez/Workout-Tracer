@@ -217,7 +217,11 @@ export function CoachButton({ onOpen, raised }: { onOpen: () => void; raised: bo
       type="button"
       onClick={onOpen}
       aria-label="Ask about my training"
-      className={`fixed right-4 z-30 flex size-12 items-center justify-center rounded-full bg-surface-2 shadow-lg ${
+      /* Violet: the one accent the workout screens do not already use for
+         something, so it reads as "the AI thing" rather than as a set count
+         or a rule warning. Both themes define it. */
+      style={{ background: 'var(--color-bodyweight)', color: 'var(--color-bg)' }}
+      className={`fixed right-4 z-30 flex size-12 items-center justify-center rounded-full shadow-lg transition-transform active:scale-95 ${
         raised
           ? 'bottom-[calc(env(safe-area-inset-bottom)+124px)]'
           : 'bottom-[calc(env(safe-area-inset-bottom)+76px)]'

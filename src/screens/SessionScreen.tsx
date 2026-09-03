@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { db } from '../db/db';
 import type { BlockExercise, DaySlot, Exercise, SetLog } from '../db/types';
 import { CABLE_STACK_KG, STATION_LABEL } from '../db/seed/exercises';
+import { MUSCLE_BY_ID } from '../db/seed/muscles';
+import { colorForRegion, regionOf } from '../lib/region';
 import { DEFAULT_BLOCK_ID } from '../db/seed';
 import { tap } from '../lib/haptics';
 import { HapticTick } from '../components/HapticTick';
@@ -761,6 +763,32 @@ export function SessionScreen({
               </span>
             }
           >
+            {/* What it trains, coloured by region. The one bit of colour on
+                this screen that is information rather than decoration: blue
+                is upper body, orange lower, cyan core. */}
+            <div className="mb-2.5 flex flex-wrap gap-1.5">
+              {activeExercise.primaryMuscles.map((muscle) => (
+                <span
+                  key={muscle}
+                  className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                  style={{
+                    color: colorForRegion(regionOf(muscle)),
+                    background: 'color-mix(in oklab, currentColor 14%, transparent)',
+                  }}
+                >
+                  {MUSCLE_BY_ID[muscle]?.name ?? muscle}
+                </span>
+              ))}
+              {activeExercise.secondaryMuscles.slice(0, 2).map((muscle) => (
+                <span
+                  key={muscle}
+                  className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-text-dim"
+                >
+                  {MUSCLE_BY_ID[muscle]?.name ?? muscle}
+                </span>
+              ))}
+            </div>
+
             <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
               <Label>{STATION_LABEL[activeExercise.station]}</Label>
               {hasLoadTranslation(activeExercise) && (

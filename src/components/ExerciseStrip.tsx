@@ -1,12 +1,17 @@
 import type { Exercise } from '../db/types';
 import { STATION_LABEL } from '../db/seed/exercises';
+import { ExerciseThumb } from './ExerciseThumb';
+import { regionColor } from '../lib/region';
 
 /* -------------------------------------------------------------------------- */
 /*  Horizontal exercise strip — spec §4: thumbnails at the top of the session  */
 /*  screen, tap to switch, never a dropdown.                                   */
 /*                                                                            */
-/*  Phase 1 has no photos (free-exercise-db enrichment is §9, a later phase),  */
-/*  so the thumbnail is a station glyph over the exercise's initials.          */
+/*  The thumbnail is the exercise's own photo — our illustration for the       */
+/*  eleven movements nothing upstream has, the cached reference photo for the  */
+/*  rest. Initials over a station glyph are the fallback, which is what this   */
+/*  showed for every exercise before there were any photos at all: a strip of  */
+/*  LS / CH / LL tells you nothing you cannot read in the label underneath.    */
 /* -------------------------------------------------------------------------- */
 
 const STATION_GLYPH: Record<Exercise['station'], string> = {
@@ -52,16 +57,29 @@ export function ExerciseStrip({
             key={exercise.id}
             type="button"
             onClick={() => onSelect(exercise.id)}
-            className={`relative w-[76px] shrink-0 rounded-2xl p-2 text-left ${
+            className={`relative w-[76px] shrink-0 rounded-2xl p-2 text-left transition-transform active:scale-[0.97] ${
               active ? 'bg-surface-2' : 'bg-surface'
             }`}
           >
             <span
-              className={`flex h-11 items-center justify-center rounded-xl text-base font-bold ${
-                active ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
-              }`}
+              className="flex h-14 items-center justify-center overflow-hidden rounded-xl"
+              /* Tinted by what it trains, so the strip has some colour in it
+                 and the tint means something: upper, lower or core. */
+              style={{
+                background: active ? regionColor(exercise) : 'var(--color-surface-2)',
+                boxShadow: active ? `0 0 0 2px ${regionColor(exercise)}` : undefined,
+              }}
             >
-              {initials(exercise.name)}
+              <ExerciseThumb
+                exercise={exercise}
+                fallback={
+                  <span
+                    className={`text-base font-bold ${active ? 'text-bg' : 'text-text-dim'}`}
+                  >
+                    {initials(exercise.name)}
+                  </span>
+                }
+              />
             </span>
             <span
               className={`mt-1.5 block truncate text-[10px] leading-tight font-medium ${
