@@ -2,16 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { EXERCISES } from '../db/seed/exercises';
 import type { BlockExercise, DaySlot } from '../db/types';
 import { DEFAULT_INVENTORY, ladderFor } from './loadable';
-import { generateBlock, WEEKLY_SET_TARGET } from './blockBuilder';
+import { balanceSets, generateDay, WEEKLY_SET_TARGET } from './blockBuilder';
+import { templateDayFor } from './weekTemplate';
 import {
   SET_DURATION_SECONDS,
   SET_TOTAL_TOLERANCE,
   daysClearOfGolf,
   formatViolationsForModel,
-  scheduleSentence,
   severityOf,
   sessionMinutes,
-  stripScheduleClaims,
   validateBlock,
   workingRepRange,
   type BlockProposal,
@@ -247,32 +246,15 @@ describe('time estimate (defect 5)', () => {
   });
 });
 
-describe('rationale (defect 1)', () => {
-  it('strips a model claim about spacing or compliance', () => {
-    const text =
-      'Pull volume is prioritised for the lats. All grip work is clear of Sat and Sun by at least 3 days. Pressing stays horizontal to spare the shoulder.';
-    const kept = stripScheduleClaims(text);
-    expect(kept).toContain('Pull volume is prioritised');
-    expect(kept).toContain('Pressing stays horizontal');
-    expect(kept).not.toMatch(/at least 3 days/);
-  });
-
-  it('generates the schedule sentence from the calendar instead', () => {
-    const p = proposal([
-      { slot: 'A', weekday: 1, ids: ['bb_bent_over_row', 'bb_bench_press'] },
-    ]);
-    const sentence = scheduleSentence(p, CONTEXT);
-    expect(sentence).toMatch(/Mon day A/);
-    expect(sentence).toMatch(/Grip work sits on Mon — 5 days clear of the next round/);
-    expect(sentence).toMatch(/sets across the week/);
-  });
-
-  it('never claims clearance a Thursday does not have', () => {
-    const p = proposal([{ slot: 'A', weekday: 4, ids: ['bb_bent_over_row'] }]);
-    // States the real number even though the validator will reject the day.
-    expect(scheduleSentence(p, CONTEXT)).toMatch(/on Thu — 2 days clear/);
-  });
-});
+/*
+ * The rationale tests lived here — stripScheduleClaims took a model's claims
+ * about spacing back out, and scheduleSentence wrote the true one from the
+ * calendar. Both are deleted with generateBlock, the only thing that used
+ * them: the app no longer asks a model to narrate a week it did not place.
+ *
+ * The rule they served is unchanged and enforced above instead: nothing
+ * self-reports compliance, and the validator recomputes.
+ */
 
 describe('violations are written to be handed back to a model', () => {
   it('numbers them and names the code', () => {
@@ -290,20 +272,83 @@ describe('violations are written to be handed back to a model', () => {
 
 /* -------------------------------------------------------------------------- */
 
-describe('the generated block passes its own validator', () => {
-  const block = generateBlock({
+/*
+ * The week the app actually builds, assembled the way the app assembles it:
+ * one day at a time through generateDay, then the weekly set budget spent
+ * across them. generateBlock used to do this in one call and chose the days
+ * itself; it is gone, and building the fixture by hand is what keeps these
+ * acceptance tests about the validator rather than about a dead function.
+ */
+function builtWeek() {
+  const days = (['A', 'B'] as DaySlot[]).map((slot, index) =>
+    generateDay({
+      blockId: 'b1',
+      exercises: EXERCISES,
+      focusMuscles: [],
+      template: templateDayFor({
+        slot,
+        weekday: (index + 1) as never,
+        intensity: 'heavy',
+        index,
+        minutesPerSession: 40,
+        golfWeekdays: [6],
+      }),
+      exclude: [],
+      hasHistory: false,
+    }),
+  );
+  // The second day cannot reuse what the first took.
+  const taken = new Set(days[0]?.exercises.map((entry) => entry.exerciseId) ?? []);
+  days[1] = generateDay({
     blockId: 'b1',
     exercises: EXERCISES,
     focusMuscles: [],
-    sessionsPerWeek: 2,
-    golfWeekdays: [6],
-    minutesPerSession: 40,
+    template: templateDayFor({
+      slot: 'B',
+      weekday: 2 as never,
+      intensity: 'heavy',
+      index: 1,
+      minutesPerSession: 40,
+      golfWeekdays: [6],
+    }),
+    exclude: [...taken],
     hasHistory: false,
-    laddersFor: (exercise) => ladderFor(exercise, DEFAULT_INVENTORY),
   });
 
+  const byIdLocal = new Map(EXERCISES.map((exercise) => [exercise.id, exercise]));
+  balanceSets(
+    days,
+    days.map((day) =>
+      templateDayFor({
+        slot: day.slot,
+        weekday: day.weekday,
+        intensity: day.intensity,
+        minutesPerSession: 40,
+        golfWeekdays: [6],
+      }),
+    ),
+    byIdLocal,
+    WEEKLY_SET_TARGET,
+  );
+  return days;
+}
+
+describe('the generated block passes its own validator', () => {
+  const block = { days: builtWeek() };
+
   it('produces no violations at all', () => {
-    expect(block.violations).toEqual([]);
+    const violations = validateBlock(
+      { days: block.days.map((day) => ({ slot: day.slot, weekday: day.weekday, exercises: day.exercises })) },
+      {
+        exercisesById: byId,
+        golfWeekdays: [6],
+        weeklySetTarget: WEEKLY_SET_TARGET,
+        sessionBudgetMinutes: 40,
+        hasHistory: false,
+        laddersFor: (exercise) => ladderFor(exercise, DEFAULT_INVENTORY),
+      },
+    );
+    expect(violations).toEqual([]);
   });
 
   it('never prescribes an advanced lift in a first block (defect 3)', () => {
@@ -358,19 +403,14 @@ describe('the generated block passes its own validator', () => {
     }
   });
 
-  it('states only clearances the calendar actually gives (defect 1)', () => {
-    const claim = block.rationale.match(/Grip work sits on (.+?) — (\d+) days clear/);
-    if (claim) {
-      const labels = (claim[1] as string).split(' and ');
-      const clear = Number(claim[2]);
-      for (const label of labels) {
-        const day = block.days.find((d) => d.weekdayLabel === label);
-        expect(day, label).toBeDefined();
-        expect(daysClearOfGolf(day!.weekday, [6])).toBeGreaterThan(3);
-      }
-      expect(clear).toBeGreaterThan(3);
-    }
-  });
+  /*
+   * "states only clearances the calendar actually gives" lived here and is
+   * gone with the rationale it checked: generateBlock wrote that sentence
+   * through scheduleSentence and stripScheduleClaims, and all three are
+   * deleted. The rule it protected — nothing self-reports compliance — is now
+   * carried by the validator tests above, which recompute rather than read a
+   * claim.
+   */
 
   it('puts a start weight on a real rung (rule h)', () => {
     for (const day of block.days) {

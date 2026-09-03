@@ -104,13 +104,21 @@ user-reported bug that finished it off. Generation now writes only a `DatePlan`
 entry, and the two ways in are the AI week planner (`WeekPlanSheet`) and one
 workout at a time.
 
-**What is left over:** `templateWeek`, `templateWeekdays`, `maxSessionsFor`,
-`generateBlock` and `configFromSchedule` are now referenced only by their own
-tests. They are the deterministic whole-week engine the starter week used.
-Deleting them touches four test files and would remove the only non-AI path to
-a full week, so it was left alone rather than ripped out in the same change.
-Decide whether a deterministic week builder is still wanted; if not, delete the
-lot and their tests together.
+**The leftovers are gone too.** `templateWeek`, `templateWeekdays`,
+`maxSessionsFor`, `availableExtraDays`, `generateBlock`, `scheduleSentence`,
+`stripScheduleClaims` and the constants only they used — `FORBIDDEN_WEEKDAYS`,
+`EXTRA_DAY_OPTIONS`, `DEFAULT_THIRD_DAY`, `MAX_SESSIONS`, `TUESDAY` — were
+reachable only from their own tests, so they went with them: 845 lines out,
+190 in, and the app's own flow re-driven in a browser afterwards to prove it.
+
+What survives is what the app calls: `templateDayFor` for one day's
+constraints, `generateDay` and `balanceSets` for filling and sizing it,
+`weekdayAllowed` for the one rule about which weekdays are usable at all. A
+week is still built a day at a time, by hand or by the AI planner.
+
+Three test files kept their coverage by building the fixture the way the app
+does — `generateDay` per day, then `balanceSets` — rather than by calling a
+week-wide function nothing else used. Tests are not a reason to keep code.
 
 ---
 

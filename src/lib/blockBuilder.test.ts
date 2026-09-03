@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EXERCISES } from '../db/seed/exercises';
-import { generateBlock, generateDay } from './blockBuilder';
+import { generateDay } from './blockBuilder';
 import { templateDayFor } from './weekTemplate';
 import type { DaySlot } from '../db/types';
 
@@ -112,39 +112,13 @@ describe('regenerating the same day', () => {
   });
 });
 
-describe('the week pass', () => {
-  it('leaves out exercises the days it is not touching already hold', () => {
-    const kept = ids(day());
-    const week = generateBlock({
-      blockId: 'block_1',
-      exercises: EXERCISES,
-      focusMuscles: [],
-      sessionsPerWeek: 2,
-      golfWeekdays: GOLF as never,
-      hasHistory: true,
-      exclude: kept,
-    });
-    const proposed = week.days.flatMap((d) => d.exercises.map((e) => e.exerciseId));
-    expect(proposed.length).toBeGreaterThan(0);
-    for (const id of proposed) expect(kept).not.toContain(id);
-  });
-
-  it('is unchanged at variant 0, so the default block is still the best draw', () => {
-    const input = {
-      blockId: 'block_1',
-      exercises: EXERCISES,
-      focusMuscles: [],
-      sessionsPerWeek: 2,
-      golfWeekdays: GOLF as never,
-      hasHistory: true,
-    };
-    const a = generateBlock(input);
-    const b = generateBlock({ ...input, variant: 0 });
-    expect(a.days.flatMap((d) => d.exercises.map((e) => e.exerciseId))).toEqual(
-      b.days.flatMap((d) => d.exercises.map((e) => e.exerciseId)),
-    );
-  });
-});
+/*
+ * The week pass used to be tested here — generateBlock, which chose the days
+ * itself and filled them in one go. It is deleted: the app builds a week one
+ * day at a time through generateDay, which is what the tests above cover, and
+ * exclusion between days is the `exclude` argument rather than a private set
+ * inside a week-wide function.
+ */
 
 /* -------------------------------------------------------------------------- */
 /*  Variant rotation, which no button drives any more.                        */

@@ -22,17 +22,12 @@ import { WEEKDAY_LABEL, gripSafeWeekdays, type Weekday } from './golf';
 export type Intensity = 'heavy' | 'light';
 
 export const MONDAY: Weekday = 1;
-export const TUESDAY: Weekday = 2;
 
 /** Days a session may never land on, whatever else is true. */
-export const FORBIDDEN_WEEKDAYS: Weekday[] = [5, 6]; // Fri, Sat
 
 /** Candidate weekdays for sessions beyond the heavy pair, in preference order. */
-export const EXTRA_DAY_OPTIONS: Weekday[] = [3, 4, 7]; // Wed, Thu, Sun
-export const DEFAULT_THIRD_DAY: Weekday = 3; // Wed
 
 /** Mon and Tue plus the three usable remaining days. */
-export const MAX_SESSIONS = 5;
 
 export interface TemplateDay {
   slot: DaySlot;
@@ -52,7 +47,7 @@ export interface TemplateDay {
   effortCue?: string;
 }
 
-export const LIGHT_DAY_MINUTES = 25;
+const LIGHT_DAY_MINUTES = 25;
 export const LIGHT_DAY_CUE = 'Leave 3-4 reps in the tank';
 
 /* -------------------------------------------------------------------------- */
@@ -231,108 +226,15 @@ function lightDay(slot: DaySlot, weekday: Weekday, index = 0): TemplateDay {
   };
 }
 
-export interface TemplateInput {
-  sessionsPerWeek: number;
-  /** What the two heavy days train. Placement is unaffected. */
-  shape?: SessionShape;
-  /** Which weekday the optional third session lands on. */
-  thirdDay?: Weekday;
-  /**
-   * Weekdays to run at full effort. Absent means the app balances it — the
-   * first two days are heavy and anything beyond them is light. An empty array
-   * is a decision, not an absence: it means every session is light.
-   */
-  heavyWeekdays?: Weekday[];
-  /** Weekdays a round is typically played; Sunday is only free when not golf. */
-  golfWeekdays?: Weekday[];
-  minutesPerSession?: number;
-}
-
-/** Weekdays beyond Mon and Tue that a session may actually use. */
-export function availableExtraDays(golfWeekdays: Weekday[] = []): Weekday[] {
-  return EXTRA_DAY_OPTIONS.filter(
-    (weekday) => !FORBIDDEN_WEEKDAYS.includes(weekday) && !golfWeekdays.includes(weekday),
-  );
-}
-
-/** The most sessions the calendar leaves room for. */
-export function maxSessionsFor(golfWeekdays: Weekday[] = []): number {
-  return 2 + availableExtraDays(golfWeekdays).length;
-}
-
-/**
- * The week, assigned from the template. Two sessions is Mon and Tue; a third
- * is the light day, on Wednesday unless another free day is chosen.
- */
-const SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y'];
-
-/** The weekdays a given number of sessions lands on, in calendar order. */
-export function templateWeekdays(
-  sessionsPerWeek: number,
-  golfWeekdays: Weekday[] = [],
-  thirdDay?: Weekday,
-): Weekday[] {
-  const wanted = Math.max(1, Math.min(sessionsPerWeek, MAX_SESSIONS));
-  const anchors: Weekday[] = [MONDAY, TUESDAY];
-  if (wanted <= 2) return anchors.slice(0, wanted);
-
-  let extras = availableExtraDays(golfWeekdays);
-  if (thirdDay !== undefined && extras.includes(thirdDay)) {
-    extras = [thirdDay, ...extras.filter((weekday) => weekday !== thirdDay)];
-  }
-  return [...anchors, ...extras.slice(0, wanted - 2)].sort((a, b) => a - b);
-}
-
-export function templateWeek({
-  sessionsPerWeek,
-  shape = 'mixed',
-  thirdDay,
-  heavyWeekdays,
-  golfWeekdays = [],
-  minutesPerSession = 40,
-}: TemplateInput): TemplateDay[] {
-  const patterns = SHAPE_PATTERNS[shape];
-  const weekdays = templateWeekdays(sessionsPerWeek, golfWeekdays, thirdDay);
-
-  /*
-   * Which days are full effort. Left to the app it is the first two, and
-   * everything after them is light — four or five hard sessions a week is not
-   * what a returning lifter with a weekend round recovers from. Chosen by
-   * hand the choice stands, including choosing none: no day is compulsorily
-   * heavy. Placement is still the template; only effort moves.
-   */
-  const chosen = heavyWeekdays?.filter((weekday) => weekdays.includes(weekday));
-  const isHeavy = (weekday: Weekday, index: number) =>
-    chosen === undefined ? index < 2 : chosen.includes(weekday);
-
-  let heavySoFar = 0;
-  let lightSoFar = 0;
-  return weekdays.map((weekday, index) => {
-    const slot = SLOTS[index] ?? 'Y';
-    if (!isHeavy(weekday, index)) {
-      const day = lightDay(slot, weekday, lightSoFar);
-      lightSoFar += 1;
-      return day;
-    }
-    // Heavy days alternate through the shape, so a third heavy day repeats the
-    // first rather than inventing a pattern set nobody asked for.
-    const set = heavySoFar % 2 === 0 ? patterns.a : patterns.b;
-    heavySoFar += 1;
-    return heavyDay(slot, weekday, set, minutesPerSession, golfWeekdays);
-  });
-}
-
 /** True when a session may be scheduled on this weekday at all. */
 /**
  * Whether a session may sit on a weekday AT ALL.
  *
  * A round is the only thing that bars one now. Friday and Saturday used to be
- * barred outright, which was a fact about where the TEMPLATE puts sessions when
- * it chooses the days itself — and it still is, see FORBIDDEN_WEEKDAYS and
- * availableExtraDays. It was never a fact about what a lifter is allowed to do.
- * Now that the days are picked by hand, treating "the template would not have
- * chosen Friday" as a rule violation meant the app refused the answer to a
- * question it had just asked.
+ * barred outright, which was a fact about where a template put sessions when it
+ * chose the days itself — never a fact about what a lifter is allowed to do.
+ * That template is gone, and treating "it would not have chosen Friday" as a
+ * violation had the app refusing the answer to a question it had just asked.
  */
 export function weekdayAllowed(weekday: Weekday, golfWeekdays: Weekday[] = []): boolean {
   return !golfWeekdays.includes(weekday);

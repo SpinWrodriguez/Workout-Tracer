@@ -4,8 +4,8 @@ import { db } from '../db/db';
 import { seedDatabase } from '../db/seed';
 import { EXERCISES } from '../db/seed/exercises';
 import type { BlockExercise } from '../db/types';
-import { generateBlock } from './blockBuilder';
-import { LIGHT_DAY_CUE } from './weekTemplate';
+import { generateDay } from './blockBuilder';
+import { LIGHT_DAY_CUE, templateDayFor } from './weekTemplate';
 import {
   addBlockExercise,
   assignSlot,
@@ -148,31 +148,41 @@ describe('block schedule', () => {
 
 describe('a generated block survives the round trip to a session', () => {
   it('keeps the weekday assignment the builder chose', async () => {
-    const generated = generateBlock({
-      blockId: 'block_1',
-      exercises: EXERCISES,
-      focusMuscles: ['lats', 'quads'],
-      sessionsPerWeek: 2,
-      golfWeekdays: [6],
-    });
+    /* Built a day at a time, the way the app builds one — generateBlock, which
+       chose the days itself, is deleted. What is under test is unchanged: a
+       weekday written into the schedule is the weekday a date resolves back
+       to. */
+    const days = (['A', 'B'] as const).map((slot, index) =>
+      generateDay({
+        blockId: 'block_1',
+        exercises: EXERCISES,
+        focusMuscles: ['lats', 'quads'],
+        template: templateDayFor({
+          slot,
+          weekday: (index + 1) as never,
+          intensity: 'heavy',
+          index,
+          golfWeekdays: [6],
+        }),
+        hasHistory: true,
+      }),
+    );
 
-    await db.blockExercise.bulkPut(generated.days.flatMap((d) => d.exercises));
+    await db.blockExercise.bulkPut(days.flatMap((d) => d.exercises));
     await writeSchedule(
       'block_1',
-      Object.fromEntries(
-        generated.days.map((d) => [d.slot, { weekday: d.weekday, intensity: d.intensity }]),
-      ),
+      Object.fromEntries(days.map((d) => [d.slot, { weekday: d.weekday, intensity: d.intensity }])),
     );
 
     const plan = await readBlockPlan();
     expect(plan).toBeDefined();
-    for (const day of generated.days) {
+    for (const day of days) {
       expect(plan?.schedule[day.slot]?.weekday).toBe(day.weekday);
       expect(plan?.schedule[day.slot]?.intensity).toBe(day.intensity);
     }
 
     // The whole point: a date now resolves to the day the builder placed.
-    const first = generated.days[0];
+    const first = days[0];
     expect(first).toBeDefined();
     const dateOfFirst = ['', MON, TUE, '2026-09-02', THU, '2026-09-04', SAT, '2026-09-06'][
       first?.weekday as number

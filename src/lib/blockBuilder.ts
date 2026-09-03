@@ -8,22 +8,11 @@ import {
   WEEKLY_SET_TARGET,
   coversGroup,
   formatViolationsForModel,
-  scheduleSentence,
   sessionMinutes,
-  stripScheduleClaims,
-  validateBlock,
   workingRepRange,
-  type BlockProposal,
   type CoverageGroup,
-  type ValidationContext,
-  type Violation,
 } from './blockValidation';
-import {
-  templateWeek,
-  type Intensity,
-  type SessionShape,
-  type TemplateDay,
-} from './weekTemplate';
+import { type Intensity, type TemplateDay } from './weekTemplate';
 
 /* -------------------------------------------------------------------------- */
 /*  Block builder.                                                            */
@@ -149,46 +138,6 @@ export interface DayPlan {
   estimatedMinutes: number;
 }
 
-export interface GeneratedBlock {
-  rationale: string;
-  days: DayPlan[];
-  warnings: string[];
-  violations: Violation[];
-}
-
-export interface GenerateInput {
-  blockId: string;
-  exercises: Exercise[];
-  focusMuscles: MuscleId[];
-  sessionsPerWeek: number;
-  /** What the two heavy days train. Placement is unaffected. */
-  shape?: SessionShape;
-  /** Weekdays a round is typically played. */
-  golfWeekdays: Weekday[];
-  /** Weekday for the optional third session. */
-  thirdDay?: Weekday;
-  /** Weekdays to run at full effort. Empty means the app balances it. */
-  heavyWeekdays?: Weekday[];
-  minutesPerSession?: number;
-  weeklySetTarget?: number;
-  hasHistory?: boolean;
-  laddersFor?: (exercise: Exercise) => number[];
-  /** Model prose, if a proposal came from one. Schedule claims are stripped. */
-  modelRationale?: string;
-  /**
-   * Exercise ids already spoken for by days this pass is NOT touching, so a
-   * newly generated day complements what is already in the block instead of
-   * repeating it.
-   */
-  exclude?: string[];
-  /**
-   * Which draw to take. Same inputs and same variant always give the same
-   * block; bumping it swaps in different exercises of comparable quality.
-   * See pickFrom() for why this is a rotation and not an exclusion.
-   */
-  variant?: number;
-}
-
 const MIN_EXERCISES = 3;
 const MAX_SETS_COMPOUND = 5;
 const MAX_SETS_ACCESSORY = 3;
@@ -230,6 +179,15 @@ function pickFrom(
   return band[variant % band.length] ?? best;
 }
 
+/** What filling a day needs to know, and nothing about the week around it. */
+interface FillInput {
+  blockId: string;
+  exercises: Exercise[];
+  focusMuscles: MuscleId[];
+  hasHistory?: boolean;
+  variant?: number;
+}
+
 /**
  * Step 3: fill one day from the curated table, inside constraints the template
  * already fixed. The only step that makes a choice, and the seam a model slots
@@ -237,7 +195,7 @@ function pickFrom(
  */
 function fillDay(
   template: TemplateDay,
-  input: GenerateInput,
+  input: FillInput,
   usedInBlock: Set<string>,
   stillNeeded: Set<CoverageGroup>,
 ): BlockExercise[] {
@@ -405,6 +363,14 @@ export function balanceSets(
     if (!chosen) break;
     chosen.entry.targetSets -= 1;
   }
+
+  /*
+   * The stored estimate has to follow the sets that just moved. It did not,
+   * so a day that had been topped up carried the minutes it took BEFORE the
+   * extra sets — a field quietly disagreeing with the function that computes
+   * it, which is the same class of bug as a ring reading a constant.
+   */
+  for (const day of days) day.estimatedMinutes = sessionMinutes(day.exercises, byId);
 }
 
 /** Drops the lowest-priority accessory until a session fits its own budget. */
@@ -455,111 +421,6 @@ function trimToBudget(days: DayPlan[], template: TemplateDay[], byId: Map<string
   }
 }
 
-function toProposal(days: DayPlan[]): BlockProposal {
-  return {
-    days: days.map((day) => ({ slot: day.slot, weekday: day.weekday, exercises: day.exercises })),
-  };
-}
-
-export function generateBlock(input: GenerateInput): GeneratedBlock {
-  const byId = new Map(input.exercises.map((e) => [e.id, e]));
-  const target = input.weeklySetTarget ?? WEEKLY_SET_TARGET;
-
-  // Steps 1 and 2: the week and its constraints, straight from the template.
-  const template = templateWeek({
-    sessionsPerWeek: input.sessionsPerWeek,
-    shape: input.shape,
-    thirdDay: input.thirdDay,
-    heavyWeekdays: input.heavyWeekdays,
-    golfWeekdays: input.golfWeekdays,
-    minutesPerSession: input.minutesPerSession ?? 40,
-  });
-
-  const context: ValidationContext = {
-    exercisesById: byId,
-    golfWeekdays: input.golfWeekdays,
-    weeklySetTarget: target,
-    sessionBudgetMinutes: input.minutesPerSession ?? 40,
-    hasHistory: input.hasHistory ?? false,
-    laddersFor: input.laddersFor ?? (() => []),
-    template,
-  };
-
-  let forced: CoverageGroup[] = [];
-  let best: { days: DayPlan[]; violations: Violation[] } | undefined;
-
-  for (let attempt = 0; attempt < MAX_VALIDATION_ATTEMPTS; attempt += 1) {
-    // Days this pass is not touching have already claimed their exercises.
-    const usedInBlock = new Set<string>(input.exclude ?? []);
-    const stillNeeded = new Set<CoverageGroup>(forced);
-
-    const days: DayPlan[] = template.map((day) => {
-      const exercises = fillDay(day, input, usedInBlock, stillNeeded);
-      return {
-        slot: day.slot,
-        weekday: day.weekday,
-        weekdayLabel: day.weekdayLabel,
-        intensity: day.intensity,
-        effortCue: day.effortCue,
-        exercises,
-        estimatedMinutes: sessionMinutes(exercises, byId),
-      };
-    });
-
-    trimToBudget(days, template, byId);
-    balanceSets(days, template, byId, target);
-    for (const day of days) day.estimatedMinutes = sessionMinutes(day.exercises, byId);
-
-    const violations = validateBlock(toProposal(days), context);
-    if (!best || violations.length < best.violations.length) best = { days, violations };
-    if (violations.length === 0) break;
-
-    forced = violations
-      .filter((violation) => violation.code === 'pattern_coverage')
-      .flatMap((violation) => COVERAGE_GROUPS.filter((group) => violation.message.includes(group)));
-  }
-
-  const resolved = best ?? { days: [], violations: [] };
-  const proposal = toProposal(resolved.days);
-
-  const explanation = stripScheduleClaims(input.modelRationale);
-  const rationale = [explanation, scheduleSentence(proposal, context)].filter(Boolean).join(' ');
-
-  const warnings: string[] = [];
-  if (template.length < input.sessionsPerWeek) {
-    warnings.push(
-      `Only ${template.length} of ${input.sessionsPerWeek} sessions could be placed — Fri and Sat are never training days, and your golf days take the rest.`,
-    );
-  }
-  if (resolved.days.length > 0 && resolved.days.every((day) => day.intensity === 'light')) {
-    warnings.push(
-      'Every session is light, so this week is a deload — it will not reach the weekly set target.',
-    );
-  }
-
-  // Squeezed heavy days mean the weekly target is low for this many sessions.
-  const squeezed = resolved.days.some(
-    (day) =>
-      day.intensity === 'heavy' &&
-      day.exercises.some((entry) => entry.targetSets <= MIN_SETS_PER_EXERCISE),
-  );
-  if (squeezed) {
-    warnings.push(
-      `A ${target}-set week does not stretch to ${input.sessionsPerWeek} sessions — the heavy days are down to ${MIN_SETS_PER_EXERCISE} sets each. Raise the weekly set target in Settings or train less often.`,
-    );
-  }
-
-  const lightDays = resolved.days.filter((day) => day.intensity === 'light');
-  const heavyDays = resolved.days.filter((day) => day.intensity === 'heavy');
-  if (lightDays.length > 0 && heavyDays.length > 0) {
-    const where = lightDays.map((day) => day.weekdayLabel).join(' and ');
-    warnings.push(
-      `${where} ${lightDays.length === 1 ? 'is a light session' : 'are light sessions'} — ${lightDays[0]?.effortCue}.`,
-    );
-  }
-  return { rationale, days: resolved.days, warnings, violations: resolved.violations };
-}
-
 /* -------------------------------------------------------------------------- */
 /*  One day at a time.                                                        */
 /*                                                                            */
@@ -578,7 +439,7 @@ export interface GenerateDayInput {
   blockId: string;
   exercises: Exercise[];
   focusMuscles: MuscleId[];
-  /** Constraints for this slot, from templateWeek() or templateDayFor(). */
+  /** Constraints for this slot, from templateDayFor(). */
   template: TemplateDay;
   /** Exercise ids held by the other days of this block. */
   exclude?: string[];
@@ -598,10 +459,6 @@ export function generateDay(input: GenerateDayInput): DayPlan {
       focusMuscles: input.focusMuscles,
       hasHistory: input.hasHistory,
       variant: input.variant,
-      // The rest of GenerateInput describes the week, which one day has no
-      // business knowing about: it never sees a date and never picks one.
-      sessionsPerWeek: 1,
-      golfWeekdays: [],
     },
     new Set<string>(input.exclude ?? []),
     new Set<CoverageGroup>(),
