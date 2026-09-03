@@ -1,5 +1,4 @@
 import { useCallback } from 'react';
-import { hapticsEnabled } from '../lib/haptics';
 
 /* -------------------------------------------------------------------------- */
 /*  A real switch, laid invisibly over a button, so iOS ticks when you tap it. */
@@ -45,7 +44,7 @@ import { hapticsEnabled } from '../lib/haptics';
 /*  focusable, so nothing reading the page ever meets it.                     */
 /* -------------------------------------------------------------------------- */
 
-export function HapticTick({ radius = 999, force = false }: { radius?: number; force?: boolean }) {
+export function HapticTick({ radius = 999 }: { radius?: number }) {
   /*
    * `switch` is not a React prop, and it has to be a real attribute rather
    * than a class for WebKit to treat this as a switch at all.
@@ -53,11 +52,6 @@ export function HapticTick({ radius = 999, force = false }: { radius?: number; f
   const attach = useCallback((node: HTMLInputElement | null) => {
     node?.setAttribute('switch', '');
   }, []);
-
-  /* Read at render rather than subscribed: the element IS the feature, so
-     turning it off has to remove it, and the screens carrying it mount after
-     Settings closes. */
-  if (!force && !hapticsEnabled()) return null;
 
   return (
     <input

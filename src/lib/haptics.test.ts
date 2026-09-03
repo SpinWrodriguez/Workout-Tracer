@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { hapticsEnabled, needsSwitchOverlay, setHapticsEnabled, tap } from './haptics';
+import { needsSwitchOverlay, tap } from './haptics';
 
 /*
  * The whole feature rides on an undocumented side effect — a `switch` checkbox
@@ -58,29 +58,6 @@ describe('on iOS, where there is none', () => {
   });
 });
 
-describe('turning it off', () => {
-  it('is on unless it has been turned off', () => {
-    expect(hapticsEnabled()).toBe(true);
-  });
-
-  it('stops the buzz where there is one', () => {
-    const vibrate = vi.fn();
-    vi.stubGlobal('navigator', { ...navigator, vibrate });
-
-    setHapticsEnabled(false);
-    tap();
-
-    expect(hapticsEnabled()).toBe(false);
-    expect(vibrate).not.toHaveBeenCalled();
-  });
-
-  it('comes back on', () => {
-    setHapticsEnabled(false);
-    setHapticsEnabled(true);
-    expect(hapticsEnabled()).toBe(true);
-  });
-});
-
 describe('a device that will not play along', () => {
   it('never throws, because a rep must not depend on a vibration motor', () => {
     vi.stubGlobal('navigator', {
@@ -92,12 +69,4 @@ describe('a device that will not play along', () => {
     expect(() => tap()).not.toThrow();
   });
 
-  it('survives blocked storage, defaulting to on', () => {
-    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('blocked');
-    });
-    expect(hapticsEnabled()).toBe(true);
-    expect(() => tap()).not.toThrow();
-    getItem.mockRestore();
-  });
 });

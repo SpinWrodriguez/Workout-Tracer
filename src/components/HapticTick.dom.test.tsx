@@ -4,7 +4,6 @@ import '../test/dom';
 
 import { screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { setHapticsEnabled } from '../lib/haptics';
 import { draw, user } from '../test/dom';
 import { HapticTick } from './HapticTick';
 
@@ -83,29 +82,5 @@ describe('the switch laid over a button', () => {
     expect(input.tabIndex).toBe(-1);
     // The button is still the thing with the name and the role.
     expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
-  });
-});
-
-describe('when it is turned off', () => {
-  it('is not there at all, since the element is the feature', () => {
-    setHapticsEnabled(false);
-    draw(<Button onClick={vi.fn()} />);
-    /* Off has to mean gone. The tick comes from iOS reacting to the switch,
-       so a switch left on the page would keep ticking however the app felt
-       about it. */
-    expect(overlay()).toBeNull();
-    setHapticsEnabled(true);
-  });
-
-  it('is still there for the Settings test, which asks about the phone', () => {
-    setHapticsEnabled(false);
-    draw(
-      <button type="button" className="relative">
-        Tap here to feel it
-        <HapticTick force />
-      </button>,
-    );
-    expect(overlay()).not.toBeNull();
-    setHapticsEnabled(true);
   });
 });

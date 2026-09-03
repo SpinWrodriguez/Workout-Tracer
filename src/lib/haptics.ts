@@ -25,26 +25,6 @@
 /*  Android and desktop keep the real API, which is what tap() is for.        */
 /* -------------------------------------------------------------------------- */
 
-const PREF_KEY = 'workout-haptics';
-
-/** Device-local, like the theme: it describes this phone, not the training. */
-export function hapticsEnabled(): boolean {
-  try {
-    return localStorage.getItem(PREF_KEY) !== 'off';
-  } catch {
-    return true;
-  }
-}
-
-export function setHapticsEnabled(on: boolean): void {
-  try {
-    if (on) localStorage.removeItem(PREF_KEY);
-    else localStorage.setItem(PREF_KEY, 'off');
-  } catch {
-    // Blocked storage costs a preference, never a rep.
-  }
-}
-
 /**
  * One tick on the platforms that have a real API for it: Android and desktop
  * Chrome, where this is a no-op if there is no motor.
@@ -54,7 +34,6 @@ export function setHapticsEnabled(on: boolean): void {
  * same handlers the tick covers, so the two platforms behave the same.
  */
 export function tap(): void {
-  if (!hapticsEnabled()) return;
   try {
     navigator.vibrate?.(8);
   } catch {
