@@ -172,14 +172,45 @@ for a workout that no longer exists.
 
 ---
 
-## 8. A real silhouette
+## 8. A real silhouette — done
 
-`src/components/Silhouette.tsx` is hand-authored and is not chart quality. The
-`Muscle.svgPathId` field exists precisely so a proper anatomical SVG can be
-dropped in: find a CC0 front/back muscle map, map its path ids onto the
-`MUSCLES` table, and keep the existing highlight logic.
+The eighteen hand-authored blobs are gone. `src/lib/bodyGeometry.ts` now holds
+traced outlines for all 18 muscles across a front and a back view, and
+`Silhouette.tsx` shades them.
 
-**Done when:** the volume view highlights real muscle shapes, in both themes.
+**How the geometry was got, because the obvious routes do not work.** A stock
+anatomy PNG cannot be tinted per muscle: a bitmap has no notion of "the lats",
+and flood-filling the drawn linework leaks straight through the soft shading —
+tried it, and it yields six blobs (one whole torso, one whole leg each) rather
+than eighteen muscles. Auto-tracing that PNG to SVG is no better: the result is
+829 anonymous paths grouped by *grey level*, so there is still no path that is
+the lats.
+
+What worked was generating the source to be segmentable: a flat-colour
+anatomical render where every muscle group is one solid colour ringed by an
+unbroken black outline. Then a colour plus a vertical band names a muscle
+exactly, and the outline is traced from the drawing rather than guessed at.
+Three things in the extraction are load-bearing and were each a bug first:
+pixels are assigned to their NEAREST flat colour, or the anti-aliased fringe
+drops out and leaves torn edges; ink is dark in every channel, not dark on
+average, or `#20a020` counts as ink and the biceps and calves vanish; and the
+ink is absorbed into the nearest *component*, not the nearest colour, or two
+same-coloured neighbours weld together — which is what happened to the upper
+back and the lats, both drawn pink.
+
+The one thing the render would not give up is the delts: the front view draws a
+single shoulder cap, so front and side delts come from splitting it down the
+middle, inner half anterior.
+
+**As a heat map.** One hue — `--color-volume`, the same orange the set counts
+beside it use — mixed toward `--surface-2`, so cold is whatever the card sits
+on and the ramp's anchor flips with the theme instead of needing a second
+palette. It climbs to `VOLUME_LOW`, not to the ceiling: measured against 20, a
+real three-day week reads almost entirely cold. Over the ceiling is a different
+claim from "more" and is not another step on the ramp — it takes an outline,
+and "Worth a look" names the muscle, because a status must never be colour
+alone. Each shape carries a `<title>` with its name and set count, and a
+five-step legend states what the colours mean.
 
 ---
 

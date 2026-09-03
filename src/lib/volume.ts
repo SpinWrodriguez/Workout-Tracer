@@ -150,8 +150,17 @@ export function volumeRows(volume: MuscleVolume): MuscleVolumeRow[] {
   })).sort((a, b) => b.sets - a.sets || a.name.localeCompare(b.name));
 }
 
-/** 0..1, for shading the silhouette. Full colour at the top of the range. */
-export function volumeIntensity(sets: number): number {
+/**
+ * How hot a muscle reads on the body map: 0 untrained, 1 at the weekly floor.
+ *
+ * Anchored on VOLUME_LOW, not the ceiling. The ceiling is where MORE becomes a
+ * problem, not where the colour should stop climbing — measured against 20, a
+ * real three-day week reads almost entirely cold, because almost nothing gets
+ * near 20 sets. The screen's flags answer the other question, "is this muscle
+ * short of what the week can give it", against fairShare.
+ */
+export function volumeHeat(sets: number): number {
   if (sets <= 0) return 0;
-  return Math.min(1, sets / VOLUME_HIGH);
+  return Math.min(1, sets / VOLUME_LOW);
 }
+

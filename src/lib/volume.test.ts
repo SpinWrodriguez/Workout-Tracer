@@ -7,7 +7,7 @@ import {
   fairShare,
   weightedPerSet,
   setsPerMuscle,
-  volumeIntensity,
+  volumeHeat,
   volumeRows,
   volumeStatus,
   perWeek,
@@ -93,12 +93,6 @@ describe('volume flags', () => {
     expect(volumeStatus(20.5)).toBe('high');
   });
 
-  it('shades the silhouette from nothing to full at the top of the range', () => {
-    expect(volumeIntensity(0)).toBe(0);
-    expect(volumeIntensity(10)).toBe(0.5);
-    expect(volumeIntensity(20)).toBe(1);
-    expect(volumeIntensity(40)).toBe(1);
-  });
 });
 
 describe('1-RM estimates', () => {
@@ -280,5 +274,39 @@ describe('a fair share of the week the lifter asked for', () => {
     expect(weightedPerSet(byId)).toBeGreaterThan(2);
     expect(weightedPerSet(byId)).toBeLessThan(4);
     expect(weightedPerSet(new Map())).toBe(1);
+  });
+});
+
+describe('how hot a muscle reads on the body map', () => {
+  it('is cold at nothing and full at the weekly floor', () => {
+    expect(volumeHeat(0)).toBe(0);
+    expect(volumeHeat(VOLUME_LOW)).toBe(1);
+  });
+
+  it('climbs to the floor, not to the ceiling', () => {
+    /* Measured against 20 a real three-day week reads almost entirely cold,
+       because almost nothing gets near 20 sets in it. Half the floor has to
+       read as half. */
+    expect(volumeHeat(VOLUME_LOW / 2)).toBe(0.5);
+    // The same eight sets read as 8/20 against the ceiling, and as full here.
+    expect(volumeHeat(VOLUME_LOW)).toBeGreaterThan(VOLUME_LOW / VOLUME_HIGH);
+  });
+
+  it('stops at the top rather than running away with a big number', () => {
+    expect(volumeHeat(VOLUME_HIGH)).toBe(1);
+    expect(volumeHeat(500)).toBe(1);
+  });
+
+  it('rises monotonically, which is the only thing a ramp must do', () => {
+    let last = -1;
+    for (let sets = 0; sets <= 24; sets += 0.5) {
+      const heat = volumeHeat(sets);
+      expect(heat, `${sets} sets`).toBeGreaterThanOrEqual(last);
+      last = heat;
+    }
+  });
+
+  it('treats a negative as untrained rather than as a negative colour', () => {
+    expect(volumeHeat(-3)).toBe(0);
   });
 });
