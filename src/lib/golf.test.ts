@@ -3,6 +3,7 @@ import { EXERCISES } from '../db/seed/exercises';
 import type { GolfDay } from '../db/types';
 import { shiftIso } from './format';
 import {
+  GRIP_ADVISORY_DAYS,
   GRIP_BUFFER_DAYS,
   buildWeek,
   gripBufferNote,
@@ -36,7 +37,23 @@ describe('Phase 3 acceptance — the golf rule', () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]?.level).toBe('warn');
     expect(warnings[0]?.title).toMatch(/Pull-up is high grip load/);
-    expect(warnings[0]?.detail).toMatch(/Golf is 1 day away/);
+    expect(warnings[0]?.detail).toMatch(/Golf is tomorrow/);
+  });
+
+  it('only notes the same pull-ups two days out, where the rule allows them', () => {
+    /* The rule was three days, which took the whole back half of the week for
+       pulling. Two days' clearance is enough for this swing, so a Thursday
+       pull before a Saturday round is a session to do with a heads-up, not one
+       to refuse — and the badge has to say which. */
+    const warnings = sessionWarnings(
+      { date: THU, exercises: [{ exerciseId: 'bw_pull_up', loggedSets: 3 }] },
+      byId,
+      [SAT],
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.level).toBe('note');
+    expect(warnings[0]?.detail).toMatch(/Golf is in 2 days/);
+    expect(warnings[0]?.detail).toMatch(/may affect your swing/);
   });
 
   it('says nothing about the same pull-ups on Monday', () => {
@@ -51,31 +68,47 @@ describe('Phase 3 acceptance — the golf rule', () => {
 });
 
 describe('the buffer window', () => {
-  it('covers the round itself and the three days before it', () => {
-    expect(GRIP_BUFFER_DAYS).toBe(3);
-    expect(gripConflictOn(SAT, [SAT])?.daysBefore).toBe(0);
-    expect(gripConflictOn(FRI, [SAT])?.daysBefore).toBe(1);
-    expect(gripConflictOn(THU, [SAT])?.daysBefore).toBe(2);
-    expect(gripConflictOn(WED, [SAT])?.daysBefore).toBe(3);
+  it('bars the round itself and the day before it', () => {
+    expect(GRIP_BUFFER_DAYS).toBe(1);
+    expect(gripConflictOn(SAT, [SAT])).toMatchObject({ daysBefore: 0, severity: 'blocked' });
+    expect(gripConflictOn(FRI, [SAT])).toMatchObject({ daysBefore: 1, severity: 'blocked' });
+    expect(isGripSafe(SAT, [SAT])).toBe(false);
+    expect(isGripSafe(FRI, [SAT])).toBe(false);
+  });
+
+  it('advises rather than bars two days out', () => {
+    /* The change that made the rule usable: three days took Wednesday,
+       Thursday and Friday off a Saturday round, leaving every pull in the week
+       to fit into Monday and Tuesday. */
+    expect(GRIP_ADVISORY_DAYS).toBe(2);
+    expect(gripConflictOn(THU, [SAT])).toMatchObject({ daysBefore: 2, severity: 'advised' });
+    // Advised is not barred: the session is fine to train.
+    expect(isGripSafe(THU, [SAT])).toBe(true);
+  });
+
+  it('says nothing at all three days out or more', () => {
+    expect(gripConflictOn(WED, [SAT])).toBeUndefined();
     expect(gripConflictOn(TUE, [SAT])).toBeUndefined();
     expect(gripConflictOn(MON, [SAT])).toBeUndefined();
   });
 
   it('does not restrict the days after a round', () => {
     expect(isGripSafe('2026-08-30', [SAT])).toBe(true);
+    expect(gripConflictOn('2026-08-30', [SAT])).toBeUndefined();
   });
 
   it('picks the soonest round when two are close together', () => {
     expect(gripConflictOn(THU, ['2026-08-30', SAT])?.golfDate).toBe(SAT);
   });
 
-  it('leaves Sun, Mon and Tue as the grip-safe weekdays for Saturday golf', () => {
-    expect(gripSafeWeekdays([6])).toEqual([1, 2, 7]);
+  it('leaves every day but Friday and Saturday safe for Saturday golf', () => {
+    // Only the round and the day before it are out.
+    expect(gripSafeWeekdays([6])).toEqual([1, 2, 3, 4, 7]);
   });
 
-  it('shrinks the safe set to Mon and Tue when Sunday is played too', () => {
-    // Wed is 3 days before Sat, and Sun is a round itself.
-    expect(gripSafeWeekdays([6, 7])).toEqual([1, 2]);
+  it('shrinks the safe set to Mon through Thu when Sunday is played too', () => {
+    // Fri is the day before Sat, and Sat is the day before Sun.
+    expect(gripSafeWeekdays([6, 7])).toEqual([1, 2, 3, 4]);
   });
 
   it('leaves the whole week safe with no golf at all', () => {
@@ -90,17 +123,32 @@ describe('the buffer window', () => {
 });
 
 describe('saying the buffer out loud', () => {
-  /* The rule acted and said nothing: a Thursday workout came back with no
+  /* The rule acted and said nothing: a workout in the buffer came back with no
      pulling in it and no screen explained why. The model is still told the
      bare prohibition — it reasons badly about calendars — but the lifter is
      not a model. */
-  it('names the round and what it costs', () => {
-    expect(gripBufferNote(THU, [SAT])).toBe('Golf in 2 days (Sat) — no grip, lat or forearm work.');
-    expect(gripBufferNote(FRI, [SAT])).toBe('Golf tomorrow (Sat) — no grip, lat or forearm work.');
-    expect(gripBufferNote(SAT, [SAT])).toBe('Golf today (Sat) — no grip, lat or forearm work.');
+  it('states the prohibition on a day that is barred', () => {
+    expect(gripBufferNote(FRI, [SAT])).toEqual({
+      text: 'Golf tomorrow (Sat) — no grip, lat or forearm work.',
+      severity: 'blocked',
+    });
+    expect(gripBufferNote(SAT, [SAT])).toEqual({
+      text: 'Golf today (Sat) — no grip, lat or forearm work.',
+      severity: 'blocked',
+    });
+  });
+
+  it('offers information, not an instruction, on a day that is merely close', () => {
+    /* Two days out the session is fine to train. Wording it as a veto is how
+       a rule stops being believed. */
+    expect(gripBufferNote(THU, [SAT])).toEqual({
+      text: 'Golf in 2 days (Sat) — may affect your swing.',
+      severity: 'advised',
+    });
   });
 
   it('says nothing on a day the rule does not touch', () => {
+    expect(gripBufferNote(WED, [SAT])).toBeUndefined();
     expect(gripBufferNote(TUE, [SAT])).toBeUndefined();
     expect(gripBufferNote(MON, [SAT])).toBeUndefined();
     // The day after a round is free: the rule is one-directional.
@@ -108,10 +156,14 @@ describe('saying the buffer out loud', () => {
     expect(gripBufferNote(THU, [])).toBeUndefined();
   });
 
-  it('agrees with the rule it is describing, on every day of a fortnight', () => {
+  it('never words an advisory day as a prohibition, across a fortnight', () => {
     for (let offset = -7; offset <= 7; offset += 1) {
       const date = shiftIso(SAT, offset);
-      expect(gripBufferNote(date, [SAT]) === undefined, date).toBe(isGripSafe(date, [SAT]));
+      const note = gripBufferNote(date, [SAT]);
+      const barred = !isGripSafe(date, [SAT]);
+      // The wording and the severity can never disagree about what is allowed.
+      expect(barred, date).toBe(note?.severity === 'blocked');
+      expect(note === undefined || note.text.includes('no grip') === barred, date).toBe(true);
     }
   });
 });
@@ -201,7 +253,8 @@ describe('weekly view', () => {
   });
 
   it('marks which days can carry grip work', () => {
-    expect(week.filter((d) => d.gripSafe).map((d) => d.weekday)).toEqual([1, 2, 7]);
+    // Everything but Friday and the round itself: advised is not barred.
+    expect(week.filter((d) => d.gripSafe).map((d) => d.weekday)).toEqual([1, 2, 3, 4, 7]);
   });
 
   it('reads the golf weekdays back off the calendar', () => {

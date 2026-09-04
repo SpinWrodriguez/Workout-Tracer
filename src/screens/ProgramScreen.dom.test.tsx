@@ -38,6 +38,7 @@ const dayOfThisWeek = (offset: number) => shiftIso(weekStart(todayIso()), offset
 const MONDAY = dayOfThisWeek(0);
 const WEDNESDAY = dayOfThisWeek(2);
 const THURSDAY = dayOfThisWeek(3);
+const FRIDAY = dayOfThisWeek(4);
 
 /** The week strip button for a date, by the label a screen reader would read. */
 const dayButton = (date: string) =>
@@ -148,7 +149,7 @@ describe('placement is one week, not every week', () => {
   });
 
   it('judges the golf rule by the date a workout sits on, not a stored weekday', async () => {
-    /* A high-grip lift two days before a round is the thing this app exists to
+    /* A high-grip lift the day before a round is the thing this app exists to
        prevent. It has to keep working now that the weekday is derived from the
        calendar rather than stored on the workout. */
     const saturday = dayOfThisWeek(5);
@@ -160,10 +161,10 @@ describe('placement is one week, not every week', () => {
     // Unplaced: there is no date, so there is nothing to be clear of.
     expect(screen.queryByRole('heading', { name: 'Worth fixing' })).toBeNull();
 
-    // Put it on the Thursday before the round and the rule speaks.
-    await ui.click(dayButton(THURSDAY));
+    // Put it on the Friday before the round and the rule speaks.
+    await ui.click(dayButton(FRIDAY));
     const sheet = await screen.findByRole('heading', {
-      name: WEEKDAY_LABEL[weekdayOf(THURSDAY)],
+      name: WEEKDAY_LABEL[weekdayOf(FRIDAY)],
     });
     await ui.click(
       await within(sheet.parentElement as HTMLElement).findByRole('button', {
@@ -180,11 +181,11 @@ describe('placement is one week, not every week', () => {
        what the day allows, and the day is known from the DATE it is planned on
        in the week being looked at. */
     await db.golfDay.put({ date: dayOfThisWeek(5), status: 'planned', holes: 18 });
-    await seedSchedule({ A: { intensity: 'heavy', name: 'Thursday session' } });
-    await seedPlan({ [THURSDAY]: 'A' });
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Friday session' } });
+    await seedPlan({ [FRIDAY]: 'A' });
     const { ui } = await openProgram();
 
-    const card = await workoutCard('Thursday session');
+    const card = await workoutCard('Friday session');
     await ui.click(within(card).getByRole('button', { name: 'Build this workout' }));
 
     await waitFor(async () => {
@@ -493,21 +494,41 @@ describe('picking and unpicking an exercise', () => {
 
 describe('the golf buffer, said out loud', () => {
   it('tells the card why its workout has no pulling in it', async () => {
-    /* The rule stripped grip work from anything built in the three days
-       before a round and no screen mentioned it, so a Thursday session came
-       back with no pulling and looked like a bad generator. */
+    /* The rule strips grip work from anything built the day before a round and
+       no screen mentioned it, so the session came back with no pulling and
+       looked like a bad generator. */
     const saturday = dayOfThisWeek(5);
     await db.golfDay.put({ date: saturday, status: 'planned', holes: 18 });
-    await seedSchedule({ A: { intensity: 'heavy', name: 'Thursday push' } });
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Friday push' } });
     await seedWorkout('A', ['bb_bench_press']);
+    await seedPlan({ [FRIDAY]: 'A' });
+
+    await openProgram();
+
+    const card = await workoutCard('Friday push');
+    await waitFor(() =>
+      expect(card.textContent).toContain('Golf tomorrow (Sat) — no grip, lat or forearm work.'),
+    );
+  });
+
+  it('says a day two out may cost the swing, without forbidding it', async () => {
+    /* The buffer was three days, which took Wednesday, Thursday and Friday off
+       a Saturday round. Two days out is now a session to train with a
+       heads-up, and the wording has to say that rather than veto it. */
+    await db.golfDay.put({ date: dayOfThisWeek(5), status: 'planned', holes: 18 });
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Thursday pull' } });
+    await seedWorkout('A', ['bb_bent_over_row']);
     await seedPlan({ [THURSDAY]: 'A' });
 
     await openProgram();
 
-    const card = await workoutCard('Thursday push');
+    const card = await workoutCard('Thursday pull');
     await waitFor(() =>
-      expect(card.textContent).toContain('Golf in 2 days (Sat) — no grip, lat or forearm work.'),
+      expect(card.textContent).toContain('Golf in 2 days (Sat) — may affect your swing.'),
     );
+    expect(card.textContent).not.toContain('no grip');
+    // And the high-grip row it was built with is still in the workout.
+    expect(card.textContent).toContain(named('bb_bent_over_row'));
   });
 
   it('says nothing on a day the rule does not touch', async () => {

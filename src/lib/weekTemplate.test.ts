@@ -84,11 +84,17 @@ describe('what heavy means', () => {
   });
 
   it('loses grip work inside the golf buffer whatever its intensity', () => {
-    // Thursday is two days from a Saturday round.
+    // Friday is the day before a Saturday round, so it is barred.
+    expect(
+      templateDayFor({ slot: 'A', weekday: 5, intensity: 'heavy', golfWeekdays: [6] })
+        .excludeGripHigh,
+    ).toBe(true);
+    /* Thursday is two days out, which the rule allows: it used to be barred,
+       and barring it left every pull in the week to fit into Mon and Tue. */
     expect(
       templateDayFor({ slot: 'A', weekday: 4, intensity: 'heavy', golfWeekdays: [6] })
         .excludeGripHigh,
-    ).toBe(true);
+    ).toBe(false);
     expect(
       templateDayFor({ slot: 'A', weekday: 1, intensity: 'heavy', golfWeekdays: [6] })
         .excludeGripHigh,

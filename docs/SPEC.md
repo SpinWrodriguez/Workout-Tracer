@@ -10,7 +10,8 @@ Written to be handed to Claude Code phase by phase.
 **User:** returning lifter, 82kg, male, sedentary desk job, two kids under 5.
 **Goal:** build muscle while losing fat slowly (~0.3 kg/week). Maintenance ≈ 2,250 kcal.
 **Realistic training week:** 2 sessions, occasionally 3. Golf Saturday, sometimes Sunday too.
-**Hard constraint:** grip, lat and forearm work must not land within 3 days of a round — it
+**Hard constraint:** grip, lat and forearm work must not land on a round or the day before it
+(relaxed from 3 days — see `src/lib/golf.ts`; two days out is advised, not barred) — it
 causes early wrist release (casting) and arms-first sequencing in the golf swing.
 
 **Why not an off-the-shelf app:** existing apps assume 3–5 sessions/week, don't model a
@@ -271,7 +272,7 @@ Each phase ships something usable. Don't start the next until the current one is
 **Scope**
 - Mark golf days on a calendar (played, or planned)
 - Each exercise carries `gripLoad`
-- Warn when scheduling `gripLoad: 'high'` within 3 days before a golf day
+- Bar `gripLoad: 'high'` on a golf day or the day before; advise two days out
 - Block builder auto-places high-grip work early in the week
 - Session view: warn if a hinge (`isHinge`) is being done late in a fatigued session
 - Weekly view showing gym days, golf days, rest days, and rule violations
@@ -370,7 +371,7 @@ Runs at block boundaries only (every 6–8 weeks), never per session.
 - Focus muscles for the block
 - Goal: hypertrophy + strength, in a small deficit
 - Constraints: 2 sessions/week realistic (3 optimistic), 40 min per session,
-  garage equipment only, **no high-gripLoad work within 3 days of a golf day**
+  garage equipment only, **no high-gripLoad work on a golf day or the day before**
 - Prior history: per exercise — weight progression, reps, RPE/RIR, and any stalls
 - Loadable weight ladder per bar (so it never prescribes an unloadable weight)
 

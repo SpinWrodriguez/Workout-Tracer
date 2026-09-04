@@ -278,7 +278,7 @@ export function ProgramScreen({
         taken: day.plannedSlot !== undefined ? labelFor(day.plannedSlot) : undefined,
         /* What the rule will do to a workout built for this date, said before
            it happens rather than never. */
-        note: gripBufferNote(day.date, golfDateList),
+        note: gripBufferNote(day.date, golfDateList)?.text,
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [week, schedule, slots, golfDays],
@@ -1122,8 +1122,13 @@ export function ProgramScreen({
             weekday={date !== undefined ? weekdayOf(date) : undefined}
             entries={list}
             exercisesById={byId}
-            /* Why this day has no pulling in it, where the rule acted. */
-            note={date === undefined ? undefined : gripBufferNote(date, golfDateList)}
+            /* Why this day has no pulling in it, where the rule acted — or
+               just that a round is close, where it only advises. */
+            note={date === undefined ? undefined : gripBufferNote(date, golfDateList)?.text}
+            noteSevere={
+              date !== undefined &&
+              gripBufferNote(date, golfDateList)?.severity === 'blocked'
+            }
             /* Real minutes, not the model's: the same learned factor that
                sized the budget this day was built to. */
             minutes={list.length > 0 ? realMinutes(estimateMinutes(list, byId), timeFactor) : undefined}

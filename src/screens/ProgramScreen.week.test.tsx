@@ -207,12 +207,14 @@ describe('building a week with a model', () => {
   it('keeps grip work off a day inside the golf buffer', async () => {
     /* The rule the app exists for, now reached through the week planner: the
        day's date decides, and the model is told the prohibition with no reason
-       attached so it cannot reason about the calendar and get it wrong. */
+       attached so it cannot reason about the calendar and get it wrong.
+       Friday, because the buffer is the day before a round — Thursday is
+       allowed now and would prove nothing. */
     const saturday = dayOfThisWeek(5);
     await db.golfDay.put({ date: saturday, status: 'planned', holes: 18 });
     const { asked } = stubModel();
     const { ui } = await openProgram();
-    await planDays(ui, [3]);
+    await planDays(ui, [4]);
     await ui.click(screen.getByRole('button', { name: 'Pull' }));
     await ui.click(screen.getByRole('button', { name: 'Build 1 workout' }));
 

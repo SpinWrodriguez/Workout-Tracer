@@ -79,6 +79,7 @@ export function DaySlotCard({
   exercisesById,
   minutes,
   note,
+  noteSevere,
   editing,
   isToday,
   onToggleEdit,
@@ -105,10 +106,12 @@ export function DaySlotCard({
   minutes?: number;
   /**
    * One line about a rule that acted on this day — the golf grip buffer, which
-   * strips pulling from anything built in the three days before a round and
-   * used to do it silently.
+   * strips pulling from anything built the day before a round and used to do
+   * it silently.
    */
   note?: string;
+  /** True where the note is a prohibition rather than a heads-up. */
+  noteSevere?: boolean;
   editing: boolean;
   isToday: boolean;
   onToggleEdit: () => void;
@@ -179,7 +182,11 @@ export function DaySlotCard({
       {note && (
         <p
           className="mb-1 rounded-xl px-3 py-2 text-[12px] leading-snug font-medium"
-          style={{ background: 'var(--color-surface-2)', color: 'var(--color-warn)' }}
+          style={{
+            background: 'var(--color-surface-2)',
+            // Amber bars the work; dim only says the round is close.
+            color: noteSevere ? 'var(--color-warn)' : 'var(--color-text-dim)',
+          }}
         >
           {note}
         </p>

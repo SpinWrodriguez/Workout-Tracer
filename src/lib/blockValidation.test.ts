@@ -126,19 +126,22 @@ describe('rule c — grip clearance computed from the calendar (defect 1)', () =
     expect(daysClearOfGolf(6, [6])).toBe(0); // the round itself
   });
 
-  it('rejects high-grip work on a Thursday with golf on Saturday', () => {
-    const p = proposal([{ slot: 'A', weekday: 4, ids: ['bb_bent_over_row'] }]);
+  it('rejects high-grip work on a Friday with golf on Saturday', () => {
+    const p = proposal([{ slot: 'A', weekday: 5, ids: ['bb_bent_over_row'] }]);
     const found = validateBlock(p, CONTEXT).find((v) => v.code === 'grip_conflict');
-    expect(found?.message).toMatch(/Thu, 2 days before your next round/);
+    expect(found?.message).toMatch(/Fri, 1 day before your next round/);
     // A problem has to carry the change that resolves it, or it is just bad
     // news: here, the day the session should move to.
     expect(found?.fix).toMatchObject({ kind: 'move_to_weekday' });
   });
 
-  it('accepts the same work on Monday or Tuesday', () => {
-    for (const weekday of [1, 2] as const) {
+  it('accepts the same work anywhere from Monday to Thursday', () => {
+    /* The buffer was three days, which barred Wednesday and Thursday too and
+       left every pull in the week fighting over Monday and Tuesday. Two days'
+       clearance is enough for this swing. */
+    for (const weekday of [1, 2, 3, 4] as const) {
       const p = proposal([{ slot: 'A', weekday, ids: ['bb_bent_over_row'] }]);
-      expect(codes(p)).not.toContain('grip_conflict');
+      expect(codes(p), `weekday ${weekday}`).not.toContain('grip_conflict');
     }
   });
 });
@@ -261,7 +264,7 @@ describe('time estimate (defect 5)', () => {
 
 describe('violations are written to be handed back to a model', () => {
   it('numbers them and names the code', () => {
-    const p = proposal([{ slot: 'A', weekday: 4, ids: ['bb_deadlift'] }]);
+    const p = proposal([{ slot: 'A', weekday: 5, ids: ['bb_deadlift'] }]);
     const text = formatViolationsForModel(validateBlock(p, CONTEXT));
     expect(text).toMatch(/previous response was rejected/);
     expect(text).toMatch(/\[grip_conflict\]/);

@@ -90,9 +90,18 @@ export function DayEditor({
         {note && (
           <p
             className="mt-2.5 rounded-xl px-3 py-2 text-[12px] leading-snug font-medium"
-            style={{ background: 'var(--color-surface-2)', color: 'var(--color-warn)' }}
+            style={{
+              background: 'var(--color-surface-2)',
+              /* Amber where the rule bars the work, plain dim where it only
+                 says the round is close: the colour has to agree with the
+                 sentence or it reads as a veto either way. */
+              color:
+                note.severity === 'blocked'
+                  ? 'var(--color-warn)'
+                  : 'var(--color-text-dim)',
+            }}
           >
-            {note}
+            {note.text}
           </p>
         )}
 
