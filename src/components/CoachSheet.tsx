@@ -55,6 +55,21 @@ type Notes = Record<number, Note>;
  */
 const MEMORY_DAYS = 3;
 
+/**
+ * How tall the question box may grow before it scrolls instead, in pixels.
+ * About five lines: enough to see a whole question, not so much that it eats
+ * the answer it is about.
+ */
+const MAX_INPUT_HEIGHT = 132;
+
+/** Fit the box to its text. A one-line input hid the end of a long question. */
+function grow(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  // Collapse first, or the box can only ever get taller.
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight, MAX_INPUT_HEIGHT)}px`;
+}
+
 /** Notes re-keyed after the front of the conversation was dropped. */
 function shift(notes: Notes, dropped: number): Notes {
   if (dropped === 0) return notes;
@@ -101,6 +116,7 @@ export function CoachSheet({
   const [error, setError] = useState<string | undefined>(undefined);
   const [notes, setNotes] = useState<Notes>({});
   const foot = useRef<HTMLDivElement | null>(null);
+  const box = useRef<HTMLTextAreaElement | null>(null);
   /* The conversation is remembered, so the first render must not race a
      question typed into an empty-looking sheet. */
   const [loaded, setLoaded] = useState(false);
@@ -145,6 +161,9 @@ export function CoachSheet({
     const asked = text.trim();
     if (!asked || pending) return;
     setQuestion('');
+    /* Straight back to one line. Measuring here would measure the question
+       still in the box — React has not re-rendered yet — and leave it tall. */
+    if (box.current) box.current.style.height = 'auto';
     setError(undefined);
     setPending(asked);
     setStreaming('');
@@ -294,12 +313,26 @@ export function CoachSheet({
         }}
         className="flex items-end gap-2 bg-bg px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)]"
       >
-        <input
+        <textarea
+          ref={box}
+          rows={1}
           value={question}
-          onChange={(event) => setQuestion(event.target.value)}
+          onChange={(event) => {
+            setQuestion(event.target.value);
+            grow(event.currentTarget);
+          }}
+          onKeyDown={(event) => {
+            /* Enter sends, as it did when this was a single-line input.
+               isComposing guards an IME mid-word, where Enter picks a
+               candidate and must not fire the question off half-typed. */
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              void ask(question);
+            }
+          }}
           placeholder="Ask about your training"
           aria-label="Ask about your training"
-          className="min-w-0 flex-1 rounded-full bg-surface px-4 py-3 text-[15px] outline-none"
+          className="min-w-0 flex-1 resize-none overflow-y-auto rounded-2xl bg-surface px-4 py-3 text-[15px] leading-snug outline-none"
         />
         <button
           type="submit"

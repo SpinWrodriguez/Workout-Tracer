@@ -150,6 +150,40 @@ describe('an answer arriving a piece at a time', () => {
   });
 });
 
+describe('typing a long question', () => {
+  it('is a box that wraps, not one line that scrolls the words away', async () => {
+    /* It was an <input>: past about forty characters the start of the question
+       slid out of sight and the cursor went with it, so you could not see the
+       word you were typing. */
+    openSheet();
+    const box = await screen.findByLabelText('Ask about your training');
+    expect(box.tagName).toBe('TEXTAREA');
+  });
+
+  it('sends on Enter, the way the single-line box used to', async () => {
+    const ui = openSheet();
+    const box = await screen.findByLabelText('Ask about your training');
+    await ui.type(box, 'is my squat moving?');
+    await ui.keyboard('{Enter}');
+
+    // On screen as the question being asked, not left sitting in the box.
+    await waitFor(() => expect(screen.getByText('is my squat moving?')).toBeTruthy());
+    expect((box as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('keeps Shift+Enter for a new line rather than firing the question off', async () => {
+    const ui = openSheet();
+    const box = await screen.findByLabelText('Ask about your training');
+    await ui.type(box, 'first line');
+    await ui.keyboard('{Shift>}{Enter}{/Shift}');
+    await ui.type(box, 'second line');
+
+    expect((box as HTMLTextAreaElement).value).toBe('first line\nsecond line');
+    // Nothing was sent: the question is still in the box.
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+});
+
 describe('a conversation that survives the sheet closing', () => {
   it('is there again on the next open, footnote and all', async () => {
     /* It lived in component state, so closing the sheet ended the thread —
