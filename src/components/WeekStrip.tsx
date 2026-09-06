@@ -99,7 +99,11 @@ export function WeekStrip({
                 onClick={() => onPickDay(day.date)}
                 className="block w-full"
                 aria-label={`${WEEKDAY_LABEL[day.weekday]} ${day.date}${
-                  day.plannedSlot ? `, ${labelFor(day.plannedSlot)}` : ''
+                  day.plannedSlot
+                    ? `, ${labelFor(day.plannedSlot)}`
+                    : day.loggedName
+                      ? `, ${day.loggedName}, done`
+                      : ''
                 }${day.golf ? `, golf ${day.golf.status}` : ''}${
                   day.violation ? ', rule violation' : ''
                 }`}
@@ -136,9 +140,21 @@ export function WeekStrip({
                 >
                   GOLF
                 </div>
+              ) : done ? (
+                /* Trained, but the workout it came from is gone — deleted after
+                   the fact, which is an ordinary thing to do. The session is
+                   the durable record, so the day is called by what was done on
+                   it rather than by "Log". Not draggable: it already happened,
+                   and there is no workout left to move. */
+                <div
+                  className="mt-1.5 rounded-lg bg-cta px-0.5 py-1 text-center text-[9px] leading-[1.15] font-bold break-words hyphens-auto text-bg"
+                  title={day.loggedName}
+                >
+                  {day.loggedName ?? 'Log'}
+                </div>
               ) : (
                 <div className="mt-1.5 py-1 text-center text-[10px] font-medium text-text-faint">
-                  {done ? 'Log' : 'Rest'}
+                  Rest
                 </div>
               )}
             </div>

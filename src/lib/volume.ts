@@ -147,6 +147,22 @@ export function plannedSetsPerMuscle(
   return toHalves(out);
 }
 
+/**
+ * Two volumes added together, muscle by muscle.
+ *
+ * The Program map is one week described two ways at once: the days already
+ * trained are described by what was LOGGED, the days still ahead by what is
+ * PLANNED. Neither alone is the week — a deleted workout erases a day you
+ * actually did, and a plan alone ignores everything you changed on the floor.
+ */
+export function mergeVolume(a: MuscleVolume, b: MuscleVolume): MuscleVolume {
+  const out = emptyVolume();
+  for (const key of Object.keys(out) as MuscleId[]) {
+    out[key] = (a[key] ?? 0) + (b[key] ?? 0);
+  }
+  return toHalves(out);
+}
+
 export interface MuscleVolumeRow {
   muscleId: MuscleId;
   name: string;

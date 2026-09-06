@@ -595,7 +595,7 @@ describe('what the week on screen will train', () => {
 
     await openProgram();
 
-    await waitFor(async () => expect(await blockCardText()).toMatch(/Nothing placed on this week/));
+    await waitFor(async () => expect(await blockCardText()).toMatch(/Nothing trained or planned on this week/));
     expect((await plannedMap()).Quads).toBe('0 sets');
   });
 
@@ -628,7 +628,101 @@ describe('what the week on screen will train', () => {
     await ui.click(screen.getByRole('button', { name: 'Next week' }));
 
     await waitFor(async () => expect((await plannedMap()).Quads).toBe('0 sets'));
-    expect(await blockCardText()).toMatch(/Nothing placed on this week/);
+    expect(await blockCardText()).toMatch(/Nothing trained or planned on this week/);
+  });
+});
+
+describe('a week whose workouts were deleted after it was trained', () => {
+  /** One logged session on a date, with sets, and no surviving workout. */
+  async function logSession(date: string, name: string, exerciseIds: string[]) {
+    const id = `s_${date}`;
+    await db.session.put({
+      id,
+      blockId: BLOCK_ID,
+      daySlot: 'A',
+      daySlotName: name,
+      date,
+      durationMin: 40,
+    });
+    await db.setLog.bulkPut(
+      exerciseIds.flatMap((exerciseId) =>
+        [1, 2, 3].map((setNo) => ({
+          sessionId: id,
+          exerciseId,
+          setNo,
+          reps: 8,
+          weightKg: 60,
+          effectiveKg: 60,
+        })),
+      ),
+    );
+  }
+
+  const blockCardText = async () =>
+    ((await screen.findByRole('heading', { name: 'Current block' }))
+      .closest('section') as HTMLElement).textContent ?? '';
+
+  it('still colours the map from what was actually logged', async () => {
+    /* Deleting a workout you have already done is an ordinary thing to do, and
+       it used to empty the day: the map read the plan, the plan was gone, and
+       a week you trained showed as untrained. */
+    await logSession(MONDAY, 'Lower body', ['bb_back_squat']);
+
+    await openProgram();
+
+    await waitFor(async () => {
+      const heading = await screen.findByRole('heading', { name: 'Current block' });
+      const card = heading.closest('section') as HTMLElement;
+      const titles = [...card.querySelectorAll('title')].map((node) => node.textContent);
+      // Three logged sets of back squat, and not one blockExercise row to read.
+      expect(titles).toContain('Quads — 3 sets');
+    });
+    expect(await db.blockExercise.count()).toBe(0);
+  });
+
+  it('names the day by the session, rather than calling it "Log"', async () => {
+    await logSession(MONDAY, 'Lower body', ['bb_back_squat']);
+
+    await openProgram();
+
+    // The strip token carries the session's own name, since nothing else does.
+    await waitFor(() => expect(screen.getAllByText('Lower body').length).toBeGreaterThan(0));
+    expect(dayButton(MONDAY).getAttribute('aria-label')).toMatch(/Lower body, done/);
+  });
+
+  it('counts a trained day once, by what it logged rather than what it planned', async () => {
+    /* A day that went exactly as written must not be counted twice, and where
+       the two disagree the log is the one that happened. */
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Squat day' } });
+    await seedWorkout('A', ['bb_back_squat'], 5);
+    await seedPlan({ [MONDAY]: 'A' });
+    await logSession(MONDAY, 'Squat day', ['bb_back_squat']);
+
+    await openProgram();
+
+    await waitFor(async () => {
+      const heading = await screen.findByRole('heading', { name: 'Current block' });
+      const card = heading.closest('section') as HTMLElement;
+      const titles = [...card.querySelectorAll('title')].map((node) => node.textContent);
+      // Three logged, five planned: three, not eight and not five.
+      expect(titles).toContain('Quads — 3 sets');
+    });
+  });
+
+  it('still reads the plan for the days it has not reached yet', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Squat day' } });
+    await seedWorkout('A', ['bb_back_squat'], 4);
+    await seedPlan({ [THURSDAY]: 'A' });
+    await logSession(MONDAY, 'Bench day', ['bb_bench_press']);
+
+    await openProgram();
+
+    await waitFor(async () => {
+      const text = await blockCardText();
+      // Monday's logged chest work and Thursday's planned squat, in one map.
+      expect(text).toContain('Chest — 3 sets');
+      expect(text).toContain('Quads — 4 sets');
+    });
   });
 });
 

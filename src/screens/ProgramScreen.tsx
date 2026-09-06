@@ -69,7 +69,7 @@ import { shiftIso, weekStart } from '../lib/format';
 import { budgetMinutes, readTimeFactor, realMinutes } from '../lib/timeModel';
 import { MUSCLES } from '../db/seed/muscles';
 import { Silhouette } from '../components/Silhouette';
-import { fairShare, plannedSetsPerMuscle } from '../lib/volume';
+import { fairShare, mergeVolume, plannedSetsPerMuscle, setsPerMuscle } from '../lib/volume';
 
 const DAY_SLOTS = SLOTS;
 
@@ -139,18 +139,34 @@ export function ProgramScreen({
     undefined,
   );
 
-  const sessionRows = useLiveQuery(async () => {
+  /**
+   * What this week actually did, alongside what it plans to.
+   *
+   * Both halves come from one query because both answer the same question and
+   * must not disagree: a workout can be deleted after it has been trained, and
+   * the session is what survives that. The name is carried too, so a day whose
+   * workout is gone is still called by what was done on it rather than "Log".
+   */
+  const weekHistory = useLiveQuery(async () => {
     const start = weekStart(anchor);
     const rows = await db.session
       .where('date')
       .between(start, shiftIso(start, 7), true, false)
       .toArray();
-    const logs = await db.setLog.toArray();
-    return rows.map((s) => ({
-      id: s.id,
-      date: s.date,
-      exerciseIds: [...new Set(logs.filter((l) => l.sessionId === s.id).map((l) => l.exerciseId))],
-    }));
+    const ids = new Set(rows.map((row) => row.id));
+    const logs = (await db.setLog.toArray()).filter((log) => ids.has(log.sessionId));
+    return {
+      sessions: rows.map((s) => ({
+        id: s.id,
+        date: s.date,
+        name: s.daySlotName,
+        exerciseIds: [
+          ...new Set(logs.filter((l) => l.sessionId === s.id).map((l) => l.exerciseId)),
+        ],
+      })),
+      logs,
+      trainedDates: new Set(rows.map((row) => row.date)),
+    };
   }, [anchor]);
 
   const byId = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
@@ -176,7 +192,7 @@ export function ProgramScreen({
     return buildWeek({
       anchorDate: anchor,
       golfDays: golfDays ?? [],
-      sessions: sessionRows ?? [],
+      sessions: weekHistory?.sessions ?? [],
       exercisesById: byId,
     }).map((day) => ({
       ...day,
@@ -184,7 +200,7 @@ export function ProgramScreen({
       // that week and nowhere else.
       plannedSlot: slotForDate(schedule ?? {}, day.date, datePlan ?? {}),
     }));
-  }, [anchor, golfDays, sessionRows, byId, schedule, datePlan]);
+  }, [anchor, golfDays, weekHistory, byId, schedule, datePlan]);
 
   /**
    * Every workout this block defines, placed or not. Read from the schedule as
@@ -296,13 +312,22 @@ export function ProgramScreen({
    * workouts rather than on Levels.
    */
   const plannedVolume = useMemo(() => {
-    const entries = week
+    const trained = weekHistory?.trainedDates ?? new Set<string>();
+    /* A day is described once: by what it logged if it has been trained, by
+       what it plans otherwise. Counting both would double a day that went
+       exactly as written, and reading only the plan would empty a day whose
+       workout was deleted after it was done. */
+    const stillToCome = week
+      .filter((day) => !trained.has(day.date))
       .map((day) => day.plannedSlot)
       .filter((slot): slot is DaySlot => slot !== undefined)
       .flatMap((slot) => entriesForSlot(slots ?? [], slot));
-    return plannedSetsPerMuscle(entries, byId);
+    return mergeVolume(
+      setsPerMuscle(weekHistory?.logs ?? [], byId),
+      plannedSetsPerMuscle(stillToCome, byId),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [week, slots, byId]);
+  }, [week, slots, byId, weekHistory]);
 
   /** Muscles the week does not touch at all — the gap worth naming. */
   const untouched = MUSCLES.filter((muscle) => (plannedVolume[muscle.id] ?? 0) === 0);
@@ -1107,12 +1132,10 @@ export function ProgramScreen({
             <div className="mt-3 border-t border-border pt-3">
               <Silhouette volume={plannedVolume} />
               <p className="mt-2 text-center text-[12px] font-medium text-text-dim">
-                {placedSlots.length === 0
-                  ? 'Nothing placed on this week yet.'
+                {untouched.length === MUSCLES.length
+                  ? 'Nothing trained or planned on this week yet.'
                   : untouched.length === 0
-                    ? `This week covers every muscle across ${placedSlots.length} workout${
-                        placedSlots.length === 1 ? '' : 's'
-                      }.`
+                    ? 'This week covers every muscle.'
                     : `Not in this week: ${untouched.map((muscle) => muscle.name).join(', ')}.`}
               </p>
             </div>

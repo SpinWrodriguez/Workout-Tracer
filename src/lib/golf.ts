@@ -222,6 +222,12 @@ export interface WeekDay {
   kind: DayKind;
   golf?: GolfDay;
   sessionIds: string[];
+  /**
+   * What a session logged that day was called, from the session itself rather
+   * than from the block. A workout can be deleted after it is trained, and the
+   * day still happened — the session is the durable record of it.
+   */
+  loggedName?: string;
   /** High-grip exercises logged or planned that day. */
   highGripExercises: string[];
   gripConflict?: GripConflict;
@@ -234,7 +240,7 @@ export interface WeekDay {
 export interface WeekInput {
   anchorDate: string;
   golfDays: GolfDay[];
-  sessions: { id: string; date: string; exerciseIds: string[] }[];
+  sessions: { id: string; date: string; exerciseIds: string[]; name?: string }[];
   exercisesById: Map<string, Exercise>;
 }
 
@@ -278,6 +284,7 @@ export function buildWeek({
       kind,
       golf,
       sessionIds: daySessions.map((s) => s.id),
+      loggedName: daySessions.find((s) => s.name)?.name,
       highGripExercises: highGrip,
       gripConflict: conflict,
       violation: highGrip.length > 0 && conflict?.severity === 'blocked',
