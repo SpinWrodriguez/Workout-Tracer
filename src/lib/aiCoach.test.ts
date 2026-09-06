@@ -210,10 +210,15 @@ describe('what the coach is sent', () => {
   it('keeps the always-sent context small enough not to think about', async () => {
     const { sent } = await ask([says('ok')]);
     const system = sent[0]?.system[0]?.text ?? '';
-    /* Roughly four characters to a token, so this is about 1,200 tokens of
+    /* Roughly four characters to a token, so this is about 1,300 tokens of
        rules and context on an empty database — a fraction of one library, and
-       the whole reason a question costs a fraction of a cent. */
-    expect(system.length).toBeLessThan(5200);
+       the whole reason a question costs a fraction of a cent.
+
+       The ceiling moved from 5,200 to 5,400 for two rules that each fixed a
+       wrong answer: which week the question is about, and never working a
+       weekday out from a date. It is a budget, not a target — raise it when a
+       rule earns it and not to make room for prose. */
+    expect(system.length).toBeLessThan(5400);
   });
 
   it('licenses general training knowledge, not just a read of the data', async () => {
@@ -516,18 +521,29 @@ describe('which week the question is about', () => {
     const context = await buildCoachContext(EXERCISES, monday);
     const week = context.payload.week as Record<string, unknown>;
 
-    expect(week.starting).toBe(monday);
+    expect(week.starting).toBe(`Mon ${monday}`);
     expect(week.viewing).toMatch(/future week/);
     // And the workout reads as belonging to that week, on its real date.
-    const workouts = week.workouts as { name: string; date?: string; placed: boolean }[];
-    expect(workouts.find((row) => row.date === monday)?.placed).toBe(true);
+    const workouts = week.workouts as {
+      name: string;
+      date?: string;
+      weekday?: string;
+      placed: boolean;
+    }[];
+    const placed = workouts.find((row) => row.date === monday);
+    expect(placed?.placed).toBe(true);
+    /* Named, not left to be worked out. Asked which day 2026-09-07 is, a model
+       answers confidently and lands a day out — which is exactly what happened:
+       Monday's workout came back as Sunday's, and the read of the whole split
+       followed from there. */
+    expect(placed?.weekday).toBe('Mon');
   });
 
   it('is the current week when nothing is open', async () => {
     const context = await buildCoachContext(EXERCISES);
     const week = context.payload.week as Record<string, unknown>;
 
-    expect(week.starting).toBe(weekStart(todayIso()));
+    expect(week.starting).toContain(weekStart(todayIso()));
     expect(week.viewing).toBe('the current week');
   });
 

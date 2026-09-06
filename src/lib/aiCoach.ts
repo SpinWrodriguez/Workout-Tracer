@@ -53,6 +53,7 @@ Then:
 
 - Rest days, soreness and golf are theirs to judge. Give them the read and a recommendation, not a lecture.
 - Weights are kilograms. Holds and carries are timed in seconds, not reps — exercise_detail says which an exercise is.
+- Every date here comes with its weekday. Never work one out from a date yourself.
 - Do not write out a whole workout set by set: the app generates those with a validator behind it, and the Program screen is where that happens. Everything short of that is yours to answer — what to add, what to drop, what to change and why.
 - Never use the Program screen, or anything else in the app, as a reason not to answer. If a question has an answer you know, give it.
 
@@ -172,7 +173,7 @@ export async function buildCoachContext(
         notes: instructions || undefined,
       },
       week: {
-        starting: from,
+        starting: `${WEEKDAY_LABEL[weekdayOf(from)]} ${from}`,
         viewing: currentWeek
           ? 'the current week'
           : from > weekStart(today)
@@ -196,6 +197,13 @@ export async function buildCoachContext(
           }),
           intensity: day.intensity,
           date: day.date,
+          /* Spelled out, never left to be worked out from the date. A model
+             asked which day 2026-09-07 is will answer, confidently, and be a
+             day out — which it was: it called Monday's workout Sunday's and
+             then reasoned about the whole split from there. Every other date
+             in this payload already carries its weekday; this was the one
+             that did not. */
+          weekday: day.date ? WEEKDAY_LABEL[weekdayOf(day.date)] : undefined,
           placed: day.date !== undefined,
           done: day.done,
           exercises: day.entries.map(
