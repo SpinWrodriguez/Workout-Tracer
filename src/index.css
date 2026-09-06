@@ -31,6 +31,17 @@
   --color-bodyweight: #a78bfa; /* weight trend */
   --color-cta: #ffffff; /* primary button fill, black text on it */
 
+  /* How hard a session is, as a colour rather than a word. Red and blue are
+     the reds and blues already here — rir-1 and muscle — so only the green is
+     new, and it exists because "heavy or light" is now told by a 3px line on
+     the card and in the calendar instead of by a label beside the weekday. */
+  --color-effort-light: #278049; /* green — a light session */
+  /* Text that sits ON an effort fill. White in both themes, because the fills
+     are dark saturated colours in both: the light palette darkens its accents
+     rather than lightening them. Chosen so 9px bold on the smallest chip
+     clears 4.5:1 — which is what set the greens, not the other way round. */
+  --color-effort-text: #ffffff;
+
   --color-rir-1: #8e2b2b; /* dark red — RIR 1, hardest */
   --color-rir-2: #7a5b12; /* dark amber — RIR 2 */
   --color-rir-3: #e8a020; /* bright amber — RIR 3 */
@@ -92,6 +103,13 @@
     --color-strength: #0b7c8c;
     --color-bodyweight: #6841d6;
     --color-cta: #0a0a0a;
+
+    /* Darker, like every other accent in this theme: the green that reads on
+       near-black is a highlighter pen on white. The text on it is white in
+       both themes — restated rather than inherited, because a token the light
+       block does not name is a token that leaks the dark value by accident. */
+    --color-effort-light: #157a4a;
+    --color-effort-text: #ffffff;
 
     /* Swatches: each step >=3:1 on a white card and >=1.5x the luminance of
        the step below, so red / amber / bright amber still reads as a scale. */

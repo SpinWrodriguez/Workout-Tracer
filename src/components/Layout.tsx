@@ -65,6 +65,7 @@ export function Card({
   collapsible = false,
   defaultOpen = false,
   summary,
+  accent,
 }: {
   title?: string;
   trailing?: ReactNode;
@@ -79,12 +80,26 @@ export function Card({
   defaultOpen?: boolean;
   /** One line worth seeing while shut — what the section currently says. */
   summary?: ReactNode;
+  /**
+   * A colour rule across the top of the card. What a workout is — heavy, light
+   * — used to be a word beside the weekday; this is the same fact as a line,
+   * so a stack of day cards can be read at arm's length.
+   */
+  accent?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const rule = accent ? (
+    <span
+      className="mb-3 block h-[3px] w-full rounded-full"
+      style={{ background: accent }}
+      aria-hidden="true"
+    />
+  ) : null;
 
   if (!collapsible) {
     return (
       <section className={`card ${className}`}>
+        {rule}
         {(title || trailing) && (
           <header className="mb-3 flex items-center justify-between gap-3">
             {title && <h2 className="card-title">{title}</h2>}
@@ -98,6 +113,7 @@ export function Card({
 
   return (
     <section className={`card ${className}`}>
+      {rule}
       <button
         type="button"
         onClick={() => setOpen(!open)}

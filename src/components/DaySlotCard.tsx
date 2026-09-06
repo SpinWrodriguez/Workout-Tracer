@@ -3,6 +3,7 @@ import type { BlockExercise, Exercise } from '../db/types';
 import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
 
 import { Card, Empty, Label } from './Layout';
+import { EFFORT_COLOR, EFFORT_WORD } from '../lib/effort';
 import { SortableRows } from './SortableRows';
 import { HapticTick } from './HapticTick';
 import { formatDuration, isTimed, prescription, repUnitWord, stepFor } from '../lib/repUnit';
@@ -184,6 +185,10 @@ export function DaySlotCard({
   return (
     <Card
       title={label}
+      /* Red heavy, green light. It was the word "light" appended to the
+         weekday, which is a thing you read rather than see, and said nothing
+         at all on a heavy day. */
+      accent={EFFORT_COLOR[intensity]}
       className="mt-3"
       /* Edit and Start used to live up here, two small pills at the top right
          of every card. Folded, five cards stack their headers a thumb-width
@@ -194,8 +199,10 @@ export function DaySlotCard({
       trailing={
         weekday !== undefined ? (
           <Label className={isToday ? 'text-text!' : ''}>
+            {/* The effort is the line above, not a word here. It stays in the
+                label a screen reader reads, where there is no line to see. */}
+            <span className="sr-only">{EFFORT_WORD[intensity]}, </span>
             {isToday ? 'today' : WEEKDAY_LABEL[weekday]}
-            {intensity === 'light' ? ' · light' : ''}
           </Label>
         ) : undefined
       }

@@ -140,6 +140,28 @@ describe('palette parity', () => {
     expect(readFileSync('src/components/SetRow.tsx', 'utf8')).toContain('{caption}');
   });
 
+  it('pairs the effort fills with a readable text colour in both themes', () => {
+    /* A workout's effort is a colour now — red heavy, green light — and the
+       calendar writes the workout's short name on top of that fill at 9px
+       bold. That is small text, so it needs 4.5:1, and it is what set the
+       greens rather than the other way round. */
+    for (const theme of [dark, light]) {
+      for (const token of ['--color-rir-1', '--color-effort-light', '--color-muscle']) {
+        const on = contrast(theme.get('--color-effort-text') as string, theme.get(token) as string);
+        expect(on, token).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it('keeps heavy and light apart by more than lightness', () => {
+    // Red and green at similar lightness is exactly the pair that red-green
+    // colour blindness collapses, which is why neither chip is colour alone:
+    // the calendar writes the workout's name on it and every screen-reader
+    // label carries the word.
+    expect(readFileSync('src/components/WeekStrip.tsx', 'utf8')).toContain('EFFORT_WORD');
+    expect(readFileSync('src/components/DayEditor.tsx', 'utf8')).toContain('EFFORT_WORD');
+  });
+
   it('pairs the danger fill with a readable text colour in both themes', () => {
     expect(
       contrast(dark.get('--color-danger-text') as string, dark.get('--color-danger') as string),

@@ -43,7 +43,7 @@ import {
   writeSchedule,
   type BlockSchedule,
 } from '../lib/program';
-import { DayEditor } from '../components/DayEditor';
+import { DayEditor, type DayEditorSlot } from '../components/DayEditor';
 import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
 import {
   WeekPlanSheet,
@@ -195,12 +195,17 @@ export function ProgramScreen({
       golfDays: golfDays ?? [],
       sessions: weekHistory?.sessions ?? [],
       exercisesById: byId,
-    }).map((day) => ({
-      ...day,
+    }).map((day) => {
       // Resolved per date, so a session moved in one week shows as moved in
       // that week and nowhere else.
-      plannedSlot: slotForDate(schedule ?? {}, day.date, datePlan ?? {}),
-    }));
+      const plannedSlot = slotForDate(schedule ?? {}, day.date, datePlan ?? {});
+      return {
+        ...day,
+        plannedSlot,
+        // What colours the chip, now that "light" is no longer a word on it.
+        intensity: plannedSlot ? (schedule?.[plannedSlot]?.intensity ?? 'heavy') : undefined,
+      };
+    });
   }, [anchor, golfDays, weekHistory, byId, schedule, datePlan]);
 
   /**
@@ -288,6 +293,25 @@ export function ProgramScreen({
    */
   const dateFor = (slot: DaySlot): string | undefined =>
     week.find((day) => day.plannedSlot === slot)?.date;
+
+  /*
+   * The day editor's tiles. It used to be handed slot letters and a labelFor,
+   * which is a name and nothing else — and a name is not enough to choose
+   * between two workouts when the question is really "have I got time for
+   * this one". Everything below is already computed for the day cards.
+   */
+  const editorSlots: DayEditorSlot[] = definedSlots.map((slot) => {
+    const list = entriesForSlot(slots ?? [], slot);
+    return {
+      slot,
+      label: labelFor(slot),
+      intensity: schedule?.[slot]?.intensity ?? 'heavy',
+      exercises: list.length,
+      sets: list.reduce((sum, entry) => sum + entry.targetSets, 0),
+      minutes:
+        list.length > 0 ? realMinutes(estimateMinutes(list, byId), timeFactor) : undefined,
+    };
+  });
 
   /** The week as the planner sees it: which dates are free, taken, or a round. */
   const weekPlanDays: WeekPlanDay[] = useMemo(
@@ -586,7 +610,6 @@ export function ProgramScreen({
    */
   const askOneWorkout = async (want: {
     goal: string;
-    forDate?: string;
     focus?: WorkoutFocus;
     intensity?: Intensity;
     /** What the body picker was pointing at, when the ask came from there. */
@@ -619,7 +642,7 @@ export function ProgramScreen({
      * case: the shortfall in this week is something the lifter would otherwise
      * have to read off the Levels screen and retype.
      */
-    const weekFrom = weekStart(want.forDate ?? todayIso());
+    const weekFrom = weekStart(todayIso());
     const weekSessions = await db.session
       .where('date')
       .between(weekFrom, shiftIso(weekFrom, 7), true, false)
@@ -628,21 +651,18 @@ export function ProgramScreen({
     const weekLogs = (await db.setLog.toArray()).filter((log) => sessionIds.has(log.sessionId));
 
     /*
-     * Limits the chosen day imposes. Passed on as prohibitions with no reason
-     * attached — a model told WHY starts reasoning about the calendar, and it
-     * has already been caught getting that wrong.
+     * A workout made here has no day yet, which is the whole design: placement
+     * is a separate act on the calendar and the model never sees a date. The
+     * golf rule needs a date to have anything to be clear of, so it applies
+     * when the workout is assigned to one, not when it is made.
+     *
+     * The day editor used to be able to ask for a workout ON a date, and this
+     * function grew a `forDate` for it — a placed template, the grip
+     * prohibition, and a plan write. That door is closed (the same ask is on
+     * the Program screen and in the New-workout sheet), so the branch went
+     * with it rather than sitting here untaken and untested.
      */
-    const placed = want.forDate
-      ? {
-          weekday: weekdayOf(want.forDate),
-          golfWeekdays: training.golfWeekdays as never as Weekday[],
-        }
-      : undefined;
-
     const constraints: DayConstraints = {};
-    if (placed && !gripAllowed(placed.weekday, placed.golfWeekdays)) {
-      constraints.noHighGrip = true;
-    }
     /* Only when the lifter chose them. Left open, the model decides and the
        validator judges whatever it decided — which is the single-workout case. */
     if (want.focus) constraints.focus = want.focus;
@@ -688,17 +708,13 @@ export function ProgramScreen({
       exercises: available,
       validate: (workout: AiWorkout) => {
         const shaped = requiredShape(workout);
-        const template = templateForAiWorkout(shaped, slot, sessionMinutes, placed);
+        const template = templateForAiWorkout(shaped, slot, sessionMinutes);
         return validateBlock(
           {
             days: [
               {
                 slot,
-                // The real day when there is one. The placeholder inside an
-                // unplaced template is Monday, and validating a Thursday
-                // against Monday is how a lat pulldown got two days from a
-                // round.
-                weekday: placed?.weekday ?? template.weekday,
+                weekday: template.weekday,
                 exercises: workout.exercises,
               },
             ],
@@ -706,13 +722,11 @@ export function ProgramScreen({
           {
             exercisesById: byId,
             /*
-             * A workout asked for on a specific date is checked against the
-             * real calendar, which is stricter than the unplaced case: the golf
-             * rule applies because there IS a date to be clear of. Without one
-             * there is nothing to be clear of, and assigning it to a day later
-             * is what surfaces the conflict.
+             * Empty: there is no date here to be clear of. Assigning the
+             * workout to a day is what surfaces a conflict, and the day editor
+             * and the week strip both say so when it does.
              */
-            golfWeekdays: want.forDate ? (training.golfWeekdays as never) : [],
+            golfWeekdays: [],
             weeklySetTarget: training.weeklySetTarget,
             sessionBudgetMinutes: sessionMinutes,
             hasHistory: hasHistory ?? false,
@@ -739,7 +753,7 @@ export function ProgramScreen({
     if (!outcome.ok) return { ok: false, reason: outcome.reason };
 
     const shaped = requiredShape(outcome.workout);
-    const template = templateForAiWorkout(shaped, slot, sessionMinutes, placed);
+    const template = templateForAiWorkout(shaped, slot, sessionMinutes);
     await db.blockExercise.bulkPut(shaped.exercises);
     await writeSchedule(block.id, {
       ...stored,
@@ -762,31 +776,13 @@ export function ProgramScreen({
       },
     });
 
-    /*
-     * Asked for on a date, so it goes there — the lifter picked the day, which
-     * is not the same as the generator picking one. The model still never saw
-     * it. And it is a date, so it is this week and no other.
-     */
-    if (want.forDate) {
-      const plans = (await readPlans())[block.id] ?? {};
-      /*
-       * Through planDate, not a bare assignment: it pins the rest of the week
-       * first, so putting a workout on Wednesday cannot shuffle the days around
-       * it, and it displaces whatever was there rather than double-booking.
-       */
-      await writePlan(
-        block.id,
-        planDate(plans, stored, weekDatesOf(want.forDate), slot, want.forDate),
-      );
-    }
-
     return { ok: true, slot };
   };
 
-  /** One workout, from the New-workout sheet or the day editor. */
+  /** One workout, from the New-workout sheet. */
   const askForWorkout = async (
     goal: string,
-    extra: { forDate?: string; muscles?: MuscleId[]; intensity?: Intensity } = {},
+    extra: { muscles?: MuscleId[]; intensity?: Intensity } = {},
   ) => {
     if (!block || asking) return;
     setAsking(true);
@@ -798,7 +794,6 @@ export function ProgramScreen({
         return;
       }
       setCreating(false);
-      setEditingDate(null);
       setEditingSlot(outcome.slot);
     } catch (cause) {
       setAskError(cause instanceof Error ? cause.message : String(cause));
@@ -1343,12 +1338,7 @@ export function ProgramScreen({
         <DayEditor
           date={editingDate}
           golfDates={golfDateList}
-          slots={definedSlots}
-          labelFor={labelFor}
-          onAsk={(goal) => void askForWorkout(goal, { forDate: editingDate })}
-          modelAvailable={isModelAvailable()}
-          asking={asking}
-          askError={askError}
+          slots={editorSlots}
           currentSlot={week.find((day) => day.date === editingDate)?.plannedSlot}
           golf={golfDays?.find((day) => day.date === editingDate)}
           onSetSlot={(slot) => {

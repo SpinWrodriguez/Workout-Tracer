@@ -233,8 +233,11 @@ describe('placement is one week, not every week', () => {
       name: WEEKDAY_LABEL[weekdayOf(FRIDAY)],
     });
     await ui.click(
+      /* The day editor's tiles carry the effort and the totals in their
+         label, since neither is text a screen reader can reach: the effort is
+         a colour rule and the totals are a second line. */
       await within(sheet.parentElement as HTMLElement).findByRole('button', {
-        name: 'Deadlift day',
+        name: /^Deadlift day, heavy,/,
       }),
     );
 
@@ -357,7 +360,7 @@ describe('moving a session to another date', () => {
     });
     await opened.ui.click(
       await within(sheet.parentElement as HTMLElement).findByRole('button', {
-        name: 'Thursday bench',
+        name: /^Thursday bench, heavy,/,
       }),
     );
     return opened;
@@ -924,5 +927,95 @@ describe('a week of workouts, folded up', () => {
     await showExercises(ui, tomorrow);
     await waitFor(() => expect(tomorrow.textContent).toContain(named('bb_bent_over_row')));
     expect(within(tomorrow).getByRole('button', { name: 'Start' })).toBeTruthy();
+  });
+});
+
+describe('what a day is, said as a colour', () => {
+  /*
+   * Heavy and light used to be a word — "Tue · light" beside the weekday, and
+   * nothing at all on a heavy day. It is a line of colour now, on the card, on
+   * the calendar chip and on the day editor's tiles. Colour cannot be
+   * asserted on usefully and a screen reader cannot see it either, so both
+   * this suite and VoiceOver read the same labels.
+   */
+  it('tells the calendar how hard each day is, until it is done', async () => {
+    await seedSchedule({
+      A: { intensity: 'heavy', name: 'Monday squats' },
+      B: { intensity: 'light', name: 'Thursday pull' },
+    });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedWorkout('B', ['bb_bent_over_row']);
+    await seedPlan({ [MONDAY]: 'A', [WEDNESDAY]: 'B' });
+
+    await openProgram();
+
+    await waitFor(() =>
+      expect(dayButton(MONDAY).getAttribute('aria-label')).toMatch(/Monday squats, heavy/),
+    );
+    expect(dayButton(WEDNESDAY).getAttribute('aria-label')).toMatch(/Thursday pull, light/);
+  });
+
+  it('goes back to plain done once the day is trained', async () => {
+    /* What it was built to be stops mattering the moment it happened, so the
+       chip drops the effort colour and reads as done. */
+    await seedSchedule({ A: { intensity: 'light', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedPlan({ [MONDAY]: 'A' });
+    await db.session.put({
+      id: 's_done',
+      blockId: BLOCK_ID,
+      daySlot: 'A',
+      daySlotName: 'Monday squats',
+      date: MONDAY,
+      durationMin: 40,
+    });
+
+    await openProgram();
+
+    await waitFor(() =>
+      expect(dayButton(MONDAY).getAttribute('aria-label')).toMatch(/Monday squats, done/),
+    );
+    expect(dayButton(MONDAY).getAttribute('aria-label')).not.toMatch(/light/);
+  });
+});
+
+describe('the day editor', () => {
+  async function openDay(date: string) {
+    const { ui } = await openProgram();
+    await workoutCard('Monday squats');
+    await ui.click(dayButton(date));
+    const heading = await screen.findByRole('heading', {
+      name: WEEKDAY_LABEL[weekdayOf(date)],
+    });
+    return { ui, sheet: heading.parentElement as HTMLElement };
+  }
+
+  it('offers a workout with enough on it to choose by', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat', 'bb_rdl']);
+
+    const { sheet } = await openDay(WEDNESDAY);
+    // A name alone cannot answer "have I got time for this one".
+    const tile = within(sheet).getByRole('button', { name: /^Monday squats, heavy,/ });
+    expect(tile.textContent).toMatch(/2 exercises · 6 sets · about \d+ min/);
+  });
+
+  it('asks about a round of golf once, not about its tense', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+
+    const { sheet } = await openDay(WEDNESDAY);
+    expect(within(sheet).getByRole('button', { name: /Round of golf/ })).toBeTruthy();
+    expect(within(sheet).queryByRole('button', { name: 'Round planned' })).toBeNull();
+    expect(within(sheet).queryByRole('button', { name: 'Round played' })).toBeNull();
+  });
+
+  it('does not offer a third way to build a workout', async () => {
+    // The same ask is on the Program screen and inside the New-workout sheet.
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+
+    const { sheet } = await openDay(WEDNESDAY);
+    expect(sheet.textContent).not.toMatch(/Build one with AI/);
   });
 });

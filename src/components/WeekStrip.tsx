@@ -3,6 +3,8 @@ import type { DaySlot } from '../db/types';
 
 import { WEEKDAY_LABEL, type WeekDay } from '../lib/golf';
 import { fromIsoDate } from '../lib/format';
+import { EFFORT_COLOR, EFFORT_TEXT, EFFORT_WORD } from '../lib/effort';
+import type { Intensity } from '../lib/weekTemplate';
 
 /* -------------------------------------------------------------------------- */
 /*  Weekly view — spec Phase 3: gym days, golf days, rest days and rule        */
@@ -20,13 +22,20 @@ import { fromIsoDate } from '../lib/format';
 export interface WeekStripDay extends WeekDay {
   /** Slot the block schedules on this weekday, logged or not. */
   plannedSlot?: DaySlot;
+  /** How hard that workout is, which is now what colours the chip. */
+  intensity?: Intensity;
 }
 
+/*
+ * The dot says one thing: this day breaks the golf rule.
+ *
+ * It used to carry a second colour for golf and a third for "there is a
+ * workout here", which the chip underneath already said in words. Now that the
+ * chip is coloured by effort, keeping a red violation dot AND a red heavy chip
+ * in the same column would be two reds meaning different things.
+ */
 function dotColor(day: WeekStripDay): string | undefined {
-  if (day.violation) return 'var(--color-rir-1)';
-  if (day.golf) return 'var(--color-muscle)';
-  if (day.plannedSlot || day.sessionIds.length > 0) return 'var(--color-volume)';
-  return undefined;
+  return day.violation ? 'var(--color-rir-1)' : undefined;
 }
 
 export function WeekStrip({
@@ -100,7 +109,11 @@ export function WeekStrip({
                 className="block w-full"
                 aria-label={`${WEEKDAY_LABEL[day.weekday]} ${day.date}${
                   day.plannedSlot
-                    ? `, ${labelFor(day.plannedSlot)}`
+                    ? `, ${labelFor(day.plannedSlot)}, ${
+                        day.sessionIds.length > 0
+                          ? 'done'
+                          : EFFORT_WORD[day.intensity ?? 'heavy']
+                      }`
                     : day.loggedName
                       ? `, ${day.loggedName}, done`
                       : ''
@@ -127,16 +140,27 @@ export function WeekStrip({
                   tabIndex={0}
                   onPointerDown={startDrag(day.plannedSlot, index)}
                   aria-label={`${labelFor(day.plannedSlot)} — drag to move`}
+                  /* Done stays the plain done colour: what it was built to
+                     be stopped mattering the moment it was trained. Until
+                     then, red heavy and green light. */
                   className={`mt-1.5 cursor-grab touch-none rounded-lg px-0.5 py-1 text-center text-[9px] leading-[1.15] font-bold break-words hyphens-auto select-none ${
                     drag?.slot === day.plannedSlot ? 'opacity-30' : ''
-                  } ${done ? 'bg-cta text-bg' : 'bg-volume text-bg'}`}
+                  } ${done ? 'bg-cta text-bg' : ''}`}
+                  style={
+                    done
+                      ? undefined
+                      : {
+                          background: EFFORT_COLOR[day.intensity ?? 'heavy'],
+                          color: EFFORT_TEXT,
+                        }
+                  }
                 >
                   {shortLabelFor(day.plannedSlot)}
                 </div>
               ) : day.golf ? (
                 <div
-                  className="mt-1.5 rounded-lg py-1 text-center text-[10px] font-bold text-bg"
-                  style={{ background: 'var(--color-muscle)' }}
+                  className="mt-1.5 rounded-lg py-1 text-center text-[10px] font-bold"
+                  style={{ background: EFFORT_COLOR.golf, color: EFFORT_TEXT }}
                 >
                   GOLF
                 </div>
