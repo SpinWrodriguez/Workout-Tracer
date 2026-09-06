@@ -72,8 +72,13 @@ function View({
               }
             }}
             fill={on ? SELECTED_FILL : 'var(--color-surface-2)'}
-            stroke={on ? 'var(--color-volume)' : 'var(--color-surface)'}
-            strokeWidth={on ? 1 : 0.5}
+            /* The same pale rule on every muscle, picked or not. Outlining a
+               picked muscle in its own fill colour welded neighbours together:
+               pick lats, traps and upper back and the whole back became one
+               red mass with no way to see which three you had chosen, or
+               where to tap to drop one. The divisions are the map. */
+            stroke="var(--color-surface)"
+            strokeWidth={on ? 0.7 : 0.5}
             className="cursor-pointer outline-none"
           >
             <title>{`${name}${on ? ' — training' : ''}`}</title>
