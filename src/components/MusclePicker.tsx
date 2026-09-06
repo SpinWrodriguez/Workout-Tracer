@@ -24,6 +24,12 @@ import { BACK_VIEW, FRONT_VIEW, type BodyView } from '../lib/bodyGeometry';
 const GAP = 10;
 const CAPTION = 12;
 
+/* Selected muscles at full `--color-volume` were the deepest red the app has,
+   which is the heat map's "you have hammered this" end of the ramp — a picker
+   is not a warning. Tinted back over the unselected fill it still reads as
+   plainly on, and the full-strength outline keeps the edge crisp. */
+const SELECTED_FILL = 'color-mix(in oklab, var(--color-volume) 45%, var(--color-surface-2))';
+
 function View({
   view,
   side,
@@ -65,7 +71,7 @@ function View({
                 onToggle(muscleId);
               }
             }}
-            fill={on ? 'var(--color-volume)' : 'var(--color-surface-2)'}
+            fill={on ? SELECTED_FILL : 'var(--color-surface-2)'}
             stroke={on ? 'var(--color-volume)' : 'var(--color-surface)'}
             strokeWidth={on ? 1 : 0.5}
             className="cursor-pointer outline-none"
