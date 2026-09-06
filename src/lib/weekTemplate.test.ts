@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   LIGHT_DAY_CUE,
   WORKOUT_FOCUSES,
+  focusForMuscles,
   templateDayFor,
   weekdayAllowed,
   workoutTemplate,
@@ -158,5 +159,49 @@ describe('templateDayFor honours a stored focus', () => {
     expect(day.repShift).toEqual({ low: 4, high: 5 });
     expect(day.effortCue).toBe(LIGHT_DAY_CUE);
     expect(day.minutesBudget).toBe(25);
+  });
+});
+
+describe('choosing by muscle instead of by category', () => {
+  it('names the choice for whatever downstream still reads a focus', () => {
+    /* The label the day's name, the validator and a model brief all read. Only
+       a label — the muscles themselves decide what gets picked. */
+    expect(focusForMuscles(['quads', 'glutes', 'hamstrings'])).toBe('lower');
+    expect(focusForMuscles(['chest', 'triceps', 'lats'])).toBe('upper');
+    expect(focusForMuscles(['abs', 'obliques'])).toBe('core');
+    // Across regions there is no honest category, and 'full' is the truthful one.
+    expect(focusForMuscles(['chest', 'quads'])).toBe('full');
+    expect(focusForMuscles([])).toBe('full');
+  });
+
+  it('shapes the session from the muscles rather than from a category', () => {
+    /* The whole point of pointing at muscles: an arms-and-back pick must stop
+       handing back a squat slot, which it would if the focus still chose the
+       patterns. */
+    const armsAndBack = workoutTemplate({
+      slot: 'A',
+      focus: focusForMuscles(['biceps', 'lats']),
+      muscles: ['biceps', 'lats'],
+      intensity: 'heavy',
+    });
+    expect(armsAndBack.patterns).not.toContain('squat');
+    expect(armsAndBack.patterns.some((pattern) => pattern.startsWith('pull'))).toBe(true);
+  });
+
+  it('covers everything picked before it repeats itself', () => {
+    const legsAndPress = workoutTemplate({
+      slot: 'A',
+      focus: 'full',
+      muscles: ['quads', 'chest'],
+      intensity: 'heavy',
+    });
+    expect(legsAndPress.patterns).toContain('squat');
+    expect(legsAndPress.patterns.some((pattern) => pattern.startsWith('push'))).toBe(true);
+  });
+
+  it('falls back to the focus when nothing was picked', () => {
+    const byFocus = workoutTemplate({ slot: 'A', focus: 'lower', intensity: 'heavy' });
+    const byEmpty = workoutTemplate({ slot: 'A', focus: 'lower', muscles: [], intensity: 'heavy' });
+    expect(byEmpty.patterns).toEqual(byFocus.patterns);
   });
 });

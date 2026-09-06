@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import type { DaySlot, Exercise, GolfDay } from '../db/types';
+import type { DaySlot, Exercise, GolfDay, MuscleId } from '../db/types';
 import { longDate, todayIso } from '../lib/format';
 import { WEEKDAY_LABEL, buildWeek, gripBufferNote, weekdayOf, type Weekday } from '../lib/golf';
 import { readInventory } from '../db/settings';
@@ -17,6 +17,7 @@ import {
 } from '../lib/blockValidation';
 import { dayLabel, describeDay, shortDayLabels } from '../lib/dayLabel';
 import {
+  focusForMuscles,
   templateDayFor,
   workoutTemplate,
   type Intensity,
@@ -498,13 +499,17 @@ export function ProgramScreen({
    * a "session per week", and knows nothing about the calendar — which is the
    * whole point: building one and deciding when to do it are separate acts.
    */
-  const createWorkout = async (focus: WorkoutFocus, intensity: 'heavy' | 'light') => {
+  const createWorkout = async (muscles: MuscleId[], intensity: 'heavy' | 'light') => {
     if (!block) return;
     const slot = freeSlot();
     if (!slot) return;
+    /* The muscles decide the movement patterns; the focus is only the label
+       everything downstream reads — the day's name, the validator, a brief. */
+    const focus = focusForMuscles(muscles);
     const template = workoutTemplate({
       slot,
       focus,
+      muscles,
       intensity,
       minutesPerSession: sessionMinutes,
     });
@@ -512,7 +517,10 @@ export function ProgramScreen({
     const day = generateDay({
       blockId: block.id,
       exercises,
-      focusMuscles: block.focusMuscles ?? [],
+      /* What was pointed at, so the pick inside each pattern goes to the
+         chosen muscle: the pattern says "a horizontal pull", this says "and
+         make it the one that hits lats". */
+      focusMuscles: muscles,
       template,
       // Complements what the other workouts hold, without touching them.
       exclude: current.map((entry) => entry.exerciseId),

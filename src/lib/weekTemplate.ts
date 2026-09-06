@@ -1,4 +1,6 @@
-import type { DaySlot, MovementPattern } from '../db/types';
+import type { DaySlot, MovementPattern, MuscleId } from '../db/types';
+import { patternsForMuscles } from './blockBuilder';
+import { MUSCLES } from '../db/seed/muscles';
 import { WEEKDAY_LABEL, gripSafeWeekdays, type Weekday } from './golf';
 
 /* -------------------------------------------------------------------------- */
@@ -102,6 +104,23 @@ const FOCUS_PATTERNS: Record<WorkoutFocus, MovementPattern[]> = {
   core: ['core', 'rotation', 'carry', 'core'],
 };
 
+/**
+ * A label for a hand-picked set of muscles, so everything downstream that reads
+ * a focus — the day's name, the validator, the brief sent to a model — keeps
+ * working. Only a label: the muscles themselves decide what gets picked.
+ */
+export function focusForMuscles(muscles: MuscleId[]): WorkoutFocus {
+  const regions = new Set(
+    muscles
+      .map((id) => MUSCLES.find((muscle) => muscle.id === id)?.region)
+      .filter((region): region is 'upper' | 'lower' | 'core' => region !== undefined),
+  );
+  if (regions.size !== 1) return 'full';
+  if (regions.has('upper')) return 'upper';
+  if (regions.has('lower')) return 'lower';
+  return 'core';
+}
+
 /** The distinct patterns a focus covers, for telling a model what to aim at. */
 export function patternsForFocus(focus: WorkoutFocus): MovementPattern[] {
   return [...new Set(FOCUS_PATTERNS[focus])];
@@ -115,15 +134,23 @@ export function patternsForFocus(focus: WorkoutFocus): MovementPattern[] {
 export function workoutTemplate({
   slot,
   focus,
+  muscles,
   intensity,
   minutesPerSession = 40,
 }: {
   slot: DaySlot;
   focus: WorkoutFocus;
+  /**
+   * Muscles chosen by hand. When given, THEY decide the movement patterns and
+   * the focus is only a label — picking biceps and lats has to stop handing
+   * back a squat slot, which it would if the focus still chose the shape.
+   */
+  muscles?: MuscleId[];
   intensity: Intensity;
   minutesPerSession?: number;
 }): TemplateDay {
-  const patterns = FOCUS_PATTERNS[focus];
+  const chosen = muscles && muscles.length > 0 ? patternsForMuscles(muscles) : undefined;
+  const patterns = chosen && chosen.length > 0 ? chosen : FOCUS_PATTERNS[focus];
   const base =
     intensity === 'light'
       ? lightDay(slot, UNPLACED)

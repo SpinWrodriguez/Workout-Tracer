@@ -104,6 +104,52 @@ function setCost(exercise: Exercise): number {
   return SET_DURATION_SECONDS + exercise.restSeconds;
 }
 
+/**
+ * The movement patterns that best cover a set of chosen muscles.
+ *
+ * Selecting muscles has to change the SHAPE of the workout, not just bias which
+ * exercise fills a fixed shape: picking biceps and lats should not still hand
+ * back a squat slot because the template said so. So the pattern list — the
+ * thing a template is actually made of — is derived from the choice.
+ *
+ * Greedy set cover, worst-served muscle first: take the pattern that covers the
+ * most muscles nothing has covered yet, until everything chosen is covered or
+ * the slots run out. Then top up with the patterns that hit the most of the
+ * selection, so a short list still fills a session rather than handing back two
+ * exercises.
+ */
+export function patternsForMuscles(muscles: MuscleId[], slots = 5): MovementPattern[] {
+  const chosen = new Set(muscles);
+  if (chosen.size === 0 || slots <= 0) return [];
+
+  const hits = (pattern: MovementPattern, against: Set<MuscleId>): number =>
+    PATTERN_MUSCLES[pattern].filter((muscle) => against.has(muscle)).length;
+
+  const usable = (Object.keys(PATTERN_MUSCLES) as MovementPattern[])
+    .filter((pattern) => hits(pattern, chosen) > 0)
+    .sort((a, b) => hits(b, chosen) - hits(a, chosen) || a.localeCompare(b));
+  if (usable.length === 0) return [];
+
+  const picked: MovementPattern[] = [];
+  const uncovered = new Set(chosen);
+  while (picked.length < slots && uncovered.size > 0) {
+    const next = usable
+      .slice()
+      .sort((a, b) => hits(b, uncovered) - hits(a, uncovered) || a.localeCompare(b))[0];
+    if (!next || hits(next, uncovered) === 0) break;
+    picked.push(next);
+    for (const muscle of PATTERN_MUSCLES[next]) uncovered.delete(muscle);
+  }
+
+  // Everything chosen is covered; spend what is left on the strongest fits.
+  for (let i = 0; picked.length < slots; i += 1) {
+    const next = usable[i % usable.length];
+    if (!next) break;
+    picked.push(next);
+  }
+  return picked;
+}
+
 function scoreExercise(
   exercise: Exercise,
   focusMuscles: MuscleId[],

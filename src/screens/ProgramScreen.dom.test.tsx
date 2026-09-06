@@ -80,11 +80,20 @@ async function workoutCard(name: string | RegExp): Promise<HTMLElement> {
 }
 
 describe('making a workout', () => {
+  /** Taps a muscle on the body picker, which is how a workout says what it is. */
+  const pickMuscle = async (ui: ReturnType<typeof user>, name: string) => {
+    const group = screen.getByRole('group', { name: 'Muscles this workout trains' });
+    await ui.click(within(group).getAllByRole('button', { name })[0] as HTMLElement);
+  };
+
   it('adds it to the list and names it from what it holds', async () => {
     const { ui } = await openProgram();
 
     await ui.click(screen.getByRole('button', { name: 'New workout' }));
-    await ui.click(await screen.findByRole('button', { name: 'Lower' }));
+    /* Six focus buttons — upper, lower, push, pull, full, core — each a guess
+       at which muscles you meant. Pointing at them says it exactly. */
+    await pickMuscle(ui, 'Quads');
+    await pickMuscle(ui, 'Glutes');
     await ui.click(screen.getByRole('button', { name: /^Heavy/ }));
     await ui.click(screen.getByRole('button', { name: 'Build it' }));
 
@@ -93,6 +102,7 @@ describe('making a workout', () => {
     const created = await createdWorkout();
     expect(created?.name).toBeTruthy();
     expect(created?.name).not.toMatch(/^Day /);
+    // Derived from the muscles: quads and glutes are both lower-body.
     expect(created?.focus).toBe('lower');
     expect(await screen.findByRole('heading', { name: created?.name })).toBeTruthy();
 
@@ -102,11 +112,48 @@ describe('making a workout', () => {
     expect(patterns.length).toBeGreaterThan(0);
   });
 
+  it('will not build a workout that trains nothing', async () => {
+    /* Nothing selected is not a full-body workout, it is an unanswered
+       question — and the button says which. */
+    const { ui } = await openProgram();
+    await ui.click(screen.getByRole('button', { name: 'New workout' }));
+
+    const build = await screen.findByRole('button', { name: 'Pick a muscle' });
+    expect(build.hasAttribute('disabled')).toBe(true);
+
+    await pickMuscle(ui, 'Chest');
+    await screen.findByRole('button', { name: 'Build it' });
+  });
+
+  it('builds for the muscles pointed at, not for a category', async () => {
+    /* The muscles have to change the SHAPE of the session, not just bias which
+       exercise fills a fixed one: an arms workout that still hands back a
+       squat is the old six buttons wearing a body map. */
+    const { ui } = await openProgram();
+    await ui.click(screen.getByRole('button', { name: 'New workout' }));
+    await pickMuscle(ui, 'Biceps');
+    await pickMuscle(ui, 'Lats');
+    await ui.click(screen.getByRole('button', { name: 'Build it' }));
+
+    await createdWorkout();
+    const entries = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
+    const chosen = entries
+      .map((entry) => exercisesById.get(entry.exerciseId))
+      .filter((exercise) => exercise !== undefined);
+    expect(chosen.length).toBeGreaterThan(0);
+
+    // Every pick pulls: nothing here squats or presses.
+    const trains = (muscle: string) =>
+      chosen.some((exercise) => exercise.primaryMuscles.includes(muscle as never));
+    expect(trains('lats') || trains('biceps')).toBe(true);
+    expect(chosen.every((exercise) => exercise.pattern !== 'squat')).toBe(true);
+  });
+
   it('does not put it in the week — where it goes is a separate decision', async () => {
     const { ui } = await openProgram();
 
     await ui.click(screen.getByRole('button', { name: 'New workout' }));
-    await ui.click(await screen.findByRole('button', { name: /^Full body/ }));
+    await ui.click(await screen.findByRole('button', { name: 'Everything' }));
     await ui.click(screen.getByRole('button', { name: 'Build it' }));
 
     const created = await createdWorkout();

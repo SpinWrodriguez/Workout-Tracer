@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import {
-  WORKOUT_FOCUSES,
-  WORKOUT_FOCUS_LABEL,
-  type Intensity,
-  type WorkoutFocus,
-} from '../lib/weekTemplate';
+import { MUSCLES } from '../db/seed/muscles';
+import type { MuscleId } from '../db/types';
+import { type Intensity } from '../lib/weekTemplate';
+import { MusclePicker } from './MusclePicker';
 import { Sheet } from './Sheet';
 import { HapticTick } from './HapticTick';
 import { Label } from './Layout';
@@ -15,6 +13,11 @@ import { Label } from './Layout';
 /*  Two questions and nothing else: what does it train, and how hard. No day,  */
 /*  no week, no "sessions per week" — a workout is a thing you make, and where */
 /*  it goes in the calendar is a decision you have not taken yet.              */
+/*                                                                            */
+/*  "What does it train" used to be six buttons — upper, lower, push, pull,    */
+/*  full, core — each of them a guess at which muscles you meant. Pointing at  */
+/*  the muscles says it exactly, and the generator derives the movement        */
+/*  patterns from the choice rather than from the category.                   */
 /* -------------------------------------------------------------------------- */
 
 const INTENSITIES: Intensity[] = ['heavy', 'light'];
@@ -38,7 +41,8 @@ export function NewWorkoutSheet({
   asking = false,
   askError,
 }: {
-  onCreate: (focus: WorkoutFocus, intensity: Intensity) => void;
+  /** The muscles chosen, in the seed's order, and how hard to train them. */
+  onCreate: (muscles: MuscleId[], intensity: Intensity) => void;
   onBlank: () => void;
   onClose: () => void;
   /** Describe the session in words and let a model choose the exercises. */
@@ -47,7 +51,7 @@ export function NewWorkoutSheet({
   asking?: boolean;
   askError?: string;
 }) {
-  const [focus, setFocus] = useState<WorkoutFocus>('full');
+  const [muscles, setMuscles] = useState<MuscleId[]>([]);
   const [intensity, setIntensity] = useState<Intensity>('heavy');
   const [goal, setGoal] = useState('');
 
@@ -91,10 +95,11 @@ export function NewWorkoutSheet({
           </button>
           <button
             type="button"
-            onClick={() => onCreate(focus, intensity)}
-            className="relative h-11 flex-[2] rounded-full bg-cta font-semibold text-bg"
+            disabled={muscles.length === 0}
+            onClick={() => onCreate(muscles, intensity)}
+            className="relative h-11 flex-[2] rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
           >
-            Build it
+            {muscles.length === 0 ? 'Pick a muscle' : 'Build it'}
             <HapticTick />
           </button>
         </div>
@@ -135,12 +140,39 @@ export function NewWorkoutSheet({
         </>
       )}
 
-      <Label className="mt-1 block">Trains</Label>
-      <div className="mt-2 flex flex-col gap-1.5">
-        {WORKOUT_FOCUSES.map((option) =>
-          row(focus === option, () => setFocus(option), WORKOUT_FOCUS_LABEL[option]),
-        )}
+      <div className="mt-1 flex items-baseline justify-between gap-3">
+        <Label>Trains</Label>
+        <span className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setMuscles(MUSCLES.map((muscle) => muscle.id))}
+            className="rounded-full bg-surface px-3 py-1 text-[12px] font-medium text-text-dim"
+          >
+            Everything
+          </button>
+          {muscles.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setMuscles([])}
+              className="rounded-full bg-surface px-3 py-1 text-[12px] font-medium text-text-dim"
+            >
+              Clear
+            </button>
+          )}
+        </span>
       </div>
+
+      <MusclePicker selected={muscles} onChange={setMuscles} />
+
+      <Label className="mt-1 block text-center">
+        {muscles.length === 0
+          ? 'Tap the muscles this workout should train.'
+          : muscles.length === MUSCLES.length
+            ? 'Everything — a full-body session.'
+            : muscles
+                .map((id) => MUSCLES.find((muscle) => muscle.id === id)?.name ?? id)
+                .join(', ')}
+      </Label>
 
       <Label className="mt-5 block">Effort</Label>
       <div className="mt-2 flex flex-col gap-1.5">
