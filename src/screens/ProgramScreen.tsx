@@ -1108,28 +1108,21 @@ export function ProgramScreen({
         )}
       </Card>
 
-      <Card title={block ? 'Current block' : 'No block'} className="mt-3">
+      <Card title={block ? 'Plan the week' : 'No block'} className="mt-3">
         {block ? (
           <>
-            <p className="text-[13px] font-medium text-text-dim">
-              {longDate(block.startDate)} — {longDate(block.endDate)}
-            </p>
-            {/* Session length, the split shape and the muscles to emphasise all
-                used to live here, wrapped around a shortcut that made workouts
-                AND placed them in one press. That shortcut wrote a standing
-                weekday, so filling four days filled every week there would ever
-                be. The settings moved to Settings, the shortcut is gone, and
-                what is left is the one thing this card was ever for: which
-                block you are in. */}
-            <Label className="mt-1.5 block">
-              Make workouts below, then drop them on the days you want them.
+            {/* This card was once the block's dates and a shortcut that made
+                workouts AND placed them in one press. That shortcut wrote a
+                standing weekday, so filling four days filled every week there
+                would ever be, and it is long gone. What the card is FOR now is
+                the week in front of you: what it trains, and the two ways to
+                change that. The block's dates are the footnote they always
+                deserved to be. */}
+            <Label className="block">
+              What this week trains — already logged, or still to come.
             </Label>
 
-            {/* What the week on screen adds up to, before it is trained. The
-                same map and the same ramp as Levels, reading the plan instead
-                of the log — so the hole is visible while there is still time
-                to fill it. */}
-            <div className="mt-3 border-t border-border pt-3">
+            <div className="mt-3">
               <Silhouette volume={plannedVolume} />
               <p className="mt-2 text-center text-[12px] font-medium text-text-dim">
                 {untouched.length === MUSCLES.length
@@ -1139,6 +1132,38 @@ export function ProgramScreen({
                     : `Not in this week: ${untouched.map((muscle) => muscle.name).join(', ')}.`}
               </p>
             </div>
+
+            {/* Two ways in, and only two: describe a week and let the model
+                build it, or make one workout at a time. Both leave the
+                calendar to you except where you named the day yourself.
+                They sit here, under the gap they are for, rather than under
+                the whole list of workouts where you had to scroll to reach
+                them. */}
+            {isModelAvailable() && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAskError(undefined);
+                  setPlanningWeek(true);
+                }}
+                className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg"
+              >
+                Build the week with AI
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              disabled={freeSlot() === undefined}
+              className="mt-2 h-11 w-full rounded-full bg-surface-2 text-sm font-medium text-text-dim disabled:text-text-faint"
+            >
+              {freeSlot() === undefined ? `All ${DAY_SLOTS.length} workouts used` : 'New workout'}
+            </button>
+
+            <Label className="mt-3 block text-center">
+              Block: {longDate(block.startDate)} — {longDate(block.endDate)}
+            </Label>
           </>
         ) : (
           <Empty>--</Empty>
@@ -1234,32 +1259,6 @@ export function ProgramScreen({
         );
       })}
 
-      {/* Two ways in, and only two: describe a week and let the model build it,
-          or make one workout at a time. Both leave the calendar to you except
-          where you named the day yourself. */}
-      {block && isModelAvailable() && (
-        <button
-          type="button"
-          onClick={() => {
-            setAskError(undefined);
-            setPlanningWeek(true);
-          }}
-          className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg"
-        >
-          Build the week with AI
-        </button>
-      )}
-
-      {block && (
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          disabled={freeSlot() === undefined}
-          className="mt-3 h-11 w-full rounded-full bg-surface-2 text-sm font-medium text-text-dim disabled:text-text-faint"
-        >
-          {freeSlot() === undefined ? `All ${DAY_SLOTS.length} workouts used` : 'New workout'}
-        </button>
-      )}
 
       {planningWeek && (
         <WeekPlanSheet

@@ -120,7 +120,7 @@ afterEach(() => {
 
 async function openProgram() {
   const view = draw(<ProgramScreen exercises={exercises} onStartDay={vi.fn()} />);
-  await screen.findByRole('heading', { name: 'Current block' });
+  await screen.findByRole('heading', { name: 'Plan the week' });
   return { view, ui: user() };
 }
 

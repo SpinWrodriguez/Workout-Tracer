@@ -72,6 +72,21 @@ function InfoButton({ name, onClick }: { name: string; onClick: () => void }) {
     </button>
   );
 }
+/** Same mark as every other collapsing section in the app. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-4 shrink-0 text-text-dim transition-transform"
+      style={{ transform: open ? 'rotate(180deg)' : undefined }}
+      fill="none"
+      aria-hidden="true"
+    >
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function DaySlotCard({
   weekday,
   intensity = 'heavy',
@@ -145,6 +160,24 @@ export function DaySlotCard({
     setTyped(customName ?? '');
   }
 
+  /* Five days of exercise lists is a screen you scroll rather than read, and
+     four of those days are not today. Shut by default, open for the day you
+     are on — and always open while editing, since the rows are the thing being
+     edited. Collapsing hides only the list: the name, the weekday, Edit, Start
+     and the golf note stay put, so a shut card still answers "what is this and
+     can I start it". */
+  const [open, setOpen] = useState(isToday);
+  /* Mirrors the prop the same way `typed` mirrors the name: which day is today
+     arrives from its own live query, so a card can be built before it knows,
+     and a card that becomes today's — or stops being it, when the session is
+     moved — should open or fold to match. */
+  const [wasToday, setWasToday] = useState(isToday);
+  if (wasToday !== isToday) {
+    setWasToday(isToday);
+    setOpen(isToday);
+  }
+  const shown = open || editing;
+
   return (
     <Card
       title={label}
@@ -213,6 +246,7 @@ export function DaySlotCard({
       )}
 
       {!editing &&
+        shown &&
         entries.map((entry) => {
           const exercise = exercisesById.get(entry.exerciseId);
           return (
@@ -296,12 +330,27 @@ export function DaySlotCard({
           starting — have I got time for this — was the one thing the card
           could not answer. Scaled by the factor learned from real durations,
           so it is minutes rather than arithmetic. */}
-      {entries.length > 0 && (
-        <Label className="mt-2 block">
-          {entries.length} {entries.length === 1 ? 'exercise' : 'exercises'} · {totalSets} sets
-          {minutes !== undefined ? ` · about ${minutes} min` : ''}
-        </Label>
-      )}
+      {entries.length > 0 &&
+        (editing ? (
+          <Label className="mt-2 block">
+            {entries.length} {entries.length === 1 ? 'exercise' : 'exercises'} · {totalSets} sets
+            {minutes !== undefined ? ` · about ${minutes} min` : ''}
+          </Label>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            aria-label={`${open ? 'Hide' : 'Show'} the exercises in ${label}`}
+            className="mt-2 flex w-full items-center justify-between gap-3 py-1 text-left"
+          >
+            <Label>
+              {entries.length} {entries.length === 1 ? 'exercise' : 'exercises'} · {totalSets} sets
+              {minutes !== undefined ? ` · about ${minutes} min` : ''}
+            </Label>
+            <Chevron open={open} />
+          </button>
+        ))}
 
       {editing && (
         <label className="mt-1 mb-3 block">

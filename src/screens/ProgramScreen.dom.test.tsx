@@ -49,9 +49,9 @@ const dayButton = (date: string) =>
 async function openProgram() {
   const onStartDay = vi.fn();
   const view = draw(<ProgramScreen exercises={exercises} onStartDay={onStartDay} />);
-  // The card only titles itself "Current block" once the live query has
+  // The card only titles itself "Plan the week" once the live query has
   // actually produced one, so this is the screen saying it is ready.
-  await screen.findByRole('heading', { name: 'Current block' });
+  await screen.findByRole('heading', { name: 'Plan the week' });
   return { onStartDay, view, ui: user() };
 }
 
@@ -76,6 +76,18 @@ async function createdWorkout() {
 async function workoutCard(name: string | RegExp): Promise<HTMLElement> {
   const card = (await screen.findByRole('heading', { name })).closest('section');
   if (!card) throw new Error(`heading ${String(name)} is not inside a card`);
+  return card;
+}
+
+/*
+ * A card lists its exercises only for the day you are on; every other day
+ * shows its name and totals and keeps the rows behind the summary toggle.
+ * Tests that read the rows have to open the card first, exactly as a thumb
+ * would.
+ */
+async function showExercises(ui: ReturnType<typeof user>, card: HTMLElement) {
+  const toggle = within(card).queryByRole('button', { name: /^Show the exercises in / });
+  if (toggle) await ui.click(toggle);
   return card;
 }
 
@@ -542,7 +554,7 @@ describe('picking and unpicking an exercise', () => {
 describe('what the week on screen will train', () => {
   /** The block card's own body map, by the muscle labels it carries. */
   async function plannedMap(): Promise<Record<string, string>> {
-    const heading = await screen.findByRole('heading', { name: 'Current block' });
+    const heading = await screen.findByRole('heading', { name: 'Plan the week' });
     const card = heading.closest('section') as HTMLElement;
     const titles = [...card.querySelectorAll('title')].map((node) => node.textContent ?? '');
     return Object.fromEntries(
@@ -551,7 +563,7 @@ describe('what the week on screen will train', () => {
   }
 
   const blockCardText = async () =>
-    ((await screen.findByRole('heading', { name: 'Current block' }))
+    ((await screen.findByRole('heading', { name: 'Plan the week' }))
       .closest('section') as HTMLElement).textContent ?? '';
 
   it('counts programmed sets, not logged ones', async () => {
@@ -659,7 +671,7 @@ describe('a week whose workouts were deleted after it was trained', () => {
   }
 
   const blockCardText = async () =>
-    ((await screen.findByRole('heading', { name: 'Current block' }))
+    ((await screen.findByRole('heading', { name: 'Plan the week' }))
       .closest('section') as HTMLElement).textContent ?? '';
 
   it('still colours the map from what was actually logged', async () => {
@@ -671,7 +683,7 @@ describe('a week whose workouts were deleted after it was trained', () => {
     await openProgram();
 
     await waitFor(async () => {
-      const heading = await screen.findByRole('heading', { name: 'Current block' });
+      const heading = await screen.findByRole('heading', { name: 'Plan the week' });
       const card = heading.closest('section') as HTMLElement;
       const titles = [...card.querySelectorAll('title')].map((node) => node.textContent);
       // Three logged sets of back squat, and not one blockExercise row to read.
@@ -701,7 +713,7 @@ describe('a week whose workouts were deleted after it was trained', () => {
     await openProgram();
 
     await waitFor(async () => {
-      const heading = await screen.findByRole('heading', { name: 'Current block' });
+      const heading = await screen.findByRole('heading', { name: 'Plan the week' });
       const card = heading.closest('section') as HTMLElement;
       const titles = [...card.querySelectorAll('title')].map((node) => node.textContent);
       // Three logged, five planned: three, not eight and not five.
@@ -754,9 +766,9 @@ describe('the golf buffer, said out loud', () => {
     await seedWorkout('A', ['bb_bent_over_row']);
     await seedPlan({ [THURSDAY]: 'A' });
 
-    await openProgram();
+    const { ui } = await openProgram();
 
-    const card = await workoutCard('Thursday pull');
+    const card = await showExercises(ui, await workoutCard('Thursday pull'));
     await waitFor(() =>
       expect(card.textContent).toContain('Golf in 2 days (Sat) — may affect your swing.'),
     );
@@ -856,7 +868,7 @@ describe('reading up on an exercise from the Program screen', () => {
     await seedWorkout('A', ['bb_back_squat']);
     const { ui } = await openProgram();
 
-    const card = await workoutCard('Monday squats');
+    const card = await showExercises(ui, await workoutCard('Monday squats'));
     await ui.click(
       within(card).getByRole('button', { name: `About ${named('bb_back_squat')}` }),
     );
@@ -868,5 +880,37 @@ describe('reading up on an exercise from the Program screen', () => {
     expect(
       await screen.findByRole('heading', { name: named('bb_back_squat') }),
     ).toBeTruthy();
+  });
+});
+
+describe('a week of workouts, folded up', () => {
+  it('keeps every card readable while hiding all but today\'s exercises', async () => {
+    /* Five days of exercise lists is a screen you scroll past. What a card has
+       to answer while shut is "what is this, when is it, can I start it" — the
+       rows are detail. */
+    await seedSchedule({
+      A: { intensity: 'heavy', name: 'Monday squats' },
+      B: { intensity: 'heavy', name: 'Thursday pull' },
+    });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedWorkout('B', ['bb_bent_over_row']);
+    /* Some other day of this same week, whichever day of it today happens to
+       be — so the pair is always two cards on one screen. */
+    const other = dayOfThisWeek(0) === todayIso() ? dayOfThisWeek(1) : dayOfThisWeek(0);
+    await seedPlan({ [todayIso()]: 'A', [other]: 'B' });
+
+    const { ui } = await openProgram();
+
+    const today = await workoutCard('Monday squats');
+    await waitFor(() => expect(today.textContent).toContain(named('bb_back_squat')));
+
+    const tomorrow = await workoutCard('Thursday pull');
+    // Shut, but not silent: the name and the totals are still on the card.
+    expect(tomorrow.textContent).not.toContain(named('bb_bent_over_row'));
+    expect(tomorrow.textContent).toContain('1 exercise · 3 sets');
+    expect(within(tomorrow).getByRole('button', { name: 'Start' })).toBeTruthy();
+
+    await showExercises(ui, tomorrow);
+    await waitFor(() => expect(tomorrow.textContent).toContain(named('bb_bent_over_row')));
   });
 });
