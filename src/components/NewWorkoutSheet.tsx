@@ -18,6 +18,11 @@ import { Label } from './Layout';
 /*  full, core — each of them a guess at which muscles you meant. Pointing at  */
 /*  the muscles says it exactly, and the generator derives the movement        */
 /*  patterns from the choice rather than from the category.                   */
+/*                                                                            */
+/*  Both answers come first because both ways of building read them. The goal  */
+/*  box used to sit at the top under "Ask for one", with the picker below      */
+/*  under "Or choose yourself" — which said the picker was the other option    */
+/*  rather than a shared input, and it was: the ask sent the words alone.     */
 /* -------------------------------------------------------------------------- */
 
 const INTENSITIES: Intensity[] = ['heavy', 'light'];
@@ -45,8 +50,13 @@ export function NewWorkoutSheet({
   onCreate: (muscles: MuscleId[], intensity: Intensity) => void;
   onBlank: () => void;
   onClose: () => void;
-  /** Describe the session in words and let a model choose the exercises. */
-  onAsk?: (goal: string) => void;
+  /**
+   * Describe the session in words and let a model choose the exercises — from
+   * the same muscles and effort the manual path uses. Sending only the words
+   * was the bug: pick abs and chest, type a line, and the model never heard
+   * about the picker.
+   */
+  onAsk?: (goal: string, muscles: MuscleId[], intensity: Intensity) => void;
   modelAvailable?: boolean;
   asking?: boolean;
   askError?: string;
@@ -105,41 +115,6 @@ export function NewWorkoutSheet({
         </div>
       }
     >
-      {onAsk && modelAvailable && (
-        <>
-          <Label className="mt-1 block">Ask for one</Label>
-          <textarea
-            rows={2}
-            value={goal}
-            onChange={(event) => setGoal(event.target.value)}
-            /* A goal, a target and a limit — the three things the app cannot
-               work out for itself. "Something easy" was a placeholder about
-               mood, which told you nothing about what to type. */
-            placeholder="Back and biceps, nothing overhead — left shoulder is sore"
-            className="mt-1.5 w-full resize-none rounded-xl bg-surface-2 px-3 py-2.5 text-[15px] placeholder:text-text-faint"
-          />
-          <button
-            type="button"
-            disabled={asking || goal.trim().length < 3}
-            onClick={() => onAsk(goal)}
-            className="mt-2 h-11 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
-          >
-            {asking ? 'Thinking…' : 'Build it from that'}
-          </button>
-          {askError && (
-            <p className="mt-2 text-[12px] font-medium" style={{ color: 'var(--color-warn)' }}>
-              {askError}
-            </p>
-          )}
-          <Label className="mt-2 block">
-            It picks from your exercise list only, and every choice is checked against
-            the rules before it lands. Where it goes in the week is still up to you.
-          </Label>
-          <div className="mt-4 h-px bg-border" />
-          <Label className="mt-4 block">Or choose yourself</Label>
-        </>
-      )}
-
       <div className="mt-1 flex items-baseline justify-between gap-3">
         <Label>Trains</Label>
         <span className="flex gap-2">
@@ -185,6 +160,41 @@ export function NewWorkoutSheet({
           ),
         )}
       </div>
+
+      {onAsk && modelAvailable && (
+        <>
+          <div className="mt-5 h-px bg-border" />
+          <Label className="mt-4 block">Or say it in words</Label>
+          <textarea
+            rows={2}
+            value={goal}
+            onChange={(event) => setGoal(event.target.value)}
+            /* A goal, a target and a limit — the three things the app cannot
+               work out for itself. "Something easy" was a placeholder about
+               mood, which told you nothing about what to type. */
+            placeholder="Back and biceps, nothing overhead — left shoulder is sore"
+            className="mt-1.5 w-full resize-none rounded-xl bg-surface-2 px-3 py-2.5 text-[15px] placeholder:text-text-faint"
+          />
+          <button
+            type="button"
+            disabled={asking || goal.trim().length < 3}
+            onClick={() => onAsk(goal, muscles, intensity)}
+            className="mt-2 h-11 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
+          >
+            {asking ? 'Thinking…' : 'Build it from that'}
+          </button>
+          {askError && (
+            <p className="mt-2 text-[12px] font-medium" style={{ color: 'var(--color-warn)' }}>
+              {askError}
+            </p>
+          )}
+          <Label className="mt-2 block">
+            {muscles.length > 0 && muscles.length < MUSCLES.length
+              ? 'It works from the muscles and effort above, picks from your exercise list only, and every choice is checked against the rules before it lands. Where it goes in the week is still up to you.'
+              : 'It picks from your exercise list only, and every choice is checked against the rules before it lands. Where it goes in the week is still up to you.'}
+          </Label>
+        </>
+      )}
 
 
     </Sheet>

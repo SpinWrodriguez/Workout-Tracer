@@ -103,7 +103,7 @@ export const SYSTEM_PROMPT = `You choose exercises for one workout in a home gym
 
 The gym is a Cortex SM-26 multi-gym, an Olympic barbell, a few kettlebells and bands, in a garage. The lifter is a returning intermediate training two, at best three times a week around weekend golf. Sessions are about 40 minutes.
 
-You will be given the exercises available for this workout, the workouts already in the current block, and a goal. Return one workout. The library you are given may be narrowed to what the requested focus allows — treat it as the whole world of choices, not a sample.
+You will be given the exercises available for this workout, the workouts already in the current block, and a goal. Return one workout. The library you are given may already be narrowed to what was asked for — the focus's patterns, or the muscles the lifter pointed at. Treat it as the whole world of choices, not a sample.
 
 The goal may be the lifter's own words, or a summary the app derived from which muscles are short this week — treat both the same way. You may also be given \`standingInstructions\`, which is what the lifter has said they are training for in general, and \`constraints\`, which are absolute: an exercise a constraint rules out is not available, whatever the goal says.
 
@@ -143,6 +143,31 @@ export function libraryForFocuses(exercises: Exercise[], focuses: WorkoutFocus[]
   const sliced = exercises.filter((exercise) => wanted.has(exercise.pattern));
   // A focus whose patterns somehow match nothing gets the whole library rather
   // than an empty one: too few choices is a worse failure than too many.
+  return sliced.length >= MIN_EXERCISES ? sliced : exercises;
+}
+
+/**
+ * Only the exercises that actually train what was pointed at.
+ *
+ * The prompt states the muscles as a requirement, but stating it is not the
+ * same as making it impossible: asked for abs and chest, the model came back
+ * with chin-ups. Taking the rest of the library away is the part that cannot
+ * be talked around — a chin-up it never sees is a chin-up it cannot pick.
+ *
+ * Primary only. Secondary spillover is unavoidable — a bench press works
+ * triceps whether you asked for them or not — so scoring it as a match would
+ * put half the library back.
+ *
+ * Same escape hatch as libraryForFocuses: a choice so narrow that the library
+ * cannot fill a session gets the whole list back, because too few choices is a
+ * worse failure than too many.
+ */
+export function libraryForMuscles(exercises: Exercise[], muscles: string[]): Exercise[] {
+  if (muscles.length === 0) return exercises;
+  const wanted = new Set(muscles);
+  const sliced = exercises.filter((exercise) =>
+    exercise.primaryMuscles.some((muscle) => wanted.has(muscle)),
+  );
   return sliced.length >= MIN_EXERCISES ? sliced : exercises;
 }
 

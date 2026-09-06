@@ -8,6 +8,7 @@ import {
   buildSystem,
   buildUser,
   libraryForFocuses,
+  libraryForMuscles,
   generateAiWorkout,
   libraryFor,
   parseWorkout,
@@ -117,6 +118,38 @@ describe('how much library a workout is shown', () => {
   it('shows everything when no focus has been chosen', () => {
     // A typed goal the model reads for itself: it has to see the whole world.
     expect(libraryForFocuses(EXERCISES, [])).toHaveLength(EXERCISES.length);
+  });
+
+  /*
+   * Stating the muscles in the prompt was not enough on its own: asked for abs
+   * and chest, the model came back with chin-ups. Taking the rest away is the
+   * part that cannot be talked around.
+   */
+  it('shows only what trains the muscles that were pointed at', () => {
+    const core = libraryForMuscles(EXERCISES, ['abs', 'chest']);
+
+    expect(core.length).toBeLessThan(EXERCISES.length);
+    expect(
+      core.every((exercise) =>
+        exercise.primaryMuscles.some((muscle) => muscle === 'abs' || muscle === 'chest'),
+      ),
+    ).toBe(true);
+    expect(core.some((exercise) => exercise.id === 'bb_bench_press')).toBe(true);
+    // The exact reply that started this: a chin-up is lats, and lats were not asked for.
+    expect(core.some((exercise) => exercise.id === 'bw_chin_up')).toBe(false);
+  });
+
+  it('counts a muscle only where it is the point of the exercise', () => {
+    // A bench press works triceps whether you asked for them or not. Scoring
+    // secondary as a match would put most of the library back.
+    const triceps = libraryForMuscles(EXERCISES, ['triceps']);
+    expect(triceps.every((exercise) => exercise.primaryMuscles.includes('triceps'))).toBe(true);
+  });
+
+  it('gives the whole library back rather than one too narrow to fill a session', () => {
+    // Too few choices is a worse failure than too many.
+    expect(libraryForMuscles(EXERCISES, ['nothing_is_this'])).toHaveLength(EXERCISES.length);
+    expect(libraryForMuscles(EXERCISES, [])).toHaveLength(EXERCISES.length);
   });
 
   it('measurably shrinks what gets sent', () => {

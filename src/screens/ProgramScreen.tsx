@@ -54,6 +54,7 @@ import { isModelAvailable } from '../lib/askModel';
 import {
   generateAiWorkout,
   libraryForFocuses,
+  libraryForMuscles,
   templateForAiWorkout,
   type AiWorkout,
 } from '../lib/aiWorkout';
@@ -588,6 +589,8 @@ export function ProgramScreen({
     forDate?: string;
     focus?: WorkoutFocus;
     intensity?: Intensity;
+    /** What the body picker was pointing at, when the ask came from there. */
+    muscles?: MuscleId[];
   }): Promise<{ ok: true; slot: DaySlot } | { ok: false; reason: string }> => {
     if (!block) return { ok: false, reason: 'No block.' };
 
@@ -644,6 +647,12 @@ export function ProgramScreen({
        validator judges whatever it decided — which is the single-workout case. */
     if (want.focus) constraints.focus = want.focus;
     if (want.intensity) constraints.intensity = want.intensity;
+    /* Everything selected is not a constraint — it is the absence of one, and
+       sending all eighteen ids would narrow nothing while telling the model to
+       hit every muscle in one session. */
+    if (want.muscles && want.muscles.length > 0 && want.muscles.length < MUSCLES.length) {
+      constraints.muscles = want.muscles;
+    }
     if (want.intensity === 'light') constraints.noHighSpinal = true;
 
     const instructions = await readAiInstructions();
@@ -665,7 +674,10 @@ export function ProgramScreen({
      * to ignore. With no chosen focus the model decides for itself and needs
      * the whole list.
      */
-    const available = libraryForFocuses(exercises, want.focus ? [want.focus] : []);
+    const available = libraryForMuscles(
+      libraryForFocuses(exercises, want.focus ? [want.focus] : []),
+      constraints.muscles ?? [],
+    );
 
     const outcome = await generateAiWorkout({
       blockId: block.id,
@@ -772,12 +784,15 @@ export function ProgramScreen({
   };
 
   /** One workout, from the New-workout sheet or the day editor. */
-  const askForWorkout = async (goal: string, forDate?: string) => {
+  const askForWorkout = async (
+    goal: string,
+    extra: { forDate?: string; muscles?: MuscleId[]; intensity?: Intensity } = {},
+  ) => {
     if (!block || asking) return;
     setAsking(true);
     setAskError(undefined);
     try {
-      const outcome = await askOneWorkout({ goal, forDate });
+      const outcome = await askOneWorkout({ goal, ...extra });
       if (!outcome.ok) {
         setAskError(outcome.reason);
         return;
@@ -1276,7 +1291,13 @@ export function ProgramScreen({
 
       {creating && (
         <NewWorkoutSheet
-          onAsk={(goal) => void askForWorkout(goal)}
+          /* The body picker and the effort rows sit above the goal box and
+             feed both ways of building. Sending only the typed words was the
+             bug: pick abs and chest, type a line, and the model — which had
+             never been told about the picker — came back with chin-ups. */
+          onAsk={(goal, muscles, intensity) =>
+            void askForWorkout(goal, { muscles, intensity })
+          }
           modelAvailable={isModelAvailable()}
           asking={asking}
           askError={askError}
@@ -1324,7 +1345,7 @@ export function ProgramScreen({
           golfDates={golfDateList}
           slots={definedSlots}
           labelFor={labelFor}
-          onAsk={(goal) => void askForWorkout(goal, editingDate)}
+          onAsk={(goal) => void askForWorkout(goal, { forDate: editingDate })}
           modelAvailable={isModelAvailable()}
           asking={asking}
           askError={askError}

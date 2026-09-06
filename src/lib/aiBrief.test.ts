@@ -120,6 +120,21 @@ describe('the payload', () => {
     }
   });
 
+  it('states the muscles that were pointed at, in the ids the model can check', () => {
+    /* Names would read better and be uncheckable: `primary` and `secondary` on
+       every library row are ids, so a requirement in names is one the model
+       cannot hold its own picks against. */
+    const input = { ...base, constraints: { muscles: ['abs', 'chest'] } };
+    const line = (briefPayload(buildBrief(input), input).constraints as string[]).join(' ');
+    expect(line).toContain('abs, chest');
+    expect(line).toContain('`primary`');
+  });
+
+  it('says nothing about muscles when none were pointed at', () => {
+    const input = { ...base, constraints: { muscles: [] } };
+    expect(briefPayload(buildBrief(input), input)).not.toHaveProperty('constraints');
+  });
+
   it('never leaks a date, whatever else is in it', () => {
     const input = {
       ...base,

@@ -67,6 +67,14 @@ export interface DayConstraints {
    * because the reason is a calendar the model has been caught misreading.
    */
   focus?: WorkoutFocus;
+  /**
+   * The muscle ids the lifter pointed at on the body picker. A requirement,
+   * not a hint: picking abs and chest and being handed chin-ups is the whole
+   * reason this field exists. Ids rather than names, because `primary` and
+   * `secondary` on every library row are ids and a requirement the model
+   * cannot check against what it sees is not a requirement.
+   */
+  muscles?: string[];
 }
 
 export interface BriefInput {
@@ -146,6 +154,14 @@ export function briefPayload(brief: Brief, input: BriefInput): Record<string, un
   }
   if (input.constraints?.intensity === 'heavy') {
     constraints.push('This is a heavy session: three working sets an exercise.');
+  }
+  if (input.constraints?.muscles && input.constraints.muscles.length > 0) {
+    const wanted = input.constraints.muscles;
+    constraints.push(
+      `This session trains these muscles and nothing else: ${wanted.join(', ')}. ` +
+        'Every exercise must name at least one of them in its `primary` list. ' +
+        'Spillover in `secondary` is fine; an exercise whose `primary` misses all of them is not.',
+    );
   }
   if (input.constraints?.focus) {
     const focus = input.constraints.focus;
