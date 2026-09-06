@@ -30,9 +30,9 @@ export interface WeekStripDay extends WeekDay {
  * The dot says one thing: this day breaks the golf rule.
  *
  * It used to carry a second colour for golf and a third for "there is a
- * workout here", which the chip underneath already said in words. Now that the
- * chip is coloured by effort, keeping a red violation dot AND a red heavy chip
- * in the same column would be two reds meaning different things.
+ * workout here", both of which the chip underneath already says in words. With
+ * the chip coloured by effort, a dot that also coloured itself would be a
+ * second colour language in a 6px space.
  */
 function dotColor(day: WeekStripDay): string | undefined {
   return day.violation ? 'var(--color-rir-1)' : undefined;
@@ -142,7 +142,7 @@ export function WeekStrip({
                   aria-label={`${labelFor(day.plannedSlot)} — drag to move`}
                   /* Done stays the plain done colour: what it was built to
                      be stopped mattering the moment it was trained. Until
-                     then, red heavy and green light. */
+                     then, rust heavy and teal light. */
                   className={`mt-1.5 cursor-grab touch-none rounded-lg px-0.5 py-1 text-center text-[9px] leading-[1.15] font-bold break-words hyphens-auto select-none ${
                     drag?.slot === day.plannedSlot ? 'opacity-30' : ''
                   } ${done ? 'bg-cta text-bg' : ''}`}

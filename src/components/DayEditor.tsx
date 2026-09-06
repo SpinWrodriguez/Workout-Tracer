@@ -14,8 +14,8 @@ import { Label } from './Layout';
 /*  The gym half is a row of tiles rather than a list of names. A name alone   */
 /*  is not enough to choose between two workouts — how long is it, how much is */
 /*  in it, how hard — and every one of those is already known here. The colour */
-/*  rule is the same one the day cards and the calendar carry: red heavy,      */
-/*  green light, blue a round.                                                */
+/*  rule is the same one the day cards and the calendar carry, and the same    */
+/*  three the dashboard rings use: rust heavy, teal light, blue a round.       */
 /*                                                                            */
 /*  "Build one with AI" used to sit in this list too. It is on the Program     */
 /*  screen and inside the New-workout sheet, and a third door onto the same    */

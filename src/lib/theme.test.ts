@@ -147,9 +147,9 @@ describe('palette parity', () => {
        ink, which is the whole reason there are two. */
     for (const theme of [dark, light]) {
       for (const [fill, ink] of [
-        ['--color-rir-1', '--color-effort-text'],
-        ['--color-muscle', '--color-effort-text'],
-        ['--color-effort-light', '--color-effort-ink'],
+        ['--color-volume', '--color-effort-ink-heavy'],
+        ['--color-strength', '--color-effort-ink-light'],
+        ['--color-muscle', '--color-effort-ink-golf'],
       ]) {
         const on = contrast(theme.get(ink as string) as string, theme.get(fill as string) as string);
         expect(on, `${ink} on ${fill}`).toBeGreaterThanOrEqual(4.5);
@@ -157,18 +157,22 @@ describe('palette parity', () => {
     }
   });
 
-  it('separates heavy from light by lightness, not only by hue', () => {
+  it('separates heavy from light on the axis colour blindness leaves alone', () => {
     /*
      * This started as red and green, which is exactly the pair red-green
-     * colour blindness collapses — and both were dark, so they barely
-     * separated in greyscale either. Amber is nearly three times the
-     * luminance of the red in the worse of the two themes, which is a
-     * difference that survives any colour vision at all.
+     * colour blindness collapses. Rust and teal is a yellow-blue pair, and
+     * blue-yellow is the axis that survives — so the test is not "are these
+     * different colours" but "are they still different once the red-green
+     * channel is gone".
+     *
+     * Simulated deuteranopia, then how far apart they sit on blue-versus-
+     * yellow. Rust and teal score about 180 of a possible 255; red and green
+     * scored 90 and came out as two olives, which is what this replaced.
      */
     for (const theme of [dark, light]) {
-      const heavy = luminance(theme.get('--color-rir-1') as string);
-      const lighter = luminance(theme.get('--color-effort-light') as string);
-      expect(lighter / heavy).toBeGreaterThan(4);
+      const heavy = deuteranope(theme.get('--color-volume') as string);
+      const lighter = deuteranope(theme.get('--color-strength') as string);
+      expect(Math.abs(blueYellow(heavy) - blueYellow(lighter))).toBeGreaterThan(120);
     }
   });
 
@@ -232,6 +236,40 @@ function contrast(a: string, b: string): number {
   const la = luminance(a);
   const lb = luminance(b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/* --- what two colours look like to the commonest colour blindness --------- */
+
+/**
+ * Viénot's deuteranope projection, applied in linear light. Red-green
+ * deficiency is what makes a red/green pair a single colour; simulating it is
+ * the only way to check a pair honestly rather than by looking at it.
+ */
+function deuteranope(hex: string): string {
+  const value = hex.replace('#', '');
+  const toLinear = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const toSrgb = (c: number) => {
+    const clamped = Math.min(1, Math.max(0, c));
+    return clamped <= 0.0031308 ? 12.92 * clamped : 1.055 * clamped ** (1 / 2.4) - 0.055;
+  };
+  const [r, g, b] = [0, 2, 4].map((i) => toLinear(parseInt(value.slice(i, i + 2), 16) / 255)) as [
+    number,
+    number,
+    number,
+  ];
+  const out = [0.625 * r + 0.375 * g, 0.7 * r + 0.3 * g, 0.3 * g + 0.7 * b];
+  return `#${out.map((c) => Math.round(toSrgb(c) * 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** Where a colour sits on blue-versus-yellow: the axis deficiency leaves intact. */
+function blueYellow(hex: string): number {
+  const value = hex.replace('#', '');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16)) as [
+    number,
+    number,
+    number,
+  ];
+  return b - (r + g) / 2;
 }
 
 describe('the light ground', () => {

@@ -185,7 +185,7 @@ export function DaySlotCard({
   return (
     <Card
       title={label}
-      /* Red heavy, green light. It was the word "light" appended to the
+      /* Rust heavy, teal light. It was the word "light" appended to the
          weekday, which is a thing you read rather than see, and said nothing
          at all on a heavy day. */
       accent={EFFORT_COLOR[intensity]}

@@ -7,36 +7,38 @@ import type { Intensity } from './weekTemplate';
 /*  day editor said nothing at all. One line of colour says it on the card, on */
 /*  the tile and in the calendar at once, and the words come off.             */
 /*                                                                            */
-/*  No new hues: heavy is RIR 1's dark red and light is the amber of RIR 3 —   */
-/*  the scale this app already uses for hardest to easiest — while golf is the */
-/*  blue its chip has always been.                                            */
+/*  The three are the ones the dashboard rings already use — volume, strength, */
+/*  muscle — chosen from there because that is the one screen where all three  */
+/*  sit side by side, and the place they were reported as telling apart.       */
 /*                                                                            */
-/*  It was red and green, which is the one pair red-green colour blindness     */
-/*  collapses, and both were dark, so they barely separated in greyscale       */
-/*  either. Red to amber separates by lightness as well as hue.               */
+/*  This started as red and green, which is the pair red-green colour          */
+/*  blindness collapses. Rust and teal is a yellow-blue pair instead, and      */
+/*  blue-yellow is the axis that survives: simulated deuteranopia separates    */
+/*  them by about 180 on it, where red and green managed 90 and came out as    */
+/*  two olives.                                                                */
 /*                                                                            */
-/*  Colour is never the ONLY thing that says it: the card still names the      */
-/*  workout, the calendar chip still carries its short name, and the golf day  */
-/*  still reads GOLF. This is a second channel, not the only one.             */
+/*  Colour is never the ONLY thing that says it: the card names the workout,   */
+/*  the calendar chip carries its short name, the golf day reads GOLF, and     */
+/*  every label a screen reader gets spells the effort out.                    */
 /* -------------------------------------------------------------------------- */
 
 export type EffortKind = Intensity | 'golf';
 
 export const EFFORT_COLOR: Record<EffortKind, string> = {
-  heavy: 'var(--color-rir-1)',
-  light: 'var(--color-effort-light)',
+  heavy: 'var(--color-volume)',
+  light: 'var(--color-strength)',
   golf: 'var(--color-muscle)',
 };
 
 /**
- * What to write on top of one of those fills. Not one colour: the amber is far
- * too bright to take white, which is the same thing that makes it readable
- * beside the red.
+ * What to write on top of one of those fills. One ink per fill rather than one
+ * for all three: in dark, two of them are bright enough to need near-black
+ * while the blue needs white. See the tokens' own note.
  */
 export const EFFORT_TEXT: Record<EffortKind, string> = {
-  heavy: 'var(--color-effort-text)',
-  light: 'var(--color-effort-ink)',
-  golf: 'var(--color-effort-text)',
+  heavy: 'var(--color-effort-ink-heavy)',
+  light: 'var(--color-effort-ink-light)',
+  golf: 'var(--color-effort-ink-golf)',
 };
 
 /** For anything a screen reader reads, where a colour is not available. */

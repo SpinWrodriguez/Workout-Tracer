@@ -32,21 +32,26 @@
   --color-cta: #ffffff; /* primary button fill, black text on it */
 
   /* How hard a session is, as a colour rather than a word, on the day card and
-     in the calendar. No new hues at all: heavy is rir-1 and light is rir-3,
-     which is the scale this app has always used for hardest to easiest, and
-     golf is the blue its chip has always been.
+     in the calendar: --volume heavy, --strength light, --muscle a round. The
+     three the dashboard rings already use, which is where they were chosen
+     from — the one place in the app these three sit side by side, and the
+     place they were reported as legible.
 
-     It was red and green, which is the one pair red-green colour blindness
-     collapses — and worse, both were dark, so they were a near-match in
-     greyscale too. Red to amber separates by LIGHTNESS: 5.5x apart in dark,
-     3x in light, where red and green were 1.7x.
+     Rust and teal is a yellow-blue pair, and blue-yellow is the axis that
+     survives red-green colour blindness: simulated, they separate by ~180 on
+     that axis where red and green managed 90 and looked like two olives. That
+     is the whole reason for this trio; lightness barely separates them at all.
 
-     Two inks, because those fills are not the same kind of colour: white on
-     the two dark ones, near-black on the amber. Both restated per theme so
-     neither leaks. */
-  --color-effort-light: #e8a020; /* amber — a light session */
-  --color-effort-text: #ffffff;
-  --color-effort-ink: #0a0a0a;
+     The one weak pair left is teal against the golf blue. They never share a
+     column — a day shows a workout chip or a golf chip, never both — and the
+     golf one says GOLF in capitals.
+
+     An ink per fill, because these three are nothing like each other in
+     lightness: near-black on the two bright ones here, white on the blue.
+     Restated per theme, and in light all three take white. */
+  --color-effort-ink-heavy: #0a0a0a;
+  --color-effort-ink-light: #0a0a0a;
+  --color-effort-ink-golf: #ffffff;
 
   --color-rir-1: #8e2b2b; /* dark red — RIR 1, hardest */
   --color-rir-2: #7a5b12; /* dark amber — RIR 2 */
@@ -110,18 +115,13 @@
     --color-bodyweight: #6841d6;
     --color-cta: #0a0a0a;
 
-    /* Brighter than rir-3's #b0851a, and deliberately so: that value is a
-       SWATCH, darkened until it cleared 3:1 against a white card, and this is
-       a FILL with near-black written on it. What it has to do is stay far from
-       the red in lightness — 4.3x here — because that distance is the whole
-       point of the pair. The 3px rule on a white card is the one place it
-       reads soft, and that rule never carries meaning on its own.
-
-       Same two inks. Restated rather than inherited: a token the light block
-       does not name is a token that leaks the dark value by accident. */
-    --color-effort-light: #d99a12;
-    --color-effort-text: #ffffff;
-    --color-effort-ink: #0a0a0a;
+    /* Every accent darkens in this theme, so all three effort fills take white
+       here where two of them took near-black in dark. Restated rather than
+       inherited: a token this block does not name is a token that leaks the
+       dark value by accident. */
+    --color-effort-ink-heavy: #ffffff;
+    --color-effort-ink-light: #ffffff;
+    --color-effort-ink-golf: #ffffff;
 
     /* Swatches: each step >=3:1 on a white card and >=1.5x the luminance of
        the step below, so red / amber / bright amber still reads as a scale. */
