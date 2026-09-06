@@ -211,13 +211,23 @@
   }
 
   /* ----------------------------------------------------------------------
-     Portrait only, and only on a phone.
+     Portrait on a phone, whichever way the phone is held.
 
      The manifest asks for portrait and Android honours it. iOS ignores
-     manifest orientation entirely, and Safari has no Screen Orientation lock
-     to call instead, so a turned iPhone rotates the app whatever the manifest
-     says. Covering the app and asking for it back upright is the only thing
-     that actually holds there.
+     manifest orientation entirely, and Safari exposes no Screen Orientation
+     lock to call instead, so a turned iPhone rotates the app whatever is
+     declared. The only thing left is to turn it back: the app is laid out at
+     the portrait size and rotated a quarter turn against the screen, so what
+     you see stays upright relative to the phone's body.
+
+     Sized 100dvh wide by 100dvw tall — the swap is the point — then rotated
+     about its top-left corner and translated by its own height, which lands it
+     exactly over the viewport.
+
+     A transform also makes this the containing block for every `position:
+     fixed` descendant, which is what carries the bottom nav, the sheets and
+     the floating button around with it rather than leaving them pinned to the
+     physical screen.
 
      The query is written so it can only ever hit a phone. A short landscape
      viewport AND a coarse pointer: an iPad in landscape is 744px tall or more
@@ -225,13 +235,32 @@
      landscape test also keeps it away from a portrait phone whose viewport has
      gone short because the keyboard is up.
      ---------------------------------------------------------------------- */
-  .portrait-only {
-    display: none;
-  }
-
   @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
-    .portrait-only {
-      display: flex;
+    #root {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100dvh;
+      height: 100dvw;
+      transform-origin: top left;
+      /* The document cannot scroll a fixed element, so the app scrolls inside
+         this one. Without it the rotated view is cropped at the fold and the
+         bottom of every screen is simply unreachable. */
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Undo the system's own rotation, so it lands upright either way the phone
+       was turned. A fixed quarter turn is upside down half the time, and both
+       are ordinary ways to hold a phone. `data-screen-angle` is set by
+       `trackScreenAngle`. */
+    :root[data-screen-angle='90'] #root {
+      transform: rotate(-90deg) translateX(-100%);
+    }
+
+    :root[data-screen-angle='270'] #root {
+      transform: rotate(90deg) translateY(-100%);
     }
   }
 }
