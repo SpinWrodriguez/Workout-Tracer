@@ -176,40 +176,28 @@ export function DaySlotCard({
     setWasToday(isToday);
     setOpen(isToday);
   }
-  const shown = open || editing;
+  /* An empty day has no rows to fold and so no toggle to unfold it with —
+     leaving it shut would hide Edit and Start behind a chevron that is not
+     there. */
+  const shown = open || editing || entries.length === 0;
 
   return (
     <Card
       title={label}
       className="mt-3"
+      /* Edit and Start used to live up here, two small pills at the top right
+         of every card. Folded, five cards stack their headers a thumb-width
+         apart, and scrolling the list kept starting workouts and opening
+         editors by accident. They are inside the card now, full height, and
+         only on a card you have opened — a shut card has nothing to hit but
+         its own fold toggle. */
       trailing={
-        <span className="flex items-center gap-2">
-          {weekday !== undefined && (
-            <Label className={isToday ? 'text-text!' : ''}>
-              {isToday ? 'today' : WEEKDAY_LABEL[weekday]}
-              {intensity === 'light' ? ' · light' : ''}
-            </Label>
-          )}
-          <button
-            type="button"
-            onClick={onToggleEdit}
-            className="rounded-full bg-surface-2 px-3 py-1.5 text-[12px] font-medium text-text-dim"
-          >
-            {editing ? 'Done' : 'Edit'}
-          </button>
-          {!editing && (
-            <button
-              type="button"
-              onClick={onStart}
-              className={`relative rounded-full px-3.5 py-1.5 text-[12px] font-semibold ${
-                isToday ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
-              }`}
-            >
-              Start
-              <HapticTick />
-            </button>
-          )}
-        </span>
+        weekday !== undefined ? (
+          <Label className={isToday ? 'text-text!' : ''}>
+            {isToday ? 'today' : WEEKDAY_LABEL[weekday]}
+            {intensity === 'light' ? ' · light' : ''}
+          </Label>
+        ) : undefined
       }
     >
       {note && (
@@ -325,6 +313,28 @@ export function DaySlotCard({
         />
       )}
 
+      {shown && !editing && (
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={onToggleEdit}
+            className="h-11 rounded-full bg-surface-2 px-5 text-[13px] font-medium text-text-dim"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={onStart}
+            className={`relative h-11 flex-1 rounded-full font-semibold ${
+              isToday ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
+            }`}
+          >
+            Start
+            <HapticTick />
+          </button>
+        </div>
+      )}
+
       {/* What the day adds up to. The estimate has been computed since the
           first generator and never shown, so the one question you ask before
           starting — have I got time for this — was the one thing the card
@@ -389,6 +399,16 @@ export function DaySlotCard({
             Delete workout
           </button>
         </div>
+      )}
+
+      {editing && (
+        <button
+          type="button"
+          onClick={onToggleEdit}
+          className="mt-2 h-11 w-full rounded-full bg-surface-2 text-[13px] font-medium text-text-dim"
+        >
+          Done
+        </button>
       )}
     </Card>
   );

@@ -91,6 +91,13 @@ async function showExercises(ui: ReturnType<typeof user>, card: HTMLElement) {
   return card;
 }
 
+/** Edit lives inside the card, so the card has to be open to reach it. */
+async function editWorkout(ui: ReturnType<typeof user>, card: HTMLElement) {
+  await showExercises(ui, card);
+  await ui.click(within(card).getByRole('button', { name: 'Edit' }));
+  return card;
+}
+
 describe('making a workout', () => {
   /** Taps a muscle on the body picker, which is how a workout says what it is. */
   const pickMuscle = async (ui: ReturnType<typeof user>, name: string) => {
@@ -282,7 +289,7 @@ describe('renaming a workout', () => {
     const { ui, view } = await openProgram();
 
     const card = await workoutCard('Monday squats');
-    await ui.click(within(card).getByRole('button', { name: 'Edit' }));
+    await editWorkout(ui, card);
     const field = await screen.findByRole('textbox', { name: 'Name' });
     await ui.clear(field);
     await ui.type(field, 'Squat and press');
@@ -307,7 +314,7 @@ describe('renaming a workout', () => {
     const { ui } = await openProgram();
 
     const card = await workoutCard('Monday squats');
-    await ui.click(within(card).getByRole('button', { name: 'Edit' }));
+    await editWorkout(ui, card);
     await ui.clear(await screen.findByRole('textbox', { name: 'Name' }));
     await ui.tab();
 
@@ -435,7 +442,7 @@ describe('reordering and removing an exercise', () => {
     await seedWorkout('A', ['bb_back_squat', 'bb_rdl', 'sm_calf_raise']);
     const { ui } = await openProgram();
     const card = await workoutCard('Monday squats');
-    await ui.click(within(card).getByRole('button', { name: 'Edit' }));
+    await editWorkout(ui, card);
     return { ui, card };
   }
 
@@ -512,7 +519,7 @@ describe('picking and unpicking an exercise', () => {
     const { ui } = await openProgram();
 
     const card = await workoutCard('Monday squats');
-    await ui.click(within(card).getByRole('button', { name: 'Edit' }));
+    await editWorkout(ui, card);
     await ui.click(within(card).getByRole('button', { name: 'Add exercise' }));
 
     /* The tick is a promise that tapping does something. Before this it was
@@ -535,7 +542,7 @@ describe('picking and unpicking an exercise', () => {
     const { ui } = await openProgram();
 
     const card = await workoutCard('Monday squats');
-    await ui.click(within(card).getByRole('button', { name: 'Edit' }));
+    await editWorkout(ui, card);
     await ui.click(within(card).getByRole('button', { name: 'Add exercise' }));
 
     const row = await screen.findByRole('button', {
@@ -908,9 +915,14 @@ describe('a week of workouts, folded up', () => {
     // Shut, but not silent: the name and the totals are still on the card.
     expect(tomorrow.textContent).not.toContain(named('bb_bent_over_row'));
     expect(tomorrow.textContent).toContain('1 exercise · 3 sets');
-    expect(within(tomorrow).getByRole('button', { name: 'Start' })).toBeTruthy();
+    /* And nothing to hit by accident: Edit and Start were two small pills at
+       the top of every folded card, right where a thumb scrolls the list. */
+    expect(within(tomorrow).queryByRole('button', { name: 'Start' })).toBeNull();
+    expect(within(tomorrow).queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(within(today).getByRole('button', { name: 'Start' })).toBeTruthy();
 
     await showExercises(ui, tomorrow);
     await waitFor(() => expect(tomorrow.textContent).toContain(named('bb_bent_over_row')));
+    expect(within(tomorrow).getByRole('button', { name: 'Start' })).toBeTruthy();
   });
 });
