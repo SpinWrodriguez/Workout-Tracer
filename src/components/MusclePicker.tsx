@@ -27,8 +27,10 @@ const CAPTION = 12;
 /* Selected muscles at full `--color-volume` were the deepest red the app has,
    which is the heat map's "you have hammered this" end of the ramp — a picker
    is not a warning. Tinted back over the unselected fill it still reads as
-   plainly on, and the full-strength outline keeps the edge crisp. */
-const SELECTED_FILL = 'color-mix(in oklab, var(--color-volume) 45%, var(--color-surface-2))';
+   plainly on without shouting. One step up from the first try, where a step is
+   the Levels legend's own (100 - MIN_TINT) / 7, so the two body maps stay in
+   the same family of tones. */
+const SELECTED_FILL = 'color-mix(in oklab, var(--color-volume) 56%, var(--color-surface-2))';
 
 function View({
   view,
