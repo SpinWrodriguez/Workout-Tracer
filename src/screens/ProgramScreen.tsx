@@ -66,7 +66,9 @@ import { Card, Empty, Label, Screen } from '../components/Layout';
 import { WeekStrip, type WeekStripDay } from '../components/WeekStrip';
 import { shiftIso, weekStart } from '../lib/format';
 import { budgetMinutes, readTimeFactor, realMinutes } from '../lib/timeModel';
-import { fairShare } from '../lib/volume';
+import { MUSCLES } from '../db/seed/muscles';
+import { Silhouette } from '../components/Silhouette';
+import { fairShare, plannedSetsPerMuscle } from '../lib/volume';
 
 const DAY_SLOTS = SLOTS;
 
@@ -283,6 +285,26 @@ export function ProgramScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [week, schedule, slots, golfDays],
   );
+
+  /**
+   * What the week on screen intends to train, from the workouts placed on it.
+   *
+   * Programmed, not logged: the Levels map answers "how did the week go", which
+   * is a question for afterwards. This one answers "what does this week miss",
+   * which is still yours to fix — which is the whole reason it sits above the
+   * workouts rather than on Levels.
+   */
+  const plannedVolume = useMemo(() => {
+    const entries = week
+      .map((day) => day.plannedSlot)
+      .filter((slot): slot is DaySlot => slot !== undefined)
+      .flatMap((slot) => entriesForSlot(slots ?? [], slot));
+    return plannedSetsPerMuscle(entries, byId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [week, slots, byId]);
+
+  /** Muscles the week does not touch at all — the gap worth naming. */
+  const untouched = MUSCLES.filter((muscle) => (plannedVolume[muscle.id] ?? 0) === 0);
 
   /** The workouts on the visible week, in the order they are trained. */
   const placedSlots = useMemo(
@@ -1069,6 +1091,23 @@ export function ProgramScreen({
             <Label className="mt-1.5 block">
               Make workouts below, then drop them on the days you want them.
             </Label>
+
+            {/* What the week on screen adds up to, before it is trained. The
+                same map and the same ramp as Levels, reading the plan instead
+                of the log — so the hole is visible while there is still time
+                to fill it. */}
+            <div className="mt-3 border-t border-border pt-3">
+              <Silhouette volume={plannedVolume} />
+              <p className="mt-2 text-center text-[12px] font-medium text-text-dim">
+                {placedSlots.length === 0
+                  ? 'Nothing placed on this week yet.'
+                  : untouched.length === 0
+                    ? `This week covers every muscle across ${placedSlots.length} workout${
+                        placedSlots.length === 1 ? '' : 's'
+                      }.`
+                    : `Not in this week: ${untouched.map((muscle) => muscle.name).join(', ')}.`}
+              </p>
+            </div>
           </>
         ) : (
           <Empty>--</Empty>

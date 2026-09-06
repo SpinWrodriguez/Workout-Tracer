@@ -492,6 +492,99 @@ describe('picking and unpicking an exercise', () => {
   });
 });
 
+describe('what the week on screen will train', () => {
+  /** The block card's own body map, by the muscle labels it carries. */
+  async function plannedMap(): Promise<Record<string, string>> {
+    const heading = await screen.findByRole('heading', { name: 'Current block' });
+    const card = heading.closest('section') as HTMLElement;
+    const titles = [...card.querySelectorAll('title')].map((node) => node.textContent ?? '');
+    return Object.fromEntries(
+      titles.map((text) => [text.split(' — ')[0] ?? '', text.split(' — ')[1] ?? '']),
+    );
+  }
+
+  const blockCardText = async () =>
+    ((await screen.findByRole('heading', { name: 'Current block' }))
+      .closest('section') as HTMLElement).textContent ?? '';
+
+  it('counts programmed sets, not logged ones', async () => {
+    /* The distinction the map exists for. Levels answers "how did the week
+       go", which is a question for afterwards; this answers "what does this
+       week miss", which is still yours to fix. Nothing is logged here at all
+       and the map is still full. */
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Squat day' } });
+    await seedWorkout('A', ['bb_back_squat'], 3);
+    await seedPlan({ [MONDAY]: 'A' });
+
+    await openProgram();
+
+    await waitFor(async () => {
+      const map = await plannedMap();
+      // Three sets of back squat: quads and glutes whole, four more at a half.
+      expect(map.Quads).toBe('3 sets');
+      expect(map.Glutes).toBe('3 sets');
+      expect(map.Hamstrings).toBe('1.5 sets');
+      expect(map.Abs).toBe('1.5 sets');
+    });
+    expect(await db.setLog.count()).toBe(0);
+  });
+
+  it('multiplies by the sets programmed, since one row is not one set', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Squat day' } });
+    await seedWorkout('A', ['bb_back_squat'], 5);
+    await seedPlan({ [MONDAY]: 'A' });
+
+    await openProgram();
+
+    await waitFor(async () => expect((await plannedMap()).Quads).toBe('5 sets'));
+  });
+
+  it('ignores a workout that is not placed on this week', async () => {
+    /* A workout you have made but not dropped on a day trains nothing yet.
+       Counting it would make the map a list of what exists rather than of
+       what the week is going to do. */
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Unplaced squats' } });
+    await seedWorkout('A', ['bb_back_squat'], 3);
+
+    await openProgram();
+
+    await waitFor(async () => expect(await blockCardText()).toMatch(/Nothing placed on this week/));
+    expect((await plannedMap()).Quads).toBe('0 sets');
+  });
+
+  it('names the muscles the week leaves out', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Squat day' } });
+    await seedWorkout('A', ['bb_back_squat'], 3);
+    await seedPlan({ [MONDAY]: 'A' });
+
+    await openProgram();
+
+    await waitFor(async () => expect(await blockCardText()).toMatch(/Not in this week:/));
+    const text = await blockCardText();
+    // A squat-only week trains no chest and no calves, and says so by name.
+    expect(text).toMatch(/Chest/);
+    expect(text).toMatch(/Calves/);
+    // And does not name what it does train.
+    expect(text.split('Not in this week:')[1]).not.toMatch(/Quads/);
+  });
+
+  it('follows the week strip rather than the calendar', async () => {
+    /* The map is of the week ON SCREEN. Stepping forward to an empty week has
+       to empty it, or it is a claim about a week nobody is looking at. */
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Squat day' } });
+    await seedWorkout('A', ['bb_back_squat'], 3);
+    await seedPlan({ [MONDAY]: 'A' });
+
+    const { ui } = await openProgram();
+    await waitFor(async () => expect((await plannedMap()).Quads).toBe('3 sets'));
+
+    await ui.click(screen.getByRole('button', { name: 'Next week' }));
+
+    await waitFor(async () => expect((await plannedMap()).Quads).toBe('0 sets'));
+    expect(await blockCardText()).toMatch(/Nothing placed on this week/);
+  });
+});
+
 describe('the golf buffer, said out loud', () => {
   it('tells the card why its workout has no pulling in it', async () => {
     /* The rule strips grip work from anything built the day before a round and

@@ -95,6 +95,23 @@ function emptyVolume(): MuscleVolume {
  * Weighted set counts per muscle for whatever set logs are passed in — the
  * caller decides the window.
  */
+/** One exercise's worth of sets, spread over what it trains. */
+function addSets(out: MuscleVolume, exercise: Exercise, sets: number): void {
+  // Warm-up mobility is counted nowhere: a 90/90 hip switch is not a set of
+  // training and would flatter every weekly total it touched.
+  if (exercise.isMobility) return;
+  for (const muscle of exercise.primaryMuscles) out[muscle] += PRIMARY_WEIGHT * sets;
+  for (const muscle of exercise.secondaryMuscles) out[muscle] += SECONDARY_WEIGHT * sets;
+}
+
+/** Halves only; keep the arithmetic exact rather than trusting float sums. */
+function toHalves(volume: MuscleVolume): MuscleVolume {
+  for (const key of Object.keys(volume) as MuscleId[]) {
+    volume[key] = Math.round(volume[key] * 2) / 2;
+  }
+  return volume;
+}
+
 export function setsPerMuscle(
   logs: SetLog[],
   exercisesById: Map<string, Exercise>,
@@ -102,16 +119,32 @@ export function setsPerMuscle(
   const out = emptyVolume();
   for (const log of logs) {
     const exercise = exercisesById.get(log.exerciseId);
-    if (!exercise) continue;
-    // Warm-up mobility is logged but never counted: a 90/90 hip switch is not
-    // a set of training and would flatter every weekly total it touched.
-    if (exercise.isMobility) continue;
-    for (const muscle of exercise.primaryMuscles) out[muscle] += PRIMARY_WEIGHT;
-    for (const muscle of exercise.secondaryMuscles) out[muscle] += SECONDARY_WEIGHT;
+    // One logged row is one set.
+    if (exercise) addSets(out, exercise, 1);
   }
-  // Halves only; keep the arithmetic exact rather than trusting float sums.
-  for (const key of Object.keys(out) as MuscleId[]) out[key] = Math.round(out[key] * 2) / 2;
-  return out;
+  return toHalves(out);
+}
+
+/**
+ * The same weighting over PROGRAMMED sets: what a week intends to train rather
+ * than what it has trained.
+ *
+ * The distinction is the whole point of showing this on the Program screen. A
+ * logged map answers "how did the week go", which is a question for afterwards;
+ * a planned map answers "what does this week miss", which is a question you can
+ * still do something about. One entry is several sets, so it carries its
+ * targetSets rather than counting as one the way a logged row does.
+ */
+export function plannedSetsPerMuscle(
+  entries: { exerciseId: string; targetSets: number }[],
+  exercisesById: Map<string, Exercise>,
+): MuscleVolume {
+  const out = emptyVolume();
+  for (const entry of entries) {
+    const exercise = exercisesById.get(entry.exerciseId);
+    if (exercise) addSets(out, exercise, entry.targetSets);
+  }
+  return toHalves(out);
 }
 
 export interface MuscleVolumeRow {
