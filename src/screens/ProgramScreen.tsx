@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { DaySlot, Exercise, GolfDay } from '../db/types';
-import { friendlyDate, longDate, todayIso } from '../lib/format';
+import { longDate, todayIso } from '../lib/format';
 import { WEEKDAY_LABEL, buildWeek, gripBufferNote, weekdayOf, type Weekday } from '../lib/golf';
 import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
@@ -1318,20 +1318,6 @@ export function ProgramScreen({
         />
       )}
 
-      {golfDays && golfDays.length > 0 && (
-        <Card title="Golf calendar" className="mt-3">
-          {golfDays
-            .slice()
-            .sort((a, b) => b.date.localeCompare(a.date))
-            .slice(0, 8)
-            .map((day) => (
-              <div key={day.date} className="flex items-baseline justify-between gap-3 py-1.5">
-                <span className="text-[14px] font-medium">{friendlyDate(day.date)}</span>
-                <Label>{day.status}</Label>
-              </div>
-            ))}
-        </Card>
-      )}
     </Screen>
   );
 }

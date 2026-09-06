@@ -209,4 +209,29 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  /* ----------------------------------------------------------------------
+     Portrait only, and only on a phone.
+
+     The manifest asks for portrait and Android honours it. iOS ignores
+     manifest orientation entirely, and Safari has no Screen Orientation lock
+     to call instead, so a turned iPhone rotates the app whatever the manifest
+     says. Covering the app and asking for it back upright is the only thing
+     that actually holds there.
+
+     The query is written so it can only ever hit a phone. A short landscape
+     viewport AND a coarse pointer: an iPad in landscape is 744px tall or more
+     and a desktop window has a fine pointer, so neither can trip it. The
+     landscape test also keeps it away from a portrait phone whose viewport has
+     gone short because the keyboard is up.
+     ---------------------------------------------------------------------- */
+  .portrait-only {
+    display: none;
+  }
+
+  @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+    .portrait-only {
+      display: flex;
+    }
+  }
 }
