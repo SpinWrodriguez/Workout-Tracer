@@ -1019,3 +1019,29 @@ describe('the day editor', () => {
     expect(sheet.textContent).not.toMatch(/Build one with AI/);
   });
 });
+
+describe('which week is on screen', () => {
+  it('says so as the arrows move it, so a question can be about it', async () => {
+    /* The coach button floats over this screen but belongs to the app. Asked
+       on a Sunday about the week being planned, it answered about the week
+       ending that evening, because nothing told it what was on show. */
+    const seen: string[] = [];
+    draw(
+      <ProgramScreen
+        exercises={exercises}
+        onStartDay={vi.fn()}
+        onWeekChange={(date) => seen.push(date)}
+      />,
+    );
+    await screen.findByRole('heading', { name: 'Plan the week' });
+    const ui = user();
+
+    expect(seen.at(-1)).toBe(todayIso());
+
+    await ui.click(screen.getByRole('button', { name: 'Next week' }));
+    await waitFor(() => expect(seen.at(-1)).toBe(shiftIso(todayIso(), 7)));
+
+    await ui.click(screen.getByRole('button', { name: 'Previous week' }));
+    await waitFor(() => expect(seen.at(-1)).toBe(todayIso()));
+  });
+});

@@ -97,9 +97,16 @@ function Footnote({ tools, ms, tokens }: Note) {
 export function CoachSheet({
   exercises,
   initialQuestion,
+  weekOf,
   onClose,
 }: {
   exercises: Exercise[];
+  /**
+   * A date in the week the Program screen currently has open. Planning next
+   * week from this one is the normal way to use that screen, and without this
+   * the coach answered about the current week whatever was on screen.
+   */
+  weekOf?: string;
   /**
    * Asked as soon as the sheet opens. How History hands over a session: the
    * question names the workout, and the coach reads it with session_detail.
@@ -170,7 +177,7 @@ export function CoachSheet({
 
     /* Rebuilt per question rather than once when the sheet opens: a set logged
        two minutes ago is exactly the thing you would ask about. */
-    const context = await buildCoachContext(exercises);
+    const context = await buildCoachContext(exercises, weekOf);
     const answer = await askCoach({
       question: asked,
       turns,

@@ -81,9 +81,18 @@ const weekDatesOf = (iso: string): string[] =>
 export function ProgramScreen({
   exercises,
   onStartDay,
+  onWeekChange,
 }: {
   exercises: Exercise[];
   onStartDay: (slot: DaySlot) => void;
+  /**
+   * Which week is on screen, published upward as the arrows move it. The
+   * coach button floats above this screen and belongs to the app, not to it,
+   * so this is how "the week I have open" reaches the question — planning
+   * next week from this one is the normal way to use this screen, and the
+   * coach used to answer about the current week regardless.
+   */
+  onWeekChange?: (anchorDate: string) => void;
 }) {
   const [anchor, setAnchor] = useState(() => todayIso());
   const [editingDate, setEditingDate] = useState<string | null>(null);
@@ -188,6 +197,10 @@ export function ProgramScreen({
      muscle is short tells it nothing. */
   const share = fairShare(training.weeklySetTarget, byId);
   const shape = training.shape;
+
+  useEffect(() => {
+    onWeekChange?.(anchor);
+  }, [anchor, onWeekChange]);
 
   const week: WeekStripDay[] = useMemo(() => {
     return buildWeek({

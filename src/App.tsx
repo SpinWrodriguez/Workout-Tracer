@@ -33,6 +33,9 @@ export default function App() {
   /* A question handed over by another screen — a session from History — asked
      the moment the sheet opens. */
   const [askAbout, setAskAbout] = useState<string | undefined>(undefined);
+  /* Which week the Program screen has open, so a question asked over the top
+     of it is about that week rather than about today's. */
+  const [programWeek, setProgramWeek] = useState<string | undefined>(undefined);
   const exercises = useLiveQuery(() => db.exercise.orderBy('name').toArray(), [], undefined);
   /*
    * A workout left running. Keyed on the settings row so it appears the moment
@@ -146,7 +149,11 @@ export default function App() {
         />
       )}
       {route.tab === 'program' && (
-        <ProgramScreen exercises={exercises} onStartDay={startSession} />
+        <ProgramScreen
+          exercises={exercises}
+          onStartDay={startSession}
+          onWeekChange={setProgramWeek}
+        />
       )}
       {route.tab === 'settings' && <SettingsScreen />}
 
@@ -177,6 +184,10 @@ export default function App() {
         <CoachSheet
           exercises={exercises}
           initialQuestion={askAbout}
+          /* Only while that screen is the one open. Asked from Home or
+             History there is no week on screen, and the current one is what
+             the question is about. */
+          weekOf={route.tab === 'program' ? programWeek : undefined}
           onClose={() => {
             setAsking(false);
             setAskAbout(undefined);

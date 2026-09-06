@@ -12,6 +12,8 @@ import { db } from '../db/db';
 import { seedDatabase } from '../db/seed';
 import { EXERCISES } from '../db/seed/exercises';
 import { writeApiKey } from './askModel';
+import { shiftIso, todayIso, weekStart } from './format';
+import { writePlan, writeSchedule } from './program';
 import {
   MAX_TOOL_ROUNDS,
   MEMORY_TURNS,
@@ -477,5 +479,73 @@ describe('a conversation that is kept', () => {
     // The trimmed thread plus the new question, starting on a question.
     expect(sent[0]?.messages).toHaveLength(MEMORY_TURNS + 1);
     expect(sent[0]?.messages[0]?.role).toBe('user');
+  });
+});
+
+describe('which week the question is about', () => {
+  /*
+   * The Program screen has arrows on it, and planning next week from this one
+   * is the normal way to use it. The coach floats over that screen but is not
+   * part of it, so it read the current week whatever was on show: asked on a
+   * Sunday about the week being planned, it answered about the empty week
+   * ending that evening.
+   */
+  const nextWeek = () => shiftIso(weekStart(todayIso()), 7);
+
+  /** One workout, placed on a date, so a week has something in it to read. */
+  async function planWorkoutOn(date: string, name: string) {
+    await writeSchedule('block_1', { A: { intensity: 'heavy', name } });
+    await db.blockExercise.bulkPut(
+      ['bb_back_squat', 'bb_rdl'].map((exerciseId, order) => ({
+        blockId: 'block_1',
+        exerciseId,
+        daySlot: 'A' as const,
+        targetSets: 3,
+        repRangeLow: 8,
+        repRangeHigh: 10,
+        order,
+      })),
+    );
+    await writePlan('block_1', { [date]: 'A' });
+  }
+
+  it('reads the week it is given, not the one today falls in', async () => {
+    const monday = nextWeek();
+    await planWorkoutOn(monday, 'Next Monday squats');
+
+    const context = await buildCoachContext(EXERCISES, monday);
+    const week = context.payload.week as Record<string, unknown>;
+
+    expect(week.starting).toBe(monday);
+    expect(week.viewing).toMatch(/future week/);
+    // And the workout reads as belonging to that week, on its real date.
+    const workouts = week.workouts as { name: string; date?: string; placed: boolean }[];
+    expect(workouts.find((row) => row.date === monday)?.placed).toBe(true);
+  });
+
+  it('is the current week when nothing is open', async () => {
+    const context = await buildCoachContext(EXERCISES);
+    const week = context.payload.week as Record<string, unknown>;
+
+    expect(week.starting).toBe(weekStart(todayIso()));
+    expect(week.viewing).toBe('the current week');
+  });
+
+  it('does not claim a workout is in a week it is not in', async () => {
+    /* The bug this guards: a workout placed next week showing up as next to
+       today's date because the plan was resolved against the wrong week. */
+    const monday = nextWeek();
+    await planWorkoutOn(monday, 'Next Monday squats');
+
+    const thisWeek = await buildCoachContext(EXERCISES);
+    const workouts = (thisWeek.payload.week as { workouts: { placed: boolean }[] }).workouts;
+    expect(workouts.every((row) => !row.placed)).toBe(true);
+  });
+
+  it('tells the model the week may not be the current one', async () => {
+    // Otherwise it reads `week` as "this week" and contradicts the screen.
+    const { sent } = await ask([says('ok')]);
+    const system = sent[0]?.system[0]?.text ?? '';
+    expect(system).toMatch(/week they are LOOKING AT/);
   });
 });

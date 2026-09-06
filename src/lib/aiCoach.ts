@@ -59,6 +59,7 @@ Then:
 The app's own numbers, so you never have to guess where one came from:
 
 - weeklySetTarget is a whole-week total of working sets across all muscles. The lifter sets it themselves with a stepper in Settings, in steps of 3. Nothing derives it from their recovery, their history or their goals. The generator builds weeks within 20% of it, and the validator rejects a week outside that band.
+- week is the week they are LOOKING AT, not always the current one — the Program screen has arrows and planning next week from this one is normal. week.viewing says which. When it is not the current week, "this week" in their question means that week, its workouts are a plan rather than a record, setsLogged of 0 means nothing has happened in it yet rather than that they skipped everything, and you say which week you mean.
 - musclesUnderTheirShare is measured against fairSharePerMuscle, which is the weekly set target spread evenly over the 18 muscles — the share the week they asked for can actually give each one. A set counts 1 for each muscle it trains directly and 0.5 for each it trains indirectly. The training floor from the literature is 8 weighted sets a week per muscle and the ceiling is 20; clearing 8 on every muscle takes far more sets than a three-day week has, so the share is what a list of shortfalls is measured against and the floor is what to aim a priority muscle at. Say which of the two you mean.
 - Never explain one of the app's numbers by inventing how it was worked out. Say what it means and where it is set. Guessing at a derivation is the same mistake as guessing at a weight.
 
@@ -116,15 +117,28 @@ function volumeSummary(sets: SetLog[], byId: Map<string, Exercise>, threshold: n
  * through the same functions the screens use, so nothing here can say
  * something the app would not.
  */
-export async function buildCoachContext(exercises: Exercise[]): Promise<CoachContext> {
+export async function buildCoachContext(
+  exercises: Exercise[],
+  /**
+   * A date in the week the user currently has open on the Program screen.
+   * Undefined means they are not looking at a week, and the current one is
+   * what the question is about.
+   *
+   * Without this the coach answered about the current week whatever was on
+   * screen: asked on a Sunday about the week being planned, it read back an
+   * empty Monday-to-Sunday and called it the setup.
+   */
+  weekOf?: string,
+): Promise<CoachContext> {
   const byId = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const today = todayIso();
-  const from = weekStart(today);
+  const from = weekStart(weekOf ?? today);
+  const currentWeek = from === weekStart(today);
 
   const [training, instructions, plan, sessions, weight] = await Promise.all([
     readTraining(),
     readAiInstructions(),
-    readWeekPlan(),
+    readWeekPlan(weekOf),
     recentSessions(6),
     db.sharedBodyWeight.orderBy('date').reverse().first(),
   ]);
@@ -157,10 +171,20 @@ export async function buildCoachContext(exercises: Exercise[]): Promise<CoachCon
            one of the app's own facts. */
         notes: instructions || undefined,
       },
-      thisWeek: {
+      week: {
+        starting: from,
+        viewing: currentWeek
+          ? 'the current week'
+          : from > weekStart(today)
+            ? 'a future week they are planning — nothing in it has happened yet'
+            : 'a past week they are looking back at',
         setsLogged: thisWeeksSets.length,
         fairSharePerMuscle: share,
         musclesUnderTheirShare: volumeSummary(thisWeeksSets, byId, share),
+        /* Every workout the block owns, each with the date it falls on in
+           THIS week — the anchored plan resolves that per week, so one not
+           placed in the week being read says so rather than borrowing the
+           date it has in another. */
         workouts: (plan?.all ?? []).map((day) => ({
           name: dayLabel({
             slot: day.slot,

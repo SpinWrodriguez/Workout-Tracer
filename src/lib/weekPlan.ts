@@ -28,6 +28,8 @@ export interface PlannedDay {
 
 export interface WeekPlan {
   blockId: string;
+  /** The Monday of the week this plan describes. */
+  weekStarting: string;
   /** Only what is actually in this week. */
   days: PlannedDay[];
   /** Every workout that exists, this week's or not — for the start sheet. */
@@ -39,12 +41,20 @@ export interface WeekPlan {
   scheduled: boolean;
 }
 
-export async function readWeekPlan(): Promise<WeekPlan | undefined> {
+/**
+ * The week around `anchorDate`, or around today when none is given.
+ *
+ * `today`, `todaySlot` and `next` stay anchored to the real today whatever the
+ * anchor is: those are about what to do now, and reading a future week does
+ * not change what is next. Everything else — which days are in it, what has
+ * been logged in it — follows the anchor.
+ */
+export async function readWeekPlan(anchorDate?: string): Promise<WeekPlan | undefined> {
   const plan = await readBlockPlan();
   if (!plan) return undefined;
 
   const today = todayIso();
-  const from = weekStart(today);
+  const from = weekStart(anchorDate ?? today);
   const sessions = await db.session
     .where('date')
     .between(from, shiftIso(from, 7), true, false)
@@ -108,6 +118,7 @@ export async function readWeekPlan(): Promise<WeekPlan | undefined> {
 
   return {
     blockId: plan.block.id,
+    weekStarting: from,
     days,
     all,
     next: (upcoming[0] ?? pending[0])?.slot,
