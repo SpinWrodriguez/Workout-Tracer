@@ -140,24 +140,41 @@ describe('palette parity', () => {
     expect(readFileSync('src/components/SetRow.tsx', 'utf8')).toContain('{caption}');
   });
 
-  it('pairs the effort fills with a readable text colour in both themes', () => {
-    /* A workout's effort is a colour now — red heavy, green light — and the
-       calendar writes the workout's short name on top of that fill at 9px
-       bold. That is small text, so it needs 4.5:1, and it is what set the
-       greens rather than the other way round. */
+  it('pairs each effort fill with an ink that can be read on it', () => {
+    /* A workout's effort is a colour now, and the calendar writes the
+       workout's short name across that fill at 9px bold. Small text needs
+       4.5:1 — and the two dark fills and the bright one cannot take the same
+       ink, which is the whole reason there are two. */
     for (const theme of [dark, light]) {
-      for (const token of ['--color-rir-1', '--color-effort-light', '--color-muscle']) {
-        const on = contrast(theme.get('--color-effort-text') as string, theme.get(token) as string);
-        expect(on, token).toBeGreaterThanOrEqual(4.5);
+      for (const [fill, ink] of [
+        ['--color-rir-1', '--color-effort-text'],
+        ['--color-muscle', '--color-effort-text'],
+        ['--color-effort-light', '--color-effort-ink'],
+      ]) {
+        const on = contrast(theme.get(ink as string) as string, theme.get(fill as string) as string);
+        expect(on, `${ink} on ${fill}`).toBeGreaterThanOrEqual(4.5);
       }
     }
   });
 
-  it('keeps heavy and light apart by more than lightness', () => {
-    // Red and green at similar lightness is exactly the pair that red-green
-    // colour blindness collapses, which is why neither chip is colour alone:
-    // the calendar writes the workout's name on it and every screen-reader
-    // label carries the word.
+  it('separates heavy from light by lightness, not only by hue', () => {
+    /*
+     * This started as red and green, which is exactly the pair red-green
+     * colour blindness collapses — and both were dark, so they barely
+     * separated in greyscale either. Amber is nearly three times the
+     * luminance of the red in the worse of the two themes, which is a
+     * difference that survives any colour vision at all.
+     */
+    for (const theme of [dark, light]) {
+      const heavy = luminance(theme.get('--color-rir-1') as string);
+      const lighter = luminance(theme.get('--color-effort-light') as string);
+      expect(lighter / heavy).toBeGreaterThan(4);
+    }
+  });
+
+  it('never leaves the colour to carry it alone', () => {
+    // Whatever the palette does, the calendar writes the workout's name on the
+    // chip and every screen-reader label spells out heavy or light.
     expect(readFileSync('src/components/WeekStrip.tsx', 'utf8')).toContain('EFFORT_WORD');
     expect(readFileSync('src/components/DayEditor.tsx', 'utf8')).toContain('EFFORT_WORD');
   });

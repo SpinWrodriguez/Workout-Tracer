@@ -151,7 +151,7 @@ export function WeekStrip({
                       ? undefined
                       : {
                           background: EFFORT_COLOR[day.intensity ?? 'heavy'],
-                          color: EFFORT_TEXT,
+                          color: EFFORT_TEXT[day.intensity ?? 'heavy'],
                         }
                   }
                 >
@@ -160,7 +160,7 @@ export function WeekStrip({
               ) : day.golf ? (
                 <div
                   className="mt-1.5 rounded-lg py-1 text-center text-[10px] font-bold"
-                  style={{ background: EFFORT_COLOR.golf, color: EFFORT_TEXT }}
+                  style={{ background: EFFORT_COLOR.golf, color: EFFORT_TEXT.golf }}
                 >
                   GOLF
                 </div>
