@@ -16,6 +16,8 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
 import { writeApiKey } from '../lib/askModel';
+import { LIGHT_DAY_CUE } from '../lib/weekTemplate';
+import { readSchedules } from '../lib/program';
 import { ProgramScreen } from './ProgramScreen';
 
 vi.mock('../lib/supabaseSource', () => ({
@@ -34,8 +36,13 @@ interface LibraryRow {
  * model cannot pick outside it, and the reply this test asserts on is the kind
  * a real one would send.
  */
-function stubModel() {
-  const seen: { library: LibraryRow[]; constraints: string[]; goal: string }[] = [];
+function stubModel({ intensity = 'heavy' }: { intensity?: 'heavy' | 'light' } = {}) {
+  const seen: {
+    library: LibraryRow[];
+    constraints: string[];
+    goal: string;
+    effort?: { suggested: string; note: string };
+  }[] = [];
 
   const fetchStub = vi.fn(async (_url: string, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body)) as {
@@ -47,8 +54,14 @@ function stubModel() {
     const sent = JSON.parse(String(body.messages[0]?.content)) as {
       goal: string;
       constraints?: string[];
+      effort?: { suggested: string; note: string };
     };
-    seen.push({ library, constraints: sent.constraints ?? [], goal: sent.goal });
+    seen.push({
+      library,
+      constraints: sent.constraints ?? [],
+      goal: sent.goal,
+      effort: sent.effort,
+    });
 
     /* Three rows the validator will accept: no repeated id, at most one heavy
        spinal lift, nothing advanced. */
@@ -73,10 +86,10 @@ function stubModel() {
             text: JSON.stringify({
               name: 'Chest and Core',
               focus: 'push',
-              intensity: 'heavy',
+              intensity,
               exercises: chosen.map((exercise) => ({
                 exerciseId: exercise.id,
-                sets: 3,
+                sets: intensity === 'light' ? 2 : 3,
                 repLow: exercise.repMin,
                 repHigh: exercise.repMax,
               })),
@@ -150,6 +163,72 @@ describe('asking a model for one workout', () => {
       const exercise = exercisesById.get(entry.exerciseId);
       expect(exercise?.primaryMuscles.some((m) => m === 'abs' || m === 'chest')).toBe(true);
     }
+  }, 20000);
+
+  it('sends the effort button as a default, not as a constraint', async () => {
+    const { seen } = stubModel();
+    draw(<ProgramScreen exercises={exercises} onStartDay={vi.fn()} />);
+    await screen.findByRole('heading', { name: 'Plan the week' });
+    const ui = user();
+
+    await ui.click(screen.getByRole('button', { name: 'New workout' }));
+    await ui.type(screen.getByRole('textbox'), 'Anything');
+    await ui.click(screen.getByRole('button', { name: 'Build it from that' }));
+
+    await waitFor(
+      async () => {
+        const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
+        expect(rows.length).toBeGreaterThan(0);
+      },
+      { timeout: 8000 },
+    );
+
+    const call = seen[0];
+    // Heavy is the sheet's default, so that is what it starts from.
+    expect(call?.effort?.suggested).toBe('heavy');
+    /* And it is NOT in the prohibitions list, which the prompt calls absolute.
+       That is the difference between a default and a verdict. */
+    expect(call?.constraints.join(' ')).not.toMatch(/heavy session/i);
+  }, 20000);
+
+  it('lets the typed words overrule the effort button', async () => {
+    /*
+     * The theory this proves. The button set the intensity, the model was told
+     * it was absolute, and then the app overwrote whatever came back with the
+     * button's value — so "easy session" against a button reading Heavy got a
+     * heavy workout, labelled Heavy, and the words never had a say.
+     *
+     * The stub stands in for a model that read the words and answered light.
+     * What has to land is a LIGHT workout: the stored effort, the two-set cap
+     * and the logging cue all follow the reply, not the button.
+     */
+    stubModel({ intensity: 'light' });
+    draw(<ProgramScreen exercises={exercises} onStartDay={vi.fn()} />);
+    await screen.findByRole('heading', { name: 'Plan the week' });
+    const ui = user();
+
+    await ui.click(screen.getByRole('button', { name: 'New workout' }));
+    await ui.type(screen.getByRole('textbox'), 'Easy one, shoulder is sore');
+    await ui.click(screen.getByRole('button', { name: 'Build it from that' }));
+
+    let stored: Awaited<ReturnType<typeof readSchedules>>[string] | undefined;
+    await waitFor(
+      async () => {
+        stored = (await readSchedules())[BLOCK_ID];
+        expect(Object.values(stored ?? {}).some((day) => day?.generated)).toBe(true);
+      },
+      { timeout: 8000 },
+    );
+
+    const made = Object.values(stored ?? {}).find((day) => day?.generated);
+    expect(made?.intensity).toBe('light');
+    // The cue is derived from the effort, so it proves the whole chain moved.
+    expect(made?.effortCue).toBe(LIGHT_DAY_CUE);
+
+    // And the sets match a light day rather than the button's three.
+    const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row.targetSets).toBeLessThanOrEqual(2);
   }, 20000);
 
   it('leaves the library whole when nothing is picked', async () => {

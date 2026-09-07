@@ -101,6 +101,36 @@ describe('what heavy means', () => {
         .excludeGripHigh,
     ).toBe(false);
   });
+
+  it('loses heavy axial work inside the golf buffer too', () => {
+    /*
+     * This was a flat false. Only the light day excluded spinal load, so the
+     * protection existed and was attached to effort — which left the one
+     * session that needed it, a heavy day the day before a round, as the one
+     * session that never got it.
+     */
+    expect(
+      templateDayFor({ slot: 'A', weekday: 5, intensity: 'heavy', golfWeekdays: [6] })
+        .excludeSpinalHigh,
+    ).toBe(true);
+    // Two days out is clear, same as grip: a deadlift on Thursday is fine.
+    expect(
+      templateDayFor({ slot: 'A', weekday: 4, intensity: 'heavy', golfWeekdays: [6] })
+        .excludeSpinalHigh,
+    ).toBe(false);
+    // And with no golf at all, nothing is barred anywhere in the week.
+    expect(
+      templateDayFor({ slot: 'A', weekday: 5, intensity: 'heavy' }).excludeSpinalHigh,
+    ).toBe(false);
+  });
+
+  it('leaves an unplaced workout unconstrained by a calendar it has no place in', () => {
+    /* A workout made from the sheet has no day yet, so it cannot be near or
+       far from a round. Inheriting one day's exclusions would be a guess. */
+    const unplaced = workoutTemplate({ slot: 'A', focus: 'lower', intensity: 'heavy' });
+    expect(unplaced.excludeGripHigh).toBe(false);
+    expect(unplaced.excludeSpinalHigh).toBe(false);
+  });
 });
 
 describe('templateDayFor honours a stored focus', () => {

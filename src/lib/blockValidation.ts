@@ -1,5 +1,12 @@
 import type { BlockExercise, DaySlot, Exercise, MovementPattern, MuscleId } from '../db/types';
-import { GRIP_BUFFER_DAYS, WEEKDAY_LABEL, gripSafeWeekdays, type Weekday } from './golf';
+import {
+  GRIP_BUFFER_DAYS,
+  SPINE_BUFFER_DAYS,
+  WEEKDAY_LABEL,
+  gripSafeWeekdays,
+  spineSafeWeekdays,
+  type Weekday,
+} from './golf';
 
 import { weekdayAllowed, type TemplateDay } from './weekTemplate';
 import { isTimed, rangeLabel, repUnitWord } from './repUnit';
@@ -59,6 +66,7 @@ export type ViolationCode =
   | 'unknown_exercise'
   | 'rep_range'
   | 'grip_conflict'
+  | 'spine_conflict'
   | 'spinal_stacking'
   | 'skill_too_advanced'
   | 'pattern_coverage'
@@ -107,6 +115,7 @@ export type Severity = 'problem' | 'suggestion';
 const SEVERITY: Record<ViolationCode, Severity> = {
   unknown_exercise: 'problem',
   grip_conflict: 'problem',
+  spine_conflict: 'problem',
   spinal_stacking: 'problem',
   unloadable_weight: 'problem',
   forbidden_day: 'problem',
@@ -143,6 +152,11 @@ export function daysClearOfGolf(weekday: Weekday, golfWeekdays: Weekday[]): numb
 
 export function gripAllowed(weekday: Weekday, golfWeekdays: Weekday[]): boolean {
   return daysClearOfGolf(weekday, golfWeekdays) > GRIP_BUFFER_DAYS;
+}
+
+/** True when the rule permits heavy axial loading on this weekday. */
+export function spineAllowed(weekday: Weekday, golfWeekdays: Weekday[]): boolean {
+  return daysClearOfGolf(weekday, golfWeekdays) > SPINE_BUFFER_DAYS;
 }
 
 /* --- time, computed from real rest periods -------------------------------- */
@@ -248,11 +262,21 @@ export function validateBlock(
   const taken = new Set(proposal.days.map((day) => day.weekday));
 
   /** A day this workout could move to: allowed, free, and clear of a round. */
-  const freeWeekday = (needsGripClearance: boolean): Weekday | undefined => {
+  /*
+   * A day this workout could move to instead. `clear` says what the move has
+   * to buy: grip and spine have their own buffers, and while both are one day
+   * today they are separate constants and a fix that assumed they agreed
+   * would quietly send a deadlift somewhere it still is not wanted.
+   */
+  const freeWeekday = (clear: 'none' | 'grip' | 'spine'): Weekday | undefined => {
+    const safe =
+      clear === 'grip'
+        ? gripSafeWeekdays(golfWeekdays)
+        : clear === 'spine'
+          ? spineSafeWeekdays(golfWeekdays)
+          : undefined;
     const usable = ([1, 2, 3, 4, 5, 6, 7] as Weekday[]).filter(
-      (weekday) =>
-        weekdayAllowed(weekday, golfWeekdays) &&
-        (!needsGripClearance || gripSafeWeekdays(golfWeekdays).includes(weekday)),
+      (weekday) => weekdayAllowed(weekday, golfWeekdays) && (!safe || safe.includes(weekday)),
     );
     return usable.find((weekday) => !taken.has(weekday)) ?? usable[0];
   };
@@ -268,7 +292,7 @@ export function validateBlock(
         code: 'forbidden_day',
         slot: day.slot,
         message: `${nameOf(day)} is scheduled on ${WEEKDAY_LABEL[day.weekday]}, which is never a training day.`,
-        fix: moveFix(day.slot, freeWeekday(false)),
+        fix: moveFix(day.slot, freeWeekday('none')),
       });
     } else if (template && template.weekday !== day.weekday) {
       violations.push({
@@ -344,7 +368,35 @@ export function validateBlock(
             // the session is fine, its placement is not. Dropping the movement
             // is the fallback when the calendar has no room.
             fix:
-              moveFix(day.slot, freeWeekday(true)) ??
+              moveFix(day.slot, freeWeekday('grip')) ??
+              ({
+                kind: 'remove_exercise',
+                slot: day.slot,
+                exerciseId: exercise.id,
+                label: `Drop ${exercise.name}`,
+              } as Fix),
+          });
+        }
+      }
+
+      /*
+       * (c2) spine clearance, computed from the same calendar. A round is
+       * hours of loaded rotation, and the veto used to live on the light day's
+       * template instead of on the date — so the one session that needed it,
+       * a heavy day before a round, was the one session that never got it.
+       */
+      if (exercise.spinalLoad === 'high') {
+        const clear = daysClearOfGolf(day.weekday, golfWeekdays);
+        if (clear <= SPINE_BUFFER_DAYS) {
+          violations.push({
+            code: 'spine_conflict',
+            slot: day.slot,
+            exerciseId: exercise.id,
+            message: `${nameOf(day)} is ${WEEKDAY_LABEL[day.weekday]}, ${clear} day${clear === 1 ? '' : 's'} before your next round, and ${exercise.name} loads the spine heavily.`,
+            // Same order as grip: move the session if the week has room,
+            // drop the movement only when it has none.
+            fix:
+              moveFix(day.slot, freeWeekday('spine')) ??
               ({
                 kind: 'remove_exercise',
                 slot: day.slot,

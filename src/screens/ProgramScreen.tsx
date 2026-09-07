@@ -9,6 +9,7 @@ import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import { balanceSets, generateDay, type DayPlan } from '../lib/blockBuilder';
 import {
   gripAllowed,
+  spineAllowed,
   sessionMinutes as estimateMinutes,
   severityOf,
   validateBlock,
@@ -697,26 +698,37 @@ export function ProgramScreen({
     /* Only when the lifter chose them. Left open, the model decides and the
        validator judges whatever it decided — which is the single-workout case. */
     if (want.focus) constraints.focus = want.focus;
-    if (want.intensity) constraints.intensity = want.intensity;
+    /* A default, not a requirement — see DayConstraints.effortDefault. The
+       goal's own words decide, and what comes back is what gets stored. */
+    if (want.intensity) constraints.effortDefault = want.intensity;
     /* Everything selected is not a constraint — it is the absence of one, and
        sending all eighteen ids would narrow nothing while telling the model to
        hit every muscle in one session. */
     if (want.muscles && want.muscles.length > 0 && want.muscles.length < MUSCLES.length) {
       constraints.muscles = want.muscles;
     }
-    if (want.intensity === 'light') constraints.noHighSpinal = true;
 
     const instructions = await readAiInstructions();
     const short = undertrained(weekLogs, byId, share);
     const brief = buildBrief({ share, goal: want.goal, instructions, undertrained: short, existing, constraints });
 
-    /* The shape the day was ASKED for, which is what it is judged against. A
-       forced focus is a requirement, so the model agreeing to it is not
-       something to take on trust. */
+    /*
+     * The shape the day was ASKED for, which is what it is judged against. A
+     * forced focus is a requirement — pick abs and chest, be handed chin-ups
+     * was this line's whole reason — so the model agreeing to it is not
+     * something to take on trust.
+     *
+     * Intensity is NOT forced, and used to be. The button set it, the model
+     * was told it was absolute, and then this overwrote whatever came back
+     * with the button's value anyway — so "easy session, shoulder is sore"
+     * against a button reading Heavy produced a heavy workout labelled Heavy,
+     * and the words never had a say. Now the words decide, the button is the
+     * default they start from, and the template and the validator are both
+     * built from what the model actually returned, so all three agree.
+     */
     const requiredShape = (workout: AiWorkout): AiWorkout => ({
       ...workout,
       focus: want.focus ?? workout.focus,
-      intensity: want.intensity ?? workout.intensity,
     });
 
     /*
@@ -892,11 +904,26 @@ export function ProgramScreen({
         const constraints: string[] = [
           `Nothing harder than RPE ${training.maxRpe}.`,
         ];
-        if (!gripAllowed(weekdayOf(day.date), golfWeekdays)) {
+        /*
+         * Two reasons for the same two prohibitions, stated once each. The
+         * calendar is the one that was missing on the spine: a heavy day the
+         * day before a round needs the rule more than a flush session does,
+         * and it was the only day that never got it.
+         *
+         * The light day's own version is said here as well because the light
+         * template excludes both and the validator marks against it — leaving
+         * either unsaid buys a rejected answer and a retry to communicate a
+         * rule we already knew.
+         */
+        const light = day.intensity === 'light';
+        const weekday = weekdayOf(day.date);
+        if (light || !gripAllowed(weekday, golfWeekdays)) {
           constraints.push('Do not use any exercise with gripLoad "high".');
         }
-        if (day.intensity === 'light') {
+        if (light || !spineAllowed(weekday, golfWeekdays)) {
           constraints.push('Do not use any exercise with spinalLoad "high".');
+        }
+        if (light) {
           constraints.push('This is a light session: two working sets an exercise, higher reps.');
         }
         return { slot: index + 1, focus: day.focus, intensity: day.intensity, constraints };

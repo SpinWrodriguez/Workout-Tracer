@@ -109,15 +109,31 @@ describe('the payload', () => {
     expect(briefPayload(buildBrief(base), base)).not.toHaveProperty('standingInstructions');
   });
 
-  it('states a day limit as a prohibition, never as its reason', () => {
-    const input = { ...base, constraints: { noHighGrip: true } };
+  it('sends the chosen effort as a default and not as a constraint', () => {
+    /*
+     * The distinction is the whole point. `constraints` is documented to the
+     * model as absolute, and the button is not: typing "easy, shoulder is
+     * sore" with Heavy still selected has to produce a light session. Putting
+     * it in the prohibitions list is what made the button win that argument.
+     */
+    const input = { ...base, constraints: { effortDefault: 'heavy' as const } };
     const payload = briefPayload(buildBrief(input), input);
-    expect(payload.constraints).toEqual(['Do not use any exercise with gripLoad "high".']);
-    const serialised = JSON.stringify(payload);
-    // The model must not be able to reason about the calendar at all.
-    for (const leak of ['golf', 'round', 'Saturday', 'weekday', 'Thursday', 'buffer', 'days clear']) {
-      expect(serialised.toLowerCase(), leak).not.toContain(leak.toLowerCase());
-    }
+    expect(payload).not.toHaveProperty('constraints');
+    expect(payload.effort).toMatchObject({ suggested: 'heavy' });
+    // And it says so in words, because a key named `effort` does not.
+    expect(String((payload.effort as { note: string }).note)).toContain('not a requirement');
+  });
+
+  it('says what choosing light costs, so the choice is informed', () => {
+    /* The light template excludes high grip and high spinal work and the
+       validator marks against it. Unsaid, the model picks a deadlift for a
+       session it just called light and pays for a retry to be told. */
+    const input = { ...base, constraints: { effortDefault: 'light' as const } };
+    const note = String(
+      (briefPayload(buildBrief(input), input).effort as { note: string }).note,
+    );
+    expect(note).toContain('gripLoad');
+    expect(note).toContain('spinalLoad');
   });
 
   it('states the muscles that were pointed at, in the ids the model can check', () => {
@@ -135,11 +151,19 @@ describe('the payload', () => {
     expect(briefPayload(buildBrief(input), input)).not.toHaveProperty('constraints');
   });
 
-  it('never leaks a date, whatever else is in it', () => {
+  it('never leaks a date or the calendar, whatever else is in it', () => {
+    /* Everything set at once, because the leak that matters is the one some
+       other field introduces later. The model has already been caught
+       reasoning about the calendar; it must not be able to see one. */
     const input = {
       ...base,
       instructions: 'Building muscle.',
-      constraints: { noHighGrip: true, noHighSpinal: true, intensity: 'light' as const },
+      constraints: {
+        effortDefault: 'light' as const,
+        focus: 'upper' as const,
+        muscles: ['lats', 'biceps'],
+        maxRpe: 8,
+      },
       existing: [
         { slot: 'A' as const, name: 'Upper', intensity: 'heavy' as const, exerciseIds: ['bb_bench_press'] },
       ],
@@ -147,6 +171,9 @@ describe('the payload', () => {
     const serialised = JSON.stringify(briefPayload(buildBrief(input), input));
     expect(serialised).not.toMatch(/\d{4}-\d{2}-\d{2}/);
     expect(serialised).not.toMatch(/\b(mon|tue|wed|thu|fri|sat|sun)\b/i);
+    for (const leak of ['golf', 'round', 'weekday', 'buffer', 'days clear']) {
+      expect(serialised.toLowerCase(), leak).not.toContain(leak.toLowerCase());
+    }
   });
 });
 

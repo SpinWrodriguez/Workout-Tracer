@@ -146,6 +146,42 @@ describe('rule c — grip clearance computed from the calendar (defect 1)', () =
   });
 });
 
+describe('rule c2 — spine clearance computed from the same calendar', () => {
+  /*
+   * This rule used to live on the light day's template, which meant it fired
+   * only where it was least needed. A flush session with a deadlift on it was
+   * caught; a HEAVY session with a deadlift the day before a round was not,
+   * because heavy days were simply trusted with axial work. A round is hours
+   * of loaded rotation and the reason is proximity to it, so proximity is
+   * what it is computed from now — for every day, at any effort.
+   */
+  it('rejects a deadlift on a Friday with golf on Saturday, heavy day or not', () => {
+    const p = proposal([{ slot: 'A', weekday: 5, ids: ['bb_deadlift'] }]);
+    const found = validateBlock(p, CONTEXT).find((v) => v.code === 'spine_conflict');
+    expect(found?.message).toMatch(/Fri, 1 day before your next round/);
+    expect(found?.message).toMatch(/loads the spine heavily/);
+    // The session is fine; its placement is not. So the fix moves the day.
+    expect(found?.fix).toMatchObject({ kind: 'move_to_weekday' });
+  });
+
+  it('is a problem rather than a suggestion', () => {
+    // A suggestion is something to weigh. This one costs a weekend of golf.
+    expect(severityOf('spine_conflict')).toBe('problem');
+  });
+
+  it('accepts the same lift anywhere from Monday to Thursday', () => {
+    for (const weekday of [1, 2, 3, 4] as const) {
+      const p = proposal([{ slot: 'A', weekday, ids: ['bb_deadlift'] }]);
+      expect(codes(p), `weekday ${weekday}`).not.toContain('spine_conflict');
+    }
+  });
+
+  it('bars nothing anywhere when no golf is played', () => {
+    const p = proposal([{ slot: 'A', weekday: 5, ids: ['bb_deadlift'] }]);
+    expect(codes(p, { ...CONTEXT, golfWeekdays: [] })).not.toContain('spine_conflict');
+  });
+});
+
 describe('rule d — one heavy spinal lift per session (defect 3)', () => {
   it('rejects a deadlift stacked with a bent-over row', () => {
     const p = proposal([

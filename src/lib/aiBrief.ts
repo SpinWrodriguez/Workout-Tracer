@@ -56,11 +56,27 @@ export function undertrained(
 
 /** A limit the day imposes, stated without the reason for it. */
 export interface DayConstraints {
-  /** True where the golf rule bars grip, lat and forearm work. */
-  noHighGrip?: boolean;
-  /** True on a light day: nothing that loads the spine heavily. */
-  noHighSpinal?: boolean;
-  intensity?: Intensity;
+  /*
+   * The grip and spine prohibitions used to live here as two booleans. They
+   * have no writer left: this path builds a workout with NO DATE, and both
+   * rules are facts about proximity to a round, so there was never anything
+   * here able to set them truthfully. The week builder, which does have dates,
+   * states them per slot from the calendar. What a light session excludes is
+   * said in `effort.note` instead, so the model learns the consequence of
+   * choosing light rather than being told the answer in advance.
+   */
+  /**
+   * The effort the lifter last had selected on the workout sheet — a starting
+   * point, NOT a constraint, which is why it does not travel in the
+   * prohibitions list with the rest of this interface.
+   *
+   * It used to be absolute, and then be overwritten onto whatever came back,
+   * so typing "easy session, shoulder is sore" against a button still reading
+   * Heavy got a heavy session and stored the word Heavy on it. Two authorities
+   * on one question, and the silent one won. The words are the authority now;
+   * this is what they start from.
+   */
+  effortDefault?: Intensity;
   /**
    * What the day was asked to train, when the lifter chose it rather than
    * leaving it open. Stated as a requirement — still with no reason attached,
@@ -149,18 +165,6 @@ export function buildBrief(input: BriefInput): Brief {
  */
 export function briefPayload(brief: Brief, input: BriefInput): Record<string, unknown> {
   const constraints: string[] = [];
-  if (input.constraints?.noHighGrip) {
-    constraints.push('Do not use any exercise with gripLoad "high".');
-  }
-  if (input.constraints?.noHighSpinal) {
-    constraints.push('Do not use any exercise with spinalLoad "high".');
-  }
-  if (input.constraints?.intensity === 'light') {
-    constraints.push('This is a light session: two working sets an exercise, higher reps.');
-  }
-  if (input.constraints?.intensity === 'heavy') {
-    constraints.push('This is a heavy session: three working sets an exercise.');
-  }
   if (input.constraints?.maxRpe !== undefined && input.constraints.maxRpe < 10) {
     const reserve = 10 - input.constraints.maxRpe;
     constraints.push(
@@ -195,6 +199,21 @@ export function briefPayload(brief: Brief, input: BriefInput): Record<string, un
     goal: brief.goal,
     ...(input.instructions?.trim() ? { standingInstructions: input.instructions.trim() } : {}),
     ...(constraints.length > 0 ? { constraints } : {}),
+    /* Deliberately not in `constraints`: the prompt calls those absolute, and
+       this one is the opposite — the default the goal is free to overrule. */
+    ...(input.constraints?.effortDefault
+      ? {
+          effort: {
+            suggested: input.constraints.effortDefault,
+            note:
+              'What the lifter last had selected, not a requirement. The goal outranks it: ' +
+              'an ask for something easy is a light session even when this says heavy. ' +
+              'A light session is two working sets an exercise at higher reps, and uses no exercise ' +
+              'with gripLoad or spinalLoad "high"; a heavy session is three sets and may use either. ' +
+              'Return the `intensity` you actually programmed — that is what gets stored and checked.',
+          },
+        }
+      : {}),
     ...(brief.derived && input.undertrained.length > 0
       ? {
           weeklyShortfall: input.undertrained.map((row) => ({

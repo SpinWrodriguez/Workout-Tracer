@@ -9,6 +9,7 @@ import {
   gripBufferNote,
   gripConflictOn,
   gripSafeWeekdays,
+  spineSafeWeekdays,
   golfWeekdaysFrom,
   isGripSafe,
   sessionWarnings,
@@ -113,6 +114,18 @@ describe('the buffer window', () => {
 
   it('leaves the whole week safe with no golf at all', () => {
     expect(gripSafeWeekdays([])).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it('protects the spine on the same days it protects the grip', () => {
+    /*
+     * A round is hours of loaded rotation, so the approach to it is no place
+     * for a heavy deadlift. The two buffers are separate constants and equal
+     * today; what matters is that the spine has its OWN answer rather than
+     * borrowing the light day's, which is where it used to live.
+     */
+    expect(spineSafeWeekdays([6])).toEqual([1, 2, 3, 4, 7]);
+    expect(spineSafeWeekdays([6, 7])).toEqual([1, 2, 3, 4]);
+    expect(spineSafeWeekdays([])).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 
   it('reads weekdays as Monday 1 through Sunday 7', () => {

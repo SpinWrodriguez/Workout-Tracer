@@ -1,7 +1,7 @@
 import type { DaySlot, MovementPattern, MuscleId } from '../db/types';
 import { patternsForMuscles } from './blockBuilder';
 import { MUSCLES } from '../db/seed/muscles';
-import { WEEKDAY_LABEL, gripSafeWeekdays, type Weekday } from './golf';
+import { WEEKDAY_LABEL, gripSafeWeekdays, spineSafeWeekdays, type Weekday } from './golf';
 
 /* -------------------------------------------------------------------------- */
 /*  The weekly template.                                                      */
@@ -159,9 +159,11 @@ export function workoutTemplate({
     ...base,
     patterns,
     /*
-     * Nothing is excluded on grip grounds while a workout is unplaced: there
-     * is no date to be clear of. Assigning it to a day inside the buffer is
-     * what surfaces the conflict, and the rule check says so there.
+     * Nothing is excluded on calendar grounds while a workout is unplaced:
+     * there is no date to be clear of. Assigning it to a day inside a buffer
+     * is what surfaces the conflict, and the rule check says so there. The
+     * spine exclusion needs no line here — heavyDay is handed an empty golf
+     * calendar, so it computes false on its own.
      */
     excludeGripHigh: false,
     maxExercises: intensity === 'light' ? 5 : 7,
@@ -228,7 +230,14 @@ function heavyDay(
     // Derived, not assumed: any day inside the buffer loses grip work whatever
     // its intensity. Mon and Tue are clear, so this changes nothing for them.
     excludeGripHigh: !gripSafeWeekdays(golfWeekdays).includes(weekday),
-    excludeSpinalHigh: false,
+    /*
+     * The same, for the spine. This was a flat `false` — heavy days were
+     * simply trusted with axial work — which left the day before a round the
+     * one place the rule was needed and the one place it never fired. The
+     * light day had it hardcoded true, so the protection existed but was
+     * attached to effort instead of to the calendar.
+     */
+    excludeSpinalHigh: !spineSafeWeekdays(golfWeekdays).includes(weekday),
     setsPerExercise: 3,
     repShift: { low: 0, high: 0 },
     minutesBudget: minutes,
@@ -243,7 +252,9 @@ function lightDay(slot: DaySlot, weekday: Weekday, index = 0): TemplateDay {
     weekdayLabel: WEEKDAY_LABEL[weekday],
     intensity: 'light',
     patterns: LIGHT_PATTERN_SETS[index % LIGHT_PATTERN_SETS.length] as MovementPattern[],
-    // Sub-maximal by construction: nothing that taxes grip or the spine.
+    /* Sub-maximal by construction: nothing that taxes grip or the spine. This
+       stays true regardless of the calendar — it is what "light" means, not a
+       golf rule — and the heavy day now carries the calendar's own version. */
     excludeGripHigh: true,
     excludeSpinalHigh: true,
     setsPerExercise: 2,

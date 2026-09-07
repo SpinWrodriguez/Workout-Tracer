@@ -165,6 +165,13 @@ export function NewWorkoutSheet({
         <>
           <div className="mt-5 h-px bg-border" />
           <Label className="mt-4 block">Or say it in words</Label>
+          {/* Said out loud because the override is otherwise invisible: ask
+              for an easy session with Heavy still selected and you get a light
+              one, and a button that was quietly ignored is worse than no
+              button at all. */}
+          <Label className="mt-1 block text-text-faint">
+            Where the words and the effort above disagree, the words win.
+          </Label>
           <textarea
             rows={2}
             value={goal}

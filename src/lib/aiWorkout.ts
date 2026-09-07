@@ -113,6 +113,7 @@ Rules:
 - Respect each exercise's own \`reps\` bounds and \`unit\`. A hold measured in seconds is not a number of reps.
 - Do not repeat what the other workouts in the block already contain, unless the goal explicitly asks for it.
 - Read the goal for effort and emphasis and set \`focus\` and \`intensity\` from it. "Tired", "easy", "gentle" mean \`intensity: "light"\`. Trust the words: a request for an easy session is not an invitation to program a hard one differently.
+- \`effort.suggested\`, where given, is what the lifter last had selected on the workout sheet. It is a starting point and the goal outranks it. Start there when the goal says nothing about effort; ignore it when the goal does.
 - Obey every entry in \`constraints\` exactly. They are not preferences.
 - Where \`standingInstructions\` and the goal disagree, the goal wins — it is about today, the instructions are about the months around it.
 - Order the exercises the way they should be performed. Explosive work first, then hinges while the position still holds, then everything else. A hinge late in a fatigued session is a form risk.

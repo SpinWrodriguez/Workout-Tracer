@@ -29,6 +29,19 @@ export const GRIP_BUFFER_DAYS = 1;
  */
 export const GRIP_ADVISORY_DAYS = 2;
 
+/**
+ * Days before a round on which heavy axial loading is barred, plus the day
+ * itself. The same one-day veto as grip, for the same reason and on its own
+ * constant so the two can diverge: a round is a few hours of rotation under a
+ * spine that a heavy deadlift the day before has already spent.
+ *
+ * This used to be a fact about LIGHT DAYS rather than about the calendar,
+ * which meant a heavy Thursday the day before a Friday round kept its
+ * deadlift and only the flush session was ever protected. Proximity to a
+ * round is the reason, so proximity is what it is computed from.
+ */
+export const SPINE_BUFFER_DAYS = 1;
+
 /** ISO weekday: Monday 1 … Sunday 7. */
 export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
@@ -129,13 +142,22 @@ export function isGripSafe(dateIso: string, golfDates: string[]): boolean {
 
 /** Which weekdays can carry grip work, given the weekdays golf is played. */
 export function gripSafeWeekdays(golfWeekdays: Weekday[]): Weekday[] {
+  return safeWeekdays(golfWeekdays, GRIP_BUFFER_DAYS);
+}
+
+/** Which weekdays can carry heavy axial work, given when golf is played. */
+export function spineSafeWeekdays(golfWeekdays: Weekday[]): Weekday[] {
+  return safeWeekdays(golfWeekdays, SPINE_BUFFER_DAYS);
+}
+
+function safeWeekdays(golfWeekdays: Weekday[], buffer: number): Weekday[] {
   if (golfWeekdays.length === 0) return [...WEEKDAYS];
   return WEEKDAYS.filter((day) =>
     golfWeekdays.every((golf) => {
       // Distance forward around a repeating week, so Sunday reads as six days
       // before next Saturday rather than one day after this one.
       const forward = (golf - day + 7) % 7;
-      return forward > GRIP_BUFFER_DAYS;
+      return forward > buffer;
     }),
   );
 }
