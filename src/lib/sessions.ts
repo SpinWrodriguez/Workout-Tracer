@@ -1,7 +1,6 @@
 import { db } from '../db/db';
 import type { Activity, Exercise, Session, SetLog } from '../db/types';
 import { effectiveKg } from './load';
-import { slotFallback } from './dayLabel';
 
 /* -------------------------------------------------------------------------- */
 /*  Session persistence.                                                       */
@@ -174,59 +173,6 @@ export async function listSessionSummaries(): Promise<SessionSummary[]> {
       untouched: Object.keys(planned).filter((id) => !logged.has(id)),
     };
   });
-}
-
-/* --- what each workout has added up to -------------------------------------- */
-
-/** One workout, across every time it has been done. */
-export interface WorkoutTotal {
-  /** The name it was logged under, which is the durable record of it. */
-  name: string;
-  times: number;
-  sets: number;
-  volumeKg: number;
-  minutes: number;
-  /** Most recent first is how these are ordered, so this is the sort key. */
-  lastDate: string;
-  firstDate: string;
-}
-
-/**
- * Every workout that has ever been done, rolled up.
- *
- * Grouped by the name the session was logged under rather than by its slot: a
- * slot is reused when a workout is deleted and another built in its place, and
- * two different workouts sharing a row because they landed on the same letter
- * would be a lie. The name is what the session recorded at the time, which is
- * the durable fact — the workout it came from may not exist any more.
- */
-export function workoutTotals(summaries: SessionSummary[]): WorkoutTotal[] {
-  const map = new Map<string, WorkoutTotal>();
-  for (const summary of summaries) {
-    const name = summary.session.daySlotName?.trim() || slotFallback(summary.session.daySlot);
-    const row = map.get(name);
-    if (!row) {
-      map.set(name, {
-        name,
-        times: 1,
-        sets: summary.setCount,
-        volumeKg: summary.volumeKg,
-        minutes: summary.session.durationMin ?? 0,
-        lastDate: summary.session.date,
-        firstDate: summary.session.date,
-      });
-      continue;
-    }
-    row.times += 1;
-    row.sets += summary.setCount;
-    row.volumeKg += summary.volumeKg;
-    row.minutes += summary.session.durationMin ?? 0;
-    if (summary.session.date > row.lastDate) row.lastDate = summary.session.date;
-    if (summary.session.date < row.firstDate) row.firstDate = summary.session.date;
-  }
-  return [...map.values()].sort(
-    (a, b) => b.lastDate.localeCompare(a.lastDate) || a.name.localeCompare(b.name),
-  );
 }
 
 /* --- write ---------------------------------------------------------------- */

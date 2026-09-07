@@ -10,9 +10,7 @@ import {
   listSessionSummaries,
   plannedSetsOf,
   saveSession,
-  workoutTotals,
   type SessionDraft,
-  type SessionSummary,
 } from './sessions';
 
 const byId = new Map(EXERCISES.map((exercise) => [exercise.id, exercise]));
@@ -128,73 +126,5 @@ describe('what a session left behind', () => {
     expect(squat?.sets.filter((set) => set.done)).toHaveLength(2);
     expect(bench?.sets).toHaveLength(3);
     expect(bench?.sets.some((set) => set.done)).toBe(false);
-  });
-});
-
-describe('what every workout has added up to', () => {
-  /*
-   * The dashboard counts THIS week, so on a Monday morning it reads zero and
-   * the week before it looks like it never happened. This is the all-time view
-   * the History screen leads with.
-   */
-  const summary = (
-    date: string,
-    name: string | undefined,
-    setCount: number,
-    volumeKg = 0,
-    durationMin = 40,
-  ): SessionSummary => ({
-    session: {
-      id: `s_${date}_${name ?? 'x'}`,
-      blockId: 'block_1',
-      daySlot: 'A',
-      daySlotName: name,
-      date,
-      durationMin,
-    },
-    setCount,
-    exerciseIds: [],
-    volumeKg,
-    plannedCount: setCount,
-    untouched: [],
-  });
-
-  it('adds up every time a workout was done, newest workout first', () => {
-    const totals = workoutTotals([
-      summary('2026-09-03', 'Golf Rotation Circuit', 12, 1936.9, 42),
-      summary('2026-09-01', 'Upper Body', 18, 2531.1, 40),
-      summary('2026-08-25', 'Upper Body', 15, 2200, 38),
-    ]);
-
-    expect(totals.map((row) => row.name)).toEqual(['Golf Rotation Circuit', 'Upper Body']);
-    const upper = totals[1];
-    expect(upper?.times).toBe(2);
-    expect(upper?.sets).toBe(33);
-    expect(upper?.minutes).toBe(78);
-    expect(Math.round(upper?.volumeKg ?? 0)).toBe(4731);
-    // The span it covers, both ends, so "last done" is never a guess.
-    expect(upper?.firstDate).toBe('2026-08-25');
-    expect(upper?.lastDate).toBe('2026-09-01');
-  });
-
-  it('groups by the name it was logged under, not by the slot', () => {
-    /* A slot is reused: delete a workout, build another, and it takes the same
-       letter. Two different sessions sharing a row because they landed on the
-       same letter would be a lie about both. */
-    const totals = workoutTotals([
-      summary('2026-09-03', 'Lower Body', 12),
-      summary('2026-08-20', 'Golf Prep', 9),
-    ]);
-    expect(totals).toHaveLength(2);
-    expect(totals.map((row) => row.times)).toEqual([1, 1]);
-  });
-
-  it('names a session that was never named after its slot', () => {
-    const totals = workoutTotals([summary('2026-09-03', undefined, 5)]);
-    expect(totals[0]?.name).toBe('Day A');
-  });
-
-  it('is empty rather than absent when nothing has been logged', () => {
-    expect(workoutTotals([])).toEqual([]);
   });
 });
