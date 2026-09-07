@@ -2,6 +2,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 import { VitePWA } from 'vite-plugin-pwa';
+import { buildStamp } from './src/lib/buildStamp.ts';
 
 /*
  * GitHub Pages serves a project repo from a subpath, so every asset URL, the
@@ -20,8 +21,14 @@ const BASE = process.env.VITE_BASE ?? '/Workout-Tracer/';
  * deployed fix from the cached version the service worker is still serving,
  * which turns every "is it fixed?" into guesswork.
  */
+/*
+ * Melbourne, not UTC. The point of the stamp is comparing it to the clock in
+ * your pocket, and UTC made that a ten- or eleven-hour subtraction done in
+ * your head at the exact moment you are trying to tell whether the fix you
+ * pushed is the one being served.
+ */
 const BUILD_ID = [
-  `${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC`,
+  buildStamp(),
   (process.env.GITHUB_SHA ?? 'local').slice(0, 7),
 ].join(' · ');
 
