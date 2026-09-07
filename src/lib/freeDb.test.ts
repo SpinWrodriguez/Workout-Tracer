@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
 import { seedDatabase } from '../db/seed';
 import { EXERCISES } from '../db/seed/exercises';
-import { FREE_DB_IDS } from '../db/seed/freeDbIds';
+import { FREE_DB_IDS, FREE_DB_WITHOUT_INSTRUCTIONS } from '../db/seed/freeDbIds';
 import { existsSync, statSync } from 'node:fs';
 import { CUES, STEPS } from '../db/seed/cues';
 import { ILLUSTRATED } from '../db/seed/photos';
@@ -47,6 +47,25 @@ describe('hand-mapped freeDbId values (spec §9)', () => {
     expect(unmapped.length).toBeLessThan(EXERCISES.length / 2);
     for (const exercise of unmapped) {
       expect(CUES[exercise.id], `${exercise.id} has no cue`).toBeTruthy();
+    }
+  });
+
+  it('writes our own steps wherever upstream has a photo and no words', () => {
+    /*
+     * Five of the 876 records carry no instructions at all. An exercise mapped
+     * to one of them showed its reference photo and then went straight to the
+     * licence line — an exercise the app half-knows, and a gap as silent as a
+     * wrong id: nothing is missing on screen, there is just less there.
+     *
+     * Three of ours point at those records. This is the check that a fourth
+     * cannot be added without noticing.
+     */
+    const wordless = new Set(FREE_DB_WITHOUT_INSTRUCTIONS);
+    const affected = EXERCISES.filter((e) => e.freeDbId && wordless.has(e.freeDbId));
+    expect(affected.length).toBeGreaterThan(0);
+    for (const exercise of affected) {
+      expect(STEPS[exercise.id], `${exercise.id} has no steps of its own`).toBeTruthy();
+      expect(STEPS[exercise.id]?.length ?? 0).toBeGreaterThanOrEqual(3);
     }
   });
 
@@ -117,10 +136,19 @@ describe('hand-mapped freeDbId values (spec §9)', () => {
     }
   });
 
-  it('does not write out the ones that have a reference, which would go stale', () => {
-    // Steps fill the gap; they are not a second description of every exercise.
+  it('does not write out the ones upstream already describes, which would go stale', () => {
+    /*
+     * Steps fill a gap; they are not a second description of every exercise.
+     * The rule used to be "no steps for anything mapped", which was the same
+     * rule for as long as mapped meant described — until three of ours turned
+     * out to point at records with a photo and no words. So: an exercise may
+     * have steps of its own exactly when upstream gives it none.
+     */
+    const wordless = new Set(FREE_DB_WITHOUT_INSTRUCTIONS);
     for (const id of Object.keys(STEPS)) {
-      expect(EXERCISES.find((e) => e.id === id)?.freeDbId, id).toBeUndefined();
+      const mapped = EXERCISES.find((e) => e.id === id)?.freeDbId;
+      if (mapped === undefined) continue;
+      expect(wordless.has(mapped), `${id} duplicates upstream instructions`).toBe(true);
     }
   });
 

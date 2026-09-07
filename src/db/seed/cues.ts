@@ -116,6 +116,34 @@ export function cueFor(exerciseId: string): string | undefined {
 /* -------------------------------------------------------------------------- */
 
 export const STEPS: Record<string, string[]> = {
+  /*
+   * Three of these have an upstream record, and it is a photo with no words:
+   * five of the 876 carry no instructions at all. The sheet showed the picture
+   * and then went straight to the licence line, which reads as an exercise the
+   * app half-knows. Written here rather than left to upstream, because a gap
+   * that has been there since the dataset shipped is not going to close.
+   *
+   * freeDbIds.ts snapshots which records are wordless and freeDb.test.ts holds
+   * this map against it, so a fourth cannot slip through in silence.
+   */
+  kb_swing: [
+    'Bell a step in front of you, feet a little wider than the hips, back straight.',
+    'Hike it back between the legs like a snap pass — high, past the knees, not down at them.',
+    'Snap the hips forward and stand tall. The bell floats out on that, and the arms only steer it.',
+    'Let it fall back into the next hike. It is a hinge: if the knees are travelling forward and the chest is dropping, you are squatting the swing.',
+  ],
+  bw_side_plank: [
+    'On one side, elbow under the shoulder, feet stacked or staggered for a wider base.',
+    'Push the floor away and lift the hips until shoulders, hips and ankles make one line.',
+    'Push the bottom shoulder away from the ear and hold, breathing normally.',
+    'Timed, not counted. When the hips sag the set is finished, however long is left on the clock.',
+  ],
+  sm_push_press: [
+    'Bar on the Smith at collarbone height, hands just outside the shoulders, elbows under the bar.',
+    'Short dip — a few inches, knees out, torso upright. Not a squat.',
+    'Reverse it hard and let the drive carry the bar past the sticking point, then lock the elbows out.',
+    'Lower under control to the shoulders and reset. The legs start it; if the arms are starting it, the bar is too heavy for a press day.',
+  ],
   lm_squat_to_press: [
     'Bar end in the landmine, far sleeve held at the shoulder in both hands, feet under the hips.',
     'Squat to depth with the chest tall and the bar close.',

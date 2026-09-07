@@ -7,6 +7,10 @@
  * verifiable offline. §9 warns that a wrong id fails silently and you never
  * notice which exercise lost its photo — this turns that into a red test.
  *
+ * FREE_DB_WITHOUT_INSTRUCTIONS is the same idea one step further: a handful of
+ * upstream records have a photo and no words, and an exercise mapped to one
+ * loses its steps just as quietly.
+ *
  * Refresh with: npm run freedb:snapshot
  */
 export const FREE_DB_IDS: string[] = [
@@ -886,4 +890,13 @@ export const FREE_DB_IDS: string[] = [
   'Zercher_Squats',
   'Zottman_Curl',
   'Zottman_Preacher_Curl',
+];
+
+/** Upstream records with a photo but no instructions. */
+export const FREE_DB_WITHOUT_INSTRUCTIONS: string[] = [
+  'Iron_Cross',
+  'One-Arm_Kettlebell_Swings',
+  'Push_Press',
+  'Side_Bridge',
+  'Side_Jackknife',
 ];
