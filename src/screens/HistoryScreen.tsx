@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { Exercise } from '../db/types';
-import { listSessionSummaries } from '../lib/sessions';
+import { listSessionSummaries, workoutTotals } from '../lib/sessions';
 import { EM_SETS, friendlyDate, kg, todayIso } from '../lib/format';
 import { hasLoadTranslation } from '../lib/load';
 import {
@@ -17,6 +17,7 @@ import type { ExerciseMetric, ExercisePoint } from '../components/Charts';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ExerciseDetail } from '../components/ExerciseDetail';
 import { slotFallback } from '../lib/dayLabel';
+import { WorkoutTotals } from '../components/WorkoutTotals';
 
 const METRICS: ExerciseMetric[] = ['topSetKg', 'oneRm', 'volumeKg'];
 const METRIC_LABEL: Record<ExerciseMetric, string> = {
@@ -54,6 +55,11 @@ export function HistoryScreen({
     for (const log of logs) counts.set(log.exerciseId, (counts.get(log.exerciseId) ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
   }, []);
+
+  /* Everything ever done, rolled up per workout. The dashboard counts THIS
+     week, so a Monday morning showed nothing at all and the week before it
+     looked like it had never happened. */
+  const totals = useMemo(() => workoutTotals(summaries ?? []), [summaries]);
 
   const activeId = exerciseId ?? defaultExerciseId;
   const activeExercise = activeId ? byId.get(activeId) : undefined;
@@ -119,7 +125,10 @@ export function HistoryScreen({
   return (
     <>
       <Screen title="History">
+        <WorkoutTotals totals={totals} />
+
         <Card
+          className={totals.length > 0 ? 'mt-3' : ''}
           title={activeExercise?.name ?? 'Per-exercise history'}
           trailing={
             <span className="flex gap-1.5">
