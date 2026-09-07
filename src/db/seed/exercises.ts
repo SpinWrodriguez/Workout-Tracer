@@ -1566,6 +1566,62 @@ export const EXERCISES: Exercise[] = [
     pattern: 'rotation',
     spinalLoad: 'none',
   },
+
+  /* --- adductors, which nothing else here trains directly ---------------- */
+  /*
+   * The two the body map kept showing pale. Everything in the table before
+   * these reached the adductors as a secondary — a split squat, a Cossack-less
+   * lateral nothing — and secondary work counts half, so the week could not
+   * close the gap however it was arranged.
+   *
+   * Neither exists in free-exercise-db: all 876 records were searched, and the
+   * only adductor entries are stretches, a seated machine and plyometrics.
+   * So the cue and the steps are ours, like the eleven before them.
+   */
+  {
+    id: 'bw_copenhagen_plank',
+    name: 'Copenhagen plank',
+    station: 'bodyweight',
+    primaryMuscles: ['adductors'],
+    secondaryMuscles: ['obliques', 'abs'],
+    loadMultiplier: 1.0,
+    loadMode: 'bodyweight',
+    gripLoad: 'none',
+    isHinge: false,
+    isExplosive: false,
+    isMobility: false,
+    /* Timed, like every other plank: it is a hold, and the shorter range says
+       what it is — an adductor at full length gives out long before an ab
+       braced in a straight line does. */
+    repMin: 10,
+    repMax: 45,
+    repUnit: 'seconds',
+    restSeconds: 60,
+    skillLevel: 'intermediate',
+    pattern: 'core',
+    spinalLoad: 'none',
+  },
+  {
+    id: 'kb_cossack_squat',
+    name: 'Cossack squat',
+    station: 'kettlebell',
+    primaryMuscles: ['adductors', 'quads'],
+    secondaryMuscles: ['glutes', 'hamstrings', 'abs'],
+    loadMultiplier: 1.0,
+    loadMode: 'weight',
+    gripLoad: 'none',
+    isHinge: false,
+    isExplosive: false,
+    isMobility: false,
+    repMin: 5,
+    repMax: 10,
+    restSeconds: 90,
+    skillLevel: 'intermediate',
+    pattern: 'squat',
+    /* Held at the chest, so the spine carries some of it — the same call the
+       goblet squat and the Bulgarian make. */
+    spinalLoad: 'low',
+  },
 ];
 
 export const STATION_LABEL: Record<Exercise['station'], string> = {

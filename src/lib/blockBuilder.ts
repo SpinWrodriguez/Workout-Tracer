@@ -86,7 +86,11 @@ const PATTERN_MUSCLES: Record<MovementPattern, MuscleId[]> = {
   pull_h: ['upper_back', 'lats', 'rear_delts', 'biceps', 'traps'],
   pull_v: ['lats', 'upper_back', 'biceps'],
   carry: ['forearms', 'traps', 'obliques'],
-  core: ['abs', 'obliques', 'lower_back'],
+  /* Adductors belong here now that a core-pattern movement trains them: the
+     Copenhagen plank is a hold, and it is the only direct adductor work in the
+     table that is not a squat. Without this, asking for adductors could only
+     ever reach them through the squat slot. */
+  core: ['abs', 'obliques', 'lower_back', 'adductors'],
   // Rotational power is hips first, torso second — a landmine scoop or
   // rotational press is a hip movement that ends in the arm, so glutes and
   // front delts count as on-pattern here, not as noise.

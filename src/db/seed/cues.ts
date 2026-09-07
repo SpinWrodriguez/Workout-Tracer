@@ -90,10 +90,48 @@ export const CUES: Record<string, string> = {
   kb_overhead_carry: 'Bell locked overhead, biceps by the ear. Walk tall and do not lean away from it.',
   mb_open_book: 'Knees stacked, top arm opens to the floor. Warm-up only, never a working set.',
   mb_90_90: 'Switch the hips side to side without pushing off the hands. Warm-up only.',
+
+  /* The two that train the adductors directly, which nothing above does. */
+  bw_copenhagen_plank:
+    'Top-leg adductor holds your bodyweight in a lengthened position. This is the one that carries over to holding hip depth.',
+  kb_cossack_squat:
+    'Loads the adductor at full length through a lateral shift — the same demand as keeping the trail hip loaded in the backswing.',
 };
 
 export function cueFor(exerciseId: string): string | undefined {
   return CUES[exerciseId];
+}
+
+/* -------------------------------------------------------------------------- */
+/*  How to make one easier or harder.                                        */
+/*                                                                           */
+/*  Only where the movement genuinely needs it. A Copenhagen plank is a       */
+/*  lever, not a weight: there is no plate to take off, so "do less" has to   */
+/*  be spelled out or it becomes "do it badly". The same for a Cossack squat, */
+/*  where the limit is usually the hip rather than the bell.                 */
+/*                                                                           */
+/*  Absent for everything else, and the sheet simply does not show the block. */
+/*  Most exercises scale by changing the number on the bar.                  */
+/* -------------------------------------------------------------------------- */
+
+export interface Scaling {
+  easier: string;
+  harder: string;
+}
+
+export const SCALING: Record<string, Scaling> = {
+  bw_copenhagen_plank: {
+    easier: 'Support the top knee on the bench instead of the ankle. Halves the lever.',
+    harder: 'Move support toward the ankle, then add reps of hip raises within the hold.',
+  },
+  kb_cossack_squat: {
+    easier: 'Hold a rack upright for balance, bodyweight only, reduced depth.',
+    harder: 'Add load, then pause 2s at the bottom.',
+  },
+};
+
+export function scalingFor(exerciseId: string): Scaling | undefined {
+  return SCALING[exerciseId];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -126,6 +164,20 @@ export const STEPS: Record<string, string[]> = {
    * freeDbIds.ts snapshots which records are wordless and freeDb.test.ts holds
    * this map against it, so a fourth cannot slip through in silence.
    */
+  bw_copenhagen_plank: [
+    'Lie on your side, forearm on the floor under your shoulder.',
+    'Rest the inside of your top ankle or shin on a bench.',
+    'Squeeze the top leg down into the bench and lift your hips until your body is in a straight line.',
+    'Hold. Keep hips square — do not let the top hip roll back.',
+    'Lower under control. Switch sides.',
+  ],
+  kb_cossack_squat: [
+    'Stand with feet wide, toes slightly out. Hold a kettlebell at your chest.',
+    'Shift your weight over one leg and sit down into that hip, keeping the other leg straight.',
+    "Let the straight leg's foot roll onto its heel with toes up.",
+    'Descend as far as hip mobility allows while keeping your chest up.',
+    'Drive back to centre through the bent leg. Alternate sides.',
+  ],
   kb_swing: [
     'Bell a step in front of you, feet a little wider than the hips, back straight.',
     'Hike it back between the legs like a snap pass — high, past the knees, not down at them.',

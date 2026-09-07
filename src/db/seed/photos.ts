@@ -31,6 +31,15 @@ export const ILLUSTRATED: string[] = [
   'mb_open_book',
 ];
 
+/**
+ * Unmapped, and not drawn yet. Declared rather than left to be noticed: the
+ * rule is that an exercise with no upstream record gets artwork of its own, and
+ * an exception that is not written down is indistinguishable from the bug the
+ * rule exists to catch. These two show the fallback tile until the frames are
+ * made, which is a picture missing rather than a wrong picture shown.
+ */
+export const AWAITING_ART: string[] = ['bw_copenhagen_plank', 'kb_cossack_squat'];
+
 const set = new Set(ILLUSTRATED);
 
 /**

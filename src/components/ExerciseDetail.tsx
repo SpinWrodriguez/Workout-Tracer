@@ -5,7 +5,7 @@ import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, barWeightFor } from '../lib/loadable';
 import { STATION_LABEL } from '../db/seed/exercises';
 import { muscleName } from '../db/seed/muscles';
-import { cueFor, stepsFor } from '../db/seed/cues';
+import { cueFor, scalingFor, stepsFor } from '../db/seed/cues';
 import { photosFor } from '../db/seed/photos';
 import { getRecord, loadImageBlob, type FreeDbRecord } from '../lib/freeDb';
 import { hasLoadTranslation } from '../lib/load';
@@ -76,6 +76,7 @@ export function ExerciseDetail({
 
   const cue = cueFor(exercise.id);
   const steps = stepsFor(exercise.id);
+  const scaling = scalingFor(exercise.id);
   const illustrations = photosFor(exercise.id);
 
   return (
@@ -200,6 +201,26 @@ export function ExerciseDetail({
               </li>
             ))}
           </ol>
+
+          {/* Only where the movement has no plate to take off. A Copenhagen
+              plank is a lever: "do less" has to be spelled out or it becomes
+              "do it badly". Most exercises scale by the number on the bar and
+              show nothing here. */}
+          {scaling && (
+            <div className="mt-3 border-t border-border pt-3">
+              {(
+                [
+                  ['Easier', scaling.easier],
+                  ['Harder', scaling.harder],
+                ] as const
+              ).map(([label, text]) => (
+                <p key={label} className="py-1 text-[13px] leading-snug text-text-dim">
+                  <span className="font-semibold text-text">{label}. </span>
+                  {text}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

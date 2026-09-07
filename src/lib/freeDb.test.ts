@@ -5,8 +5,8 @@ import { seedDatabase } from '../db/seed';
 import { EXERCISES } from '../db/seed/exercises';
 import { FREE_DB_IDS, FREE_DB_WITHOUT_INSTRUCTIONS } from '../db/seed/freeDbIds';
 import { existsSync, statSync } from 'node:fs';
-import { CUES, STEPS } from '../db/seed/cues';
-import { ILLUSTRATED } from '../db/seed/photos';
+import { CUES, SCALING, STEPS } from '../db/seed/cues';
+import { AWAITING_ART, ILLUSTRATED } from '../db/seed/photos';
 import {
   FREE_DB_IMAGE_BASE,
   fetchAndStoreFreeDb,
@@ -100,15 +100,34 @@ describe('hand-mapped freeDbId values (spec §9)', () => {
     }
   });
 
-  it('illustrates every one of them, since no photo is coming from upstream', () => {
+  it('illustrates every one of them, or says out loud which are still waiting', () => {
     /*
      * Drawn for this app because nothing licensable exists: the only stock
      * for these movements is watermarked or share-alike, and a picture of a
      * near-enough exercise teaches the wrong one. Two frames each, start and
      * finish.
+     *
+     * A newly added movement has no frames on the day it arrives, so there is
+     * one escape hatch and it is a list. Naming the gap keeps it visible and
+     * keeps this check strict about everything else — an exception nobody
+     * wrote down is indistinguishable from the bug the rule catches.
      */
+    const declared = new Set(AWAITING_ART);
     for (const exercise of EXERCISES.filter((e) => !e.freeDbId)) {
+      if (declared.has(exercise.id)) continue;
       expect(ILLUSTRATED, `${exercise.id} has no illustrations`).toContain(exercise.id);
+    }
+  });
+
+  it('keeps the waiting list short, honest and about real exercises', () => {
+    // Not somewhere to park a growing pile, and not somewhere to hide an id
+    // that has a photo coming from upstream anyway.
+    expect(AWAITING_ART.length).toBeLessThanOrEqual(4);
+    for (const id of AWAITING_ART) {
+      const exercise = EXERCISES.find((e) => e.id === id);
+      expect(exercise, `${id} is not an exercise`).toBeTruthy();
+      expect(exercise?.freeDbId, `${id} has an upstream record`).toBeUndefined();
+      expect(ILLUSTRATED, `${id} is drawn, so it is not waiting`).not.toContain(id);
     }
   });
 
@@ -321,5 +340,50 @@ describe('fetch and store', () => {
     await fetchAndStoreFreeDb(fetchImpl);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect((await db.freeDbCache.get('Barbell_Squat'))?.imageBlobs).toBeUndefined();
+  });
+});
+
+describe('the adductors have something of their own', () => {
+  /*
+   * The body map kept showing them pale and no arrangement of the week could
+   * fix it: every exercise that reached the adductors reached them as a
+   * secondary, and a secondary set counts half. A Copenhagen plank and a
+   * Cossack squat are the two movements that train them directly, and neither
+   * exists upstream — all 876 records were searched and the only adductor
+   * entries are stretches, a seated machine and plyometrics.
+   */
+  it('is trained directly by at least one exercise', () => {
+    const direct = EXERCISES.filter((e) => e.primaryMuscles.includes('adductors'));
+    expect(direct.map((e) => e.id).sort()).toEqual(['bw_copenhagen_plank', 'kb_cossack_squat']);
+  });
+
+  it('reaches them from a hold as well as from a squat', () => {
+    // One of each, so a week with no room for a loaded squat can still do it.
+    const patterns = EXERCISES.filter((e) => e.primaryMuscles.includes('adductors')).map(
+      (e) => e.pattern,
+    );
+    expect(new Set(patterns)).toEqual(new Set(['core', 'squat']));
+  });
+
+  it('times the hold and counts the squat', () => {
+    // A Copenhagen plank in reps is the same mistake as a plank in reps.
+    const plank = EXERCISES.find((e) => e.id === 'bw_copenhagen_plank');
+    expect(plank?.repUnit).toBe('seconds');
+    expect(EXERCISES.find((e) => e.id === 'kb_cossack_squat')?.repUnit).toBeUndefined();
+  });
+});
+
+describe('scaling notes', () => {
+  it('are only on exercises that have no plate to take off', () => {
+    /* A lever and a hip limit cannot be scaled by the number on the bar, so
+       "do less" has to be spelled out. Everything else scales by load and
+       shows nothing. */
+    for (const id of Object.keys(SCALING)) {
+      const exercise = EXERCISES.find((e) => e.id === id);
+      expect(exercise, `${id} is not an exercise`).toBeTruthy();
+      expect(SCALING[id]?.easier).toBeTruthy();
+      expect(SCALING[id]?.harder).toBeTruthy();
+    }
+    expect(Object.keys(SCALING).length).toBeLessThan(EXERCISES.length / 4);
   });
 });
