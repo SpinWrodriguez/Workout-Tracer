@@ -169,7 +169,7 @@ describe('saying the buffer out loud', () => {
 });
 
 describe('hinge fatigue note', () => {
-  it('flags a hinge scheduled fourth or later', () => {
+  it('flags a hinge reached fourth with real work behind it', () => {
     const warnings = sessionWarnings(
       {
         date: MON,
@@ -186,7 +186,50 @@ describe('hinge fatigue note', () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]?.level).toBe('note');
     expect(warnings[0]?.exerciseId).toBe('bb_rdl');
-    expect(warnings[0]?.detail).toMatch(/9 sets in already/);
+    // Counts what was actually done, and says so where it can be read.
+    expect(warnings[0]?.title).toMatch(/9 sets in$/);
+  });
+
+  it('says nothing on a workout where nothing has been done yet', () => {
+    /*
+     * The whole claim is about fatigue, and position alone used to be enough
+     * to make it — so opening an untouched workout with a hinge fourth put up
+     * "0 sets in already. Hinges belong early", which is nonsense on a session
+     * that has not started. A note that is wrong the first time you see it
+     * teaches you to dismiss the next one.
+     */
+    const warnings = sessionWarnings(
+      {
+        date: MON,
+        exercises: [
+          { exerciseId: 'bb_bench_press', loggedSets: 0 },
+          { exerciseId: 'bw_split_squat', loggedSets: 0 },
+          { exerciseId: 'cb_fly', loggedSets: 0 },
+          { exerciseId: 'bb_rdl', loggedSets: 0 },
+        ],
+      },
+      byId,
+      [],
+    );
+    expect(warnings).toEqual([]);
+  });
+
+  it('stays quiet while the sets behind it are still trivial', () => {
+    // One set into the session is not fatigue, whatever position it sits in.
+    const warnings = sessionWarnings(
+      {
+        date: MON,
+        exercises: [
+          { exerciseId: 'bb_bench_press', loggedSets: 1 },
+          { exerciseId: 'bw_split_squat', loggedSets: 1 },
+          { exerciseId: 'cb_fly', loggedSets: 1 },
+          { exerciseId: 'bb_rdl', loggedSets: 3 },
+        ],
+      },
+      byId,
+      [],
+    );
+    expect(warnings).toEqual([]);
   });
 
   it('says nothing about a hinge done first', () => {

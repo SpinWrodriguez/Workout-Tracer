@@ -153,10 +153,23 @@ export interface RuleWarning {
 
 /**
  * Hinges are a form risk when fatigued, so the spec asks for a nudge when one
- * is scheduled late in a session rather than fresh.
+ * is reached tired rather than fresh.
+ *
+ * Position alone used to be enough, and that is how the note came up on an
+ * untouched workout reading "0 sets in already" — a claim about fatigue on a
+ * session where nothing had happened yet, which is worse than saying nothing:
+ * a note that is wrong the first time you see it teaches you to dismiss the
+ * next one. Both triggers now need real work behind them, because the note is
+ * about tiredness and nothing else can measure it.
+ *
+ * Ordering at PLANNING time is already handled upstream — the builder puts
+ * hinges second only to explosive work, and the prompt tells the model the
+ * same thing — so this note has only ever had one job.
  */
 export const HINGE_LATE_POSITION = 3; // fourth exercise onward
 export const HINGE_FATIGUE_SETS = 12;
+/** Two exercises' worth. Below this you are still fresh, wherever it sits. */
+export const HINGE_FRESH_SETS = 6;
 
 export interface SessionShape {
   date: string;
@@ -196,13 +209,17 @@ export function sessionWarnings(
 
     if (
       exercise.isHinge &&
-      (index >= HINGE_LATE_POSITION || setsBefore >= HINGE_FATIGUE_SETS)
+      (setsBefore >= HINGE_FATIGUE_SETS ||
+        (index >= HINGE_LATE_POSITION && setsBefore >= HINGE_FRESH_SETS))
     ) {
       warnings.push({
         level: 'note',
         exerciseId: exercise.id,
-        title: `${exercise.name} is a hinge, scheduled late`,
-        detail: `${setsBefore} sets in already. Hinges belong early, while the position still holds.`,
+        /* What is true, rather than a verdict on the plan: the sets are done
+           and the hinge is next. "Scheduled late" was a claim about ordering,
+           which is decided before the session and not this note's business. */
+        title: `${exercise.name} is a hinge, ${setsBefore} sets in`,
+        detail: 'Hinges are a form risk once the position tires. Ease off, or move it earlier next time.',
       });
     }
 
