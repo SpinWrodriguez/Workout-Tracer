@@ -59,6 +59,7 @@ Then:
 
 The app's own numbers, so you never have to guess where one came from:
 
+- maxRpe is the hardest a working set should be, set by the lifter in Settings: 8 leaves two reps in reserve, 9 leaves one, 10 is failure. It caps what the generator builds and what they should be doing, so a set logged at RIR 0 under a ceiling of 8 is worth naming.
 - weeklySetTarget is a whole-week total of working sets across all muscles. The lifter sets it themselves with a stepper in Settings, in steps of 3. Nothing derives it from their recovery, their history or their goals. The generator builds weeks within 20% of it, and the validator rejects a week outside that band.
 - week is the week they are LOOKING AT, not always the current one — the Program screen has arrows and planning next week from this one is normal. week.viewing says which. When it is not the current week, "this week" in their question means that week, its workouts are a plan rather than a record, setsLogged of 0 means nothing has happened in it yet rather than that they skipped everything, and you say which week you mean.
 - musclesUnderTheirShare is measured against fairSharePerMuscle, which is the weekly set target spread evenly over the 18 muscles — the share the week they asked for can actually give each one. A set counts 1 for each muscle it trains directly and 0.5 for each it trains indirectly. The training floor from the literature is 8 weighted sets a week per muscle and the ceiling is 20; clearing 8 on every muscle takes far more sets than a three-day week has, so the share is what a list of shortfalls is measured against and the floor is what to aim a priority muscle at. Say which of the two you mean.
@@ -166,6 +167,9 @@ export async function buildCoachContext(
         bodyWeightOn: weight?.date,
         golfDays: training.golfWeekdays.map(weekdayName),
         weeklySetTarget: training.weeklySetTarget,
+        /* The ceiling they set in Settings, so "am I pushing too hard" has a
+           number to be answered against rather than a guess. */
+        maxRpe: training.maxRpe,
         sessionMinutes: training.sessionMinutes,
         split: training.shape,
         /* Their own words, from Settings. Last so it cannot be mistaken for

@@ -675,7 +675,7 @@ export function ProgramScreen({
      * the Program screen and in the New-workout sheet), so the branch went
      * with it rather than sitting here untaken and untested.
      */
-    const constraints: DayConstraints = {};
+    const constraints: DayConstraints = { maxRpe: training.maxRpe };
     /* Only when the lifter chose them. Left open, the model decides and the
        validator judges whatever it decided — which is the single-workout case. */
     if (want.focus) constraints.focus = want.focus;
@@ -868,7 +868,12 @@ export function ProgramScreen({
       const golfWeekdays = training.golfWeekdays as never as Weekday[];
       /* Position in the request, 1-based. The only address the model gets. */
       const requests: WeekSlotRequest[] = days.map((day, index) => {
-        const constraints: string[] = [];
+        /* Every slot carries the effort ceiling, because a slot's constraints
+           bind only that slot — the prompt says so, so stating it once at the
+           top would leave the other days unbound. */
+        const constraints: string[] = [
+          `Nothing harder than RPE ${training.maxRpe}.`,
+        ];
         if (!gripAllowed(weekdayOf(day.date), golfWeekdays)) {
           constraints.push('Do not use any exercise with gripLoad "high".');
         }
@@ -888,7 +893,15 @@ export function ProgramScreen({
       const weekLogs = (await db.setLog.toArray()).filter((log) => sessionIds.has(log.sessionId));
       const instructions = await readAiInstructions();
       const short = undertrained(weekLogs, byId, share);
-      const brief = buildBrief({ share, goal: note, instructions, undertrained: short, existing });
+      const constraints: DayConstraints = { maxRpe: training.maxRpe };
+      const brief = buildBrief({
+        share,
+        goal: note,
+        instructions,
+        undertrained: short,
+        existing,
+        constraints,
+      });
 
       const outcome = await generateAiWeek({
         slots: requests,
@@ -897,7 +910,13 @@ export function ProgramScreen({
         // ceiling would truncate it mid-JSON.
         maxTokens: 16000,
         user: JSON.stringify({
-          ...briefPayload(brief, { goal: note, instructions, undertrained: short, existing }),
+          ...briefPayload(brief, {
+            goal: note,
+            instructions,
+            undertrained: short,
+            existing,
+            constraints,
+          }),
           slots: requests,
         }),
         validate: (workout) => {

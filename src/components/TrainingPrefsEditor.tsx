@@ -4,6 +4,8 @@ import { db } from '../db/db';
 import { budgetMinutes, readTimeFactor } from '../lib/timeModel';
 import {
   DEFAULT_TRAINING,
+  MAX_MAX_RPE,
+  MIN_MAX_RPE,
   readTraining,
   writeTraining,
   type TrainingPrefs,
@@ -15,6 +17,19 @@ import {
   SESSION_SHAPE_LABEL,
 } from '../lib/weekTemplate';
 import { Card, Chip, Label, SegmentedToggle } from './Layout';
+
+/*
+ * What each rung on the ceiling means, in reps rather than in RPE — nobody
+ * lifting decides "that was an 8", they decide "I had two more in me". The
+ * generator and the coach are both told this number, so the words have to
+ * match what they are asked to build to.
+ */
+const RPE_HINT: Record<number, string> = {
+  7: 'three reps left in the tank',
+  8: 'two reps left — sustainable',
+  9: 'one rep left on the hardest set',
+  10: 'to failure, every set',
+};
 
 /* -------------------------------------------------------------------------- */
 /*  Training preferences: set once, rarely changed.                           */
@@ -65,7 +80,7 @@ export function TrainingPrefsEditor() {
     <Card
       title="Training"
       collapsible
-      summary={`${prefs.weeklySetTarget} sets a week · ${prefs.sessionMinutes} min sessions`}
+      summary={`${prefs.weeklySetTarget} sets a week · ${prefs.sessionMinutes} min · RPE ${prefs.maxRpe} ceiling`}
     >
       <Label>Golf days</Label>
       <p className="mt-1 text-[13px] text-text-dim">
@@ -136,6 +151,28 @@ export function TrainingPrefsEditor() {
         <span className="ml-1 text-[12px] font-medium text-text-dim">
           sets a week across all muscles
         </span>
+      </div>
+
+      <Label className="mt-4 block">Hardest working set</Label>
+      <div className="mt-1.5 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => patch({ maxRpe: Math.max(MIN_MAX_RPE, prefs.maxRpe - 1) })}
+          aria-label="Lower the effort ceiling"
+          className="size-9 rounded-xl bg-surface-2 text-lg font-semibold"
+        >
+          −
+        </button>
+        <span className="w-12 text-center text-[17px] font-semibold">RPE {prefs.maxRpe}</span>
+        <button
+          type="button"
+          onClick={() => patch({ maxRpe: Math.min(MAX_MAX_RPE, prefs.maxRpe + 1) })}
+          aria-label="Raise the effort ceiling"
+          className="size-9 rounded-xl bg-surface-2 text-lg font-semibold"
+        >
+          +
+        </button>
+        <span className="ml-1 text-[12px] font-medium text-text-dim">{RPE_HINT[prefs.maxRpe]}</span>
       </div>
 
       <div className="mt-4 flex gap-2">

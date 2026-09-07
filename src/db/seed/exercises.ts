@@ -47,9 +47,27 @@ export const CABLE_SINGLE_PULLEY = 0.49;
 export const CABLE_BILATERAL = 0.98;
 export const CABLE_DUAL_ADAPTOR = 1.0;
 
-/** Bar weights, spec §2. */
+/** Bar weights, spec §2. Overridden per gym by inventory.barWeights. */
 export const FREE_BAR_KG = 20;
 export const SMITH_BAR_KG = 18;
+
+/**
+ * A landmine is the free bar with one end pinned in a socket, so the hands
+ * carry roughly half of what is on the sleeve — the same kind of leverage
+ * correction the cable stack already gets, and the same reason it cannot be
+ * left at 1.0. At 1.0 a scoop toss with 20 kg on the sleeve was logged as 20
+ * effective kilos, which overstates it against every barbell lift it is
+ * compared to on the Levels screen and in the volume totals.
+ *
+ * 0.6 rather than a flat half: the sleeve is not at the very end of the lever,
+ * and the published estimates for a standing landmine sit between 0.5 and 0.65
+ * depending on where the hands are. It is one number in one place, so it is
+ * easy to move if the honest figure turns out lower.
+ *
+ * Stored effectiveKg is written once per set at save time, so this changes what
+ * NEW entries record and leaves every logged set exactly as it was.
+ */
+export const LANDMINE_LEVERAGE = 0.6;
 
 /** One functional-trainer stack, spec §2 (13 × 5 kg plates + 5 kg selector rod). */
 export const CABLE_STACK_KG = 70;
@@ -366,10 +384,10 @@ export const EXERCISES: Exercise[] = [
     loadMode: 'weight',
     gripLoad: 'none',
     isHinge: false,
-    isExplosive: false,
+    isExplosive: true,
     isMobility: false,
-    repMin: 8,
-    repMax: 15,
+    repMin: 5,
+    repMax: 6,
     restSeconds: 60,
     skillLevel: 'beginner',
     pattern: 'rotation',
@@ -387,10 +405,10 @@ export const EXERCISES: Exercise[] = [
     loadMode: 'weight',
     gripLoad: 'none',
     isHinge: false,
-    isExplosive: false,
+    isExplosive: true,
     isMobility: false,
-    repMin: 8,
-    repMax: 15,
+    repMin: 5,
+    repMax: 6,
     restSeconds: 60,
     skillLevel: 'beginner',
     pattern: 'rotation',
@@ -642,7 +660,7 @@ export const EXERCISES: Exercise[] = [
     attachment: 'landmine_handle',
     primaryMuscles: ['front_delts'],
     secondaryMuscles: ['chest', 'triceps', 'abs'],
-    loadMultiplier: 1.0,
+    loadMultiplier: LANDMINE_LEVERAGE,
     barWeight: FREE_BAR_KG,
     loadMode: 'weight',
     gripLoad: 'none',
@@ -664,7 +682,7 @@ export const EXERCISES: Exercise[] = [
     attachment: 'landmine_handle',
     primaryMuscles: ['upper_back', 'lats'],
     secondaryMuscles: ['biceps', 'rear_delts', 'forearms'],
-    loadMultiplier: 1.0,
+    loadMultiplier: LANDMINE_LEVERAGE,
     barWeight: FREE_BAR_KG,
     loadMode: 'weight',
     gripLoad: 'high',
@@ -685,15 +703,15 @@ export const EXERCISES: Exercise[] = [
     station: 'landmine',
     primaryMuscles: ['obliques'],
     secondaryMuscles: ['abs', 'front_delts'],
-    loadMultiplier: 1.0,
+    loadMultiplier: LANDMINE_LEVERAGE,
     barWeight: FREE_BAR_KG,
     loadMode: 'weight',
     gripLoad: 'none',
     isHinge: false,
-    isExplosive: false,
+    isExplosive: true,
     isMobility: false,
-    repMin: 8,
-    repMax: 15,
+    repMin: 5,
+    repMax: 6,
     restSeconds: 90,
     skillLevel: 'intermediate',
     pattern: 'rotation',
@@ -705,7 +723,7 @@ export const EXERCISES: Exercise[] = [
     station: 'landmine',
     primaryMuscles: ['quads', 'glutes', 'front_delts'],
     secondaryMuscles: ['abs', 'triceps', 'upper_back'],
-    loadMultiplier: 1.0,
+    loadMultiplier: LANDMINE_LEVERAGE,
     barWeight: FREE_BAR_KG,
     loadMode: 'weight',
     gripLoad: 'none',
@@ -1099,7 +1117,7 @@ export const EXERCISES: Exercise[] = [
     attachment: 'landmine_handle',
     primaryMuscles: ['front_delts', 'obliques'],
     secondaryMuscles: ['triceps', 'abs', 'glutes'],
-    loadMultiplier: 1.0,
+    loadMultiplier: LANDMINE_LEVERAGE,
     barWeight: FREE_BAR_KG,
     loadMode: 'weight',
     gripLoad: 'none',
@@ -1120,7 +1138,7 @@ export const EXERCISES: Exercise[] = [
     attachment: 'landmine_handle',
     primaryMuscles: ['obliques', 'glutes'],
     secondaryMuscles: ['abs', 'front_delts', 'quads'],
-    loadMultiplier: 1.0,
+    loadMultiplier: LANDMINE_LEVERAGE,
     barWeight: FREE_BAR_KG,
     loadMode: 'weight',
     gripLoad: 'none',
@@ -1147,8 +1165,8 @@ export const EXERCISES: Exercise[] = [
     isHinge: false,
     isExplosive: false,
     isMobility: false,
-    repMin: 8,
-    repMax: 12,
+    repMin: 6,
+    repMax: 8,
     restSeconds: 90,
     skillLevel: 'intermediate',
     pattern: 'rotation',
@@ -1251,7 +1269,7 @@ export const EXERCISES: Exercise[] = [
     isExplosive: true,
     isMobility: false,
     repMin: 5,
-    repMax: 10,
+    repMax: 8,
     restSeconds: 120,
     skillLevel: 'intermediate',
     pattern: 'hinge',
@@ -1271,7 +1289,7 @@ export const EXERCISES: Exercise[] = [
     isExplosive: true,
     isMobility: false,
     repMin: 6,
-    repMax: 12,
+    repMax: 8,
     restSeconds: 120,
     skillLevel: 'intermediate',
     pattern: 'hinge',
@@ -1312,7 +1330,7 @@ export const EXERCISES: Exercise[] = [
     isExplosive: true,
     isMobility: false,
     repMin: 5,
-    repMax: 10,
+    repMax: 8,
     restSeconds: 120,
     skillLevel: 'beginner',
     pattern: 'squat',

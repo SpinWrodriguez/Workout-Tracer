@@ -7,6 +7,7 @@ import {
   CABLE_SINGLE_PULLEY,
   EXERCISES,
   FREE_BAR_KG,
+  LANDMINE_LEVERAGE,
   SMITH_BAR_KG,
 } from '../db/seed/exercises';
 import { MUSCLES } from '../db/seed/muscles';
@@ -46,14 +47,33 @@ describe('exercise seed (spec §8)', () => {
     expect(inverted?.barWeight).toBeUndefined();
   });
 
-  it('applies the cable ratios from §2 and nothing else', () => {
+  it('applies a multiplier only where leverage really changes the load', () => {
+    /*
+     * The cable ratios from §2, and the landmine, which is the same kind of
+     * correction: one end of the bar sits in a socket, so the hands carry a
+     * fraction of what is on the sleeve. The rule used to be "cable and
+     * nothing else", which held only while the landmine was wrong — it sat at
+     * 1.0 and reported a scoop toss as heavier than it is against every
+     * barbell lift on the Levels screen.
+     *
+     * Everything else is what it says it is: a kettlebell is a kettlebell.
+     */
     for (const exercise of EXERCISES) {
       if (exercise.station === 'cable') {
         expect([CABLE_SINGLE_PULLEY, CABLE_BILATERAL, 1.0]).toContain(exercise.loadMultiplier);
+      } else if (exercise.station === 'landmine') {
+        expect(exercise.loadMultiplier).toBe(LANDMINE_LEVERAGE);
       } else {
         expect(exercise.loadMultiplier).toBe(1.0);
       }
     }
+  });
+
+  it('keeps the landmine correction inside the range the leverage allows', () => {
+    // Half at the very end of the lever, a little more with the hands closer
+    // in. Outside 0.4-0.8 it is a typo rather than a measurement.
+    expect(LANDMINE_LEVERAGE).toBeGreaterThan(0.4);
+    expect(LANDMINE_LEVERAGE).toBeLessThan(0.8);
   });
 
   it('marks every golf-sensitive movement the spec calls out as high grip', () => {
@@ -106,6 +126,34 @@ describe('the rotational and explosive additions', () => {
     expect(explosive).toEqual(
       expect.arrayContaining(['kb_clean', 'kb_high_pull', 'sm_push_press', 'bw_jump_squat', 'lm_scoop']),
     );
+  });
+
+  it('keeps every explosive exercise inside a power rep range', () => {
+    /*
+     * A set of twelve is not power work — the tenth rep of a high pull is a
+     * conditioning rep with a heavy bell, and it is the flag that decides this
+     * one goes first in the session. The chop, the lift and the landmine
+     * rotation were at 8-15 and not flagged at all.
+     *
+     * This is also all the enforcement the generator needs: workingRepRange
+     * clamps every prescription to the exercise's own bounds, so a model
+     * asking for 8-15 on a scoop toss gets 5-8 whatever it asked for. The rule
+     * lives in the data, and this is the check that it stays there.
+     */
+    for (const exercise of EXERCISES.filter((e) => e.isExplosive)) {
+      expect(exercise.repMax, `${exercise.id} reps`).toBeLessThanOrEqual(8);
+      expect(exercise.repMin, `${exercise.id} reps`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('flags the rotational power work that carries the swing', () => {
+    // Ordered before everything else, and capped, because a chop done tired
+    // and slow trains something else entirely.
+    for (const id of ['cb_chop', 'cb_lift', 'lm_rotation', 'lm_scoop', 'lm_rotational_press']) {
+      const exercise = byId.get(id);
+      expect(exercise?.pattern, id).toBe('rotation');
+      if (id !== 'lm_rotational_press') expect(exercise?.isExplosive, id).toBe(true);
+    }
   });
 
   it('gives the generator a horizontal pull that is not grip-heavy', () => {

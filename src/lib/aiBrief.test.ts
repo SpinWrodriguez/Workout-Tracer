@@ -149,3 +149,31 @@ describe('the payload', () => {
     expect(serialised).not.toMatch(/\b(mon|tue|wed|thu|fri|sat|sun)\b/i);
   });
 });
+
+describe('the effort ceiling', () => {
+  /*
+   * 19 of the first 65 logged sets came in at RPE 10, against standing
+   * instructions that ask for sustainable progression. A rep range does not
+   * say how close to failure to take it, so the ceiling has to be said.
+   */
+  const base = { undertrained: [], existing: [] };
+
+  it('reaches the model as a constraint, in reps left rather than in RPE', () => {
+    const input = { ...base, constraints: { maxRpe: 8 } };
+    const line = (briefPayload(buildBrief(input), input).constraints as string[]).join(' ');
+    expect(line).toContain('RPE 8');
+    expect(line).toContain('2 reps in reserve');
+  });
+
+  it('says one rep, not 1 reps', () => {
+    const input = { ...base, constraints: { maxRpe: 9 } };
+    const line = (briefPayload(buildBrief(input), input).constraints as string[]).join(' ');
+    expect(line).toContain('1 rep in reserve');
+  });
+
+  it('says nothing at all when the ceiling is failure', () => {
+    // A ceiling of 10 is not a ceiling, and stating it would read as a licence.
+    const input = { ...base, constraints: { maxRpe: 10 } };
+    expect(briefPayload(buildBrief(input), input)).not.toHaveProperty('constraints');
+  });
+});

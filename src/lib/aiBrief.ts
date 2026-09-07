@@ -75,6 +75,12 @@ export interface DayConstraints {
    * cannot check against what it sees is not a requirement.
    */
   muscles?: string[];
+  /**
+   * The hardest a working set should be, from Settings. Stated because a rep
+   * range alone does not say how close to failure to take it, and 19 of the
+   * first 65 logged sets came in at RPE 10.
+   */
+  maxRpe?: number;
 }
 
 export interface BriefInput {
@@ -154,6 +160,14 @@ export function briefPayload(brief: Brief, input: BriefInput): Record<string, un
   }
   if (input.constraints?.intensity === 'heavy') {
     constraints.push('This is a heavy session: three working sets an exercise.');
+  }
+  if (input.constraints?.maxRpe !== undefined && input.constraints.maxRpe < 10) {
+    const reserve = 10 - input.constraints.maxRpe;
+    constraints.push(
+      `Nothing harder than RPE ${input.constraints.maxRpe} — leave at least ` +
+        `${reserve} ${reserve === 1 ? 'rep' : 'reps'} in reserve on every working set. ` +
+        'Pick rep ranges that can be finished at that effort, not ranges that need failure.',
+    );
   }
   if (input.constraints?.muscles && input.constraints.muscles.length > 0) {
     const wanted = input.constraints.muscles;

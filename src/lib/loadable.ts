@@ -117,9 +117,18 @@ function inventoryKey(inventory: Inventory): string {
   return `${plates}|${bells}|${free}|${smith}|${inventory.cableStackKg}|${inventory.cableStepKg}`;
 }
 
-/** Bar weight for an exercise, letting Settings override the seed. */
+/**
+ * Bar weight for an exercise, letting Settings override the seed.
+ *
+ * A landmine counts as the free bar, because it is the free bar — one end in a
+ * socket, the same steel on the same rack. Reading its seeded 20 while Settings
+ * said 15 built its ladder on a bar that does not exist here, so every rung on
+ * a landmine press was 5 kg out.
+ */
 export function barWeightFor(exercise: Exercise, inventory: Inventory): number | undefined {
-  if (exercise.station === 'free_bar') return inventory.barWeights.free_bar;
+  if (exercise.station === 'free_bar' || exercise.station === 'landmine') {
+    return inventory.barWeights.free_bar;
+  }
   if (exercise.station === 'smith') return inventory.barWeights.smith;
   return exercise.barWeight;
 }

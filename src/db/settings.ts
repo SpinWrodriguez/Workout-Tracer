@@ -76,13 +76,31 @@ export interface TrainingPrefs {
    * it — two heavy days look identical whichever split produced them.
    */
   shape: 'mixed' | 'upper_lower';
+  /**
+   * The hardest a working set should be, as RPE. 8 leaves two reps in reserve,
+   * 9 leaves one, 10 is failure.
+   *
+   * A ceiling rather than a target, and a setting rather than a habit: the
+   * generator and the coach are both told it, so "leave two in the tank" is a
+   * constraint on what gets built instead of something to remember on the
+   * fourth set of a session that is already going badly.
+   */
+  maxRpe: number;
 }
+
+/** What the ceiling may be set to. 7 is easy work; below that is a warm-up. */
+export const MIN_MAX_RPE = 7;
+export const MAX_MAX_RPE = 10;
 
 export const DEFAULT_TRAINING: TrainingPrefs = {
   golfWeekdays: [6],
   weeklySetTarget: 33,
   sessionMinutes: 40,
   shape: 'mixed',
+  /* 9 — one rep in reserve on the hardest set. Not 10: training to failure
+     every set is what the standing instructions already ask against, and a
+     default nobody chose should be the sustainable one. */
+  maxRpe: 9,
 };
 
 export function mergeTraining(value: unknown): TrainingPrefs {
@@ -94,6 +112,7 @@ export function mergeTraining(value: unknown): TrainingPrefs {
     : DEFAULT_TRAINING.golfWeekdays;
   const target = Number(value.weeklySetTarget);
   const minutes = Number(value.sessionMinutes);
+  const rpe = Number(value.maxRpe);
   return {
     golfWeekdays,
     weeklySetTarget:
@@ -103,6 +122,11 @@ export function mergeTraining(value: unknown): TrainingPrefs {
         ? Math.round(minutes)
         : DEFAULT_TRAINING.sessionMinutes,
     shape: value.shape === 'upper_lower' ? 'upper_lower' : DEFAULT_TRAINING.shape,
+    /* Clamped rather than trusted: a stored 12 would reach the prompt as a
+       ceiling above failure, which is no ceiling at all. */
+    maxRpe: Number.isFinite(rpe)
+      ? Math.min(MAX_MAX_RPE, Math.max(MIN_MAX_RPE, Math.round(rpe)))
+      : DEFAULT_TRAINING.maxRpe,
   };
 }
 

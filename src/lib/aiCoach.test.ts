@@ -214,11 +214,12 @@ describe('what the coach is sent', () => {
        rules and context on an empty database — a fraction of one library, and
        the whole reason a question costs a fraction of a cent.
 
-       The ceiling moved from 5,200 to 5,400 for two rules that each fixed a
-       wrong answer: which week the question is about, and never working a
-       weekday out from a date. It is a budget, not a target — raise it when a
-       rule earns it and not to make room for prose. */
-    expect(system.length).toBeLessThan(5400);
+       The ceiling has moved twice, each time for a rule that fixed a wrong
+       answer: which week the question is about, never working a weekday out
+       from a date, and what the effort ceiling means. It is a budget, not a
+       target — raise it when a rule earns it and not to make room for
+       prose. */
+    expect(system.length).toBeLessThan(5600);
   });
 
   it('licenses general training knowledge, not just a read of the data', async () => {
