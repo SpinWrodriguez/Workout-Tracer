@@ -621,6 +621,10 @@ export function SessionScreen({
       ).filter((w) => !dismissed.includes(`${w.exerciseId}:${w.title}`))
     : [];
 
+  /* Only the exercise in hand. The rest are true but not yet useful, and the
+     one you are on is the one you can act on. */
+  const activeWarnings = warnings.filter((warning) => warning.exerciseId === activeId);
+
   /* A light day carries its own instruction, set by the template. */
   const effortCue = draft ? plan?.schedule[draft.daySlot as DaySlot]?.effortCue : undefined;
 
@@ -686,43 +690,6 @@ export function SessionScreen({
           </>
         }
       >
-        {warnings.map((warning) => (
-          <button
-            key={`${warning.exerciseId}:${warning.title}`}
-            type="button"
-            onClick={() =>
-              setDismissed((prev) => [...prev, `${warning.exerciseId}:${warning.title}`])
-            }
-            className="mb-3 w-full rounded-2xl px-4 py-3 text-left"
-            style={
-              // The danger pair is themed: a dark red fill with white text in
-              // dark, a tinted fill with dark red text in light. --text would
-              // be black on dark red in one of them.
-              warning.level === 'warn'
-                ? { background: 'var(--color-danger)', color: 'var(--color-danger-text)' }
-                : { background: 'var(--color-surface)' }
-            }
-          >
-            <span className="flex items-baseline justify-between gap-3">
-              <span className="card-title">{warning.title}</span>
-              <span
-                className={`text-[11px] font-medium whitespace-nowrap ${
-                  warning.level === 'warn' ? 'opacity-70' : 'text-text-dim'
-                }`}
-              >
-                dismiss
-              </span>
-            </span>
-            <span
-              className={`mt-1 block text-[12px] leading-snug font-medium ${
-                warning.level === 'warn' ? 'opacity-90' : 'text-text-dim'
-              }`}
-            >
-              {warning.detail}
-            </span>
-          </button>
-        ))}
-
         {!activeExercise || !activeDraftExercise ? (
           <Card title="No exercises yet">
             <p className="text-text-dim">--- sets</p>
@@ -774,6 +741,53 @@ export function SessionScreen({
               </span>
             }
           >
+            {/* Above the set rows of the exercise it is about, rather than
+                stacked over the whole session. A note on the fifth exercise
+                used to sit on top of the first one's set rows, pushing the
+                work down the screen to say something about a lift twenty
+                minutes away — and by the time it mattered you had dismissed
+                it to get it out of the way.
+
+                Nothing is lost by waiting: the set rows only exist for the
+                active exercise, so a lift cannot be logged without passing
+                its note first. */}
+            {activeWarnings.map((warning) => (
+              <button
+                key={`${warning.exerciseId}:${warning.title}`}
+                type="button"
+                onClick={() =>
+                  setDismissed((prev) => [...prev, `${warning.exerciseId}:${warning.title}`])
+                }
+                className="mb-2.5 w-full rounded-xl px-3.5 py-2.5 text-left"
+                style={
+                  // The danger pair is themed: a dark red fill with white text
+                  // in dark, a tinted fill with dark red text in light. --text
+                  // would be black on dark red in one of them.
+                  warning.level === 'warn'
+                    ? { background: 'var(--color-danger)', color: 'var(--color-danger-text)' }
+                    : { background: 'var(--color-surface-2)' }
+                }
+              >
+                <span className="flex items-baseline justify-between gap-3">
+                  <span className="text-[14px] leading-snug font-semibold">{warning.title}</span>
+                  <span
+                    className={`text-[11px] font-medium whitespace-nowrap ${
+                      warning.level === 'warn' ? 'opacity-70' : 'text-text-dim'
+                    }`}
+                  >
+                    dismiss
+                  </span>
+                </span>
+                <span
+                  className={`mt-0.5 block text-[12px] leading-snug font-medium ${
+                    warning.level === 'warn' ? 'opacity-90' : 'text-text-dim'
+                  }`}
+                >
+                  {warning.detail}
+                </span>
+              </button>
+            ))}
+
             {/* What it trains, coloured by region. The one bit of colour on
                 this screen that is information rather than decoration: blue
                 is upper body, orange lower, cyan core. */}

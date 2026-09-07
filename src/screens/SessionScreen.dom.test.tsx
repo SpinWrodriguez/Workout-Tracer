@@ -24,7 +24,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
 import { readActiveSession, writeActiveSession } from '../db/settings';
-import { todayIso } from '../lib/format';
+import { shiftIso, todayIso } from '../lib/format';
 import { SessionScreen } from './SessionScreen';
 
 const SQUAT = 'bb_back_squat';
@@ -405,5 +405,55 @@ describe('the rest timer', () => {
     // And back: the squat is its own 180 again, not the 90 that was tapped.
     await ui.click(stripButton('bb_back_squat'));
     await waitFor(() => expect(screen.getByText('3:00')).toBeTruthy());
+  });
+});
+
+describe('a rule note sits with the exercise it is about', () => {
+  /*
+   * They used to stack above the whole session, so a note about the fifth
+   * exercise sat on top of the first one's set rows — pushing the work down
+   * the screen to say something about a lift twenty minutes away, which is
+   * how they got dismissed on sight.
+   */
+  const PULL_UP = 'bw_pull_up';
+
+  it('waits until that exercise is the one in hand', async () => {
+    // Golf tomorrow, so the pull-up carries the grip warning and the squat
+    // carries nothing.
+    await db.golfDay.put({ date: shiftIso(todayIso(), 1), status: 'planned', holes: 18 });
+    await seedBlock();
+    await seedSchedule({ A: { weekday: 1, intensity: 'heavy' } });
+    await seedWorkout('A', [SQUAT, PULL_UP], 3);
+
+    draw(<SessionScreen daySlot="A" exercises={exercises} onExit={vi.fn()} />);
+    await screen.findByRole('heading', { name: named(SQUAT) });
+    const ui = user();
+
+    // On the squat: nothing, even though the workout holds a lift that breaks
+    // the rule.
+    expect(screen.queryByText(/is high grip load/)).toBeNull();
+
+    await ui.click(screen.getByRole('button', { name: new RegExp(named(PULL_UP)) }));
+    await screen.findByRole('heading', { name: named(PULL_UP) });
+
+    // On the pull-up: there it is, above the sets it is about.
+    const note = await screen.findByText(`${named(PULL_UP)} is high grip load`);
+    const card = note.closest('section') as HTMLElement;
+    expect(card.textContent).toContain(named(PULL_UP));
+    expect(card.textContent).toMatch(/swing/);
+  });
+
+  it('goes away when dismissed and stays away', async () => {
+    await db.golfDay.put({ date: shiftIso(todayIso(), 1), status: 'planned', holes: 18 });
+    await seedBlock();
+    await seedSchedule({ A: { weekday: 1, intensity: 'heavy' } });
+    await seedWorkout('A', [PULL_UP], 3);
+
+    draw(<SessionScreen daySlot="A" exercises={exercises} onExit={vi.fn()} />);
+    const ui = user();
+
+    const note = await screen.findByText(`${named(PULL_UP)} is high grip load`);
+    await ui.click(note);
+    await waitFor(() => expect(screen.queryByText(/is high grip load/)).toBeNull());
   });
 });
