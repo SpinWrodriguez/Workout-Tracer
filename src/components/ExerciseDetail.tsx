@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import type { Exercise } from '../db/types';
+import { readInventory } from '../db/settings';
+import { DEFAULT_INVENTORY, barWeightFor } from '../lib/loadable';
 import { STATION_LABEL } from '../db/seed/exercises';
 import { muscleName } from '../db/seed/muscles';
 import { cueFor, stepsFor } from '../db/seed/cues';
@@ -48,6 +51,11 @@ export function ExerciseDetail({
   exercise: Exercise;
   onClose: () => void;
 }) {
+  /* Read here rather than passed in: this sheet opens from four screens and
+     the bar in the garage is the same bar on all of them. */
+  const inventory = useLiveQuery(() => readInventory(), [], DEFAULT_INVENTORY);
+  const bar = barWeightFor(exercise, inventory);
+
   // `undefined` while loading, `null` once we know there is nothing to show.
   // An unmapped exercise is known to be empty without a lookup.
   const [record, setRecord] = useState<FreeDbRecord | null | undefined>(
@@ -83,7 +91,7 @@ export function ExerciseDetail({
         <Label>Setup</Label>
         <div className="mt-2 flex flex-wrap gap-1.5">
           <Chip tone="plain">{STATION_LABEL[exercise.station]}</Chip>
-          {exercise.barWeight !== undefined && <Chip tone="plain">bar {exercise.barWeight} kg</Chip>}
+          {bar !== undefined && <Chip tone="plain">bar {bar} kg</Chip>}
           {hasLoadTranslation(exercise) && (
             <Chip tone="plain">×{exercise.loadMultiplier.toFixed(2)} effective</Chip>
           )}

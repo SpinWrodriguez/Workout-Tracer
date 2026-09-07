@@ -23,7 +23,8 @@ import {
 import { screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
-import { readActiveSession, writeActiveSession } from '../db/settings';
+import { readActiveSession, writeActiveSession, writeInventory } from '../db/settings';
+import { DEFAULT_INVENTORY } from '../lib/loadable';
 import { shiftIso, todayIso } from '../lib/format';
 import { SessionScreen } from './SessionScreen';
 
@@ -455,5 +456,26 @@ describe('a rule note sits with the exercise it is about', () => {
     const note = await screen.findByText(`${named(PULL_UP)} is high grip load`);
     await ui.click(note);
     await waitFor(() => expect(screen.queryByText(/is high grip load/)).toBeNull());
+  });
+});
+
+describe('the bar on the rack', () => {
+  /*
+   * The seed says 20 kg because an Olympic bar is 20. This one is 15, and
+   * Settings is where that is said. The ladder always asked barWeightFor for
+   * the real bar; the caption above the ladder read the seed, so the weights
+   * you could pick were right while the line describing them was wrong.
+   */
+  it('says what Settings says, and so does the ladder', async () => {
+    await writeInventory({ ...DEFAULT_INVENTORY, barWeights: { free_bar: 15, smith: 18 } });
+    await seedBlock();
+    await seedSchedule({ A: { weekday: 1, intensity: 'heavy' } });
+    await seedWorkout('A', [SQUAT], 3);
+
+    draw(<SessionScreen daySlot="A" exercises={exercises} onExit={vi.fn()} />);
+    await screen.findByRole('heading', { name: named(SQUAT) });
+
+    await screen.findByText('bar 15 kg');
+    expect(screen.queryByText('bar 20 kg')).toBeNull();
   });
 });

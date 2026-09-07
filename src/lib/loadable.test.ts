@@ -14,6 +14,7 @@ import {
   prevRung,
   snapToLadder,
   handHeldWeights,
+  barWeightFor,
   clearLadderCache,
   type Inventory,
 } from './loadable';
@@ -225,5 +226,37 @@ describe('what a hand can hold', () => {
     /* 20 kg bar + 2x20 + 2x10 + 4x5 + 4x1.5 = 106, which is the whole rack on
        one bar — right for a squat, absurd for a swing. */
     expect(Math.max(...rungs)).toBe(106);
+  });
+});
+
+describe('whose bar it is', () => {
+  /*
+   * The seed says 20 because an Olympic bar is 20. The bar in this garage is
+   * whatever Settings says, and the ladder has always asked this function —
+   * it was the caption above the ladder, and the figure handed to the coach,
+   * that went on printing the seed.
+   */
+  const fifteen: Inventory = {
+    ...DEFAULT_INVENTORY,
+    barWeights: { free_bar: 15, smith: 16 },
+  };
+
+  it('answers with the bar Settings holds, not the one in the seed', () => {
+    const squat = find('bb_back_squat');
+    expect(squat.barWeight).toBe(20);
+    expect(barWeightFor(squat, fifteen)).toBe(15);
+    expect(barWeightFor(find('sm_calf_raise'), fifteen)).toBe(16);
+  });
+
+  it('leaves an exercise with no bar without one', () => {
+    // A kettlebell swing has no bar to weigh, whatever Settings says.
+    expect(barWeightFor(find('kb_swing'), fifteen)).toBeUndefined();
+  });
+
+  it('moves the whole ladder with it', () => {
+    clearLadderCache();
+    const ladder = ladderFor(find('bb_back_squat'), fifteen);
+    expect(ladder[0]).toBe(15);
+    expect(ladder).not.toContain(20);
   });
 });

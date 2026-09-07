@@ -16,6 +16,8 @@
 /* -------------------------------------------------------------------------- */
 
 import { db } from '../db/db';
+import { readInventory } from '../db/settings';
+import { barWeightFor } from './loadable';
 import { MUSCLE_BY_ID } from '../db/seed/muscles';
 import type { Exercise, MovementPattern, MuscleId, SetLog } from '../db/types';
 import { effectiveKg } from './load';
@@ -175,10 +177,14 @@ function searchExercises(exercises: Exercise[], input: unknown): unknown {
   };
 }
 
-function exerciseDetail(exercises: Exercise[], input: unknown): unknown {
+async function exerciseDetail(exercises: Exercise[], input: unknown): Promise<unknown> {
   const id = asRecord(input).exerciseId;
   const exercise = exercises.find((row) => row.id === id);
   if (!exercise) return { error: `No exercise with id ${String(id)}.` };
+  /* The bar in the garage, from Settings. The seeded 20 was being reported to
+     the coach as fact, so it would work a load out on a bar that is not the
+     one being lifted. */
+  const inventory = await readInventory();
   return {
     id: exercise.id,
     name: exercise.name,
@@ -193,7 +199,7 @@ function exerciseDetail(exercises: Exercise[], input: unknown): unknown {
     range: [exercise.repMin, exercise.repMax],
     restSeconds: exercise.restSeconds,
     loadMode: exercise.loadMode,
-    barWeightKg: exercise.barWeight,
+    barWeightKg: barWeightFor(exercise, inventory),
     loadMultiplier: exercise.loadMultiplier,
     gripLoad: exercise.gripLoad,
     spinalLoad: exercise.spinalLoad,
@@ -363,7 +369,7 @@ export async function runCoachTool(
       return { content: JSON.stringify(searchExercises(exercises, input)), isError: false };
     }
     if (name === 'exercise_detail') {
-      return { content: JSON.stringify(exerciseDetail(exercises, input)), isError: false };
+      return { content: JSON.stringify(await exerciseDetail(exercises, input)), isError: false };
     }
     if (name === 'exercise_history') {
       return { content: JSON.stringify(await exerciseHistory(exercises, input)), isError: false };

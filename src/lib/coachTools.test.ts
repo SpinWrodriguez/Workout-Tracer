@@ -5,6 +5,8 @@ import { seedDatabase } from '../db/seed';
 import { CABLE_SINGLE_PULLEY, EXERCISES } from '../db/seed/exercises';
 import type { SetLog } from '../db/types';
 import { COACH_TOOLS, runCoachTool } from './coachTools';
+import { writeInventory } from '../db/settings';
+import { DEFAULT_INVENTORY } from './loadable';
 
 /*
  * These are the coach's only route to the exercise library and the logs, and
@@ -100,6 +102,16 @@ describe('reading one exercise', () => {
   it('reports the grip load the golf rule turns on', async () => {
     const result = await call('exercise_detail', { exerciseId: 'kb_suitcase_carry' });
     expect(result.gripLoad).toBe('high');
+  });
+
+  it('reports the bar in the garage, not the one in the seed', async () => {
+    /* Told 20 kg, the coach works a load out on a bar nobody is lifting. The
+       seed says 20 because an Olympic bar is 20; Settings says what is on the
+       rack. */
+    await writeInventory({ ...DEFAULT_INVENTORY, barWeights: { free_bar: 15, smith: 16 } });
+    expect(await call('exercise_detail', { exerciseId: 'bb_back_squat' })).toMatchObject({
+      barWeightKg: 15,
+    });
   });
 
   it('answers an unknown id with something the model can read', async () => {

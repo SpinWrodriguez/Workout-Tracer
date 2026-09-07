@@ -22,7 +22,7 @@ import {
   writeActiveSession,
 } from '../db/settings';
 import { hasLoadTranslation } from '../lib/load';
-import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
+import { DEFAULT_INVENTORY, barWeightFor, ladderFor, type Inventory } from '../lib/loadable';
 import { sessionWarnings, type RuleWarning } from '../lib/golf';
 import {
   DEFAULT_REP_RANGE,
@@ -821,8 +821,13 @@ export function SessionScreen({
                   ×{activeExercise.loadMultiplier.toFixed(2)} · {CABLE_STACK_KG} kg stack
                 </Label>
               )}
-              {activeExercise.barWeight !== undefined && (
-                <Label>bar {activeExercise.barWeight} kg</Label>
+              {/* From Settings, not from the seed. The ladder has always
+                  asked barWeightFor for the real bar; this line read the
+                  seeded 20 and went on saying it after the bar in the garage
+                  was set to 15 — so the weights you could pick were right and
+                  the caption above them was wrong. */}
+              {barWeightFor(activeExercise, inventory) !== undefined && (
+                <Label>bar {barWeightFor(activeExercise, inventory)} kg</Label>
               )}
               {activeExercise.loadMode === 'rpe_only' && <Label>band — log RPE and reps only</Label>}
               {activeExercise.isHinge && <Label>hinge — do this fresh</Label>}
