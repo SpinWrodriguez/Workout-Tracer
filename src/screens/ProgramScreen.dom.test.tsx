@@ -9,6 +9,7 @@
 
 import {
   BLOCK_ID,
+  confirmWith,
   exercises,
   exercisesById,
   named,
@@ -1043,5 +1044,151 @@ describe('which week is on screen', () => {
 
     await ui.click(screen.getByRole('button', { name: 'Previous week' }));
     await waitFor(() => expect(seen.at(-1)).toBe(todayIso()));
+  });
+});
+
+describe('what a workout card says about itself', () => {
+  /** A finished session for a slot, on a date. */
+  async function logFor(slot: string, name: string, date: string) {
+    await db.session.put({
+      id: `s_${slot}_${date}`,
+      blockId: BLOCK_ID,
+      daySlot: slot as never,
+      daySlotName: name,
+      date,
+      durationMin: 40,
+    });
+  }
+
+  it('says done where it was trained, and the day where it is only planned', async () => {
+    await seedSchedule({
+      A: { intensity: 'heavy', name: 'Monday squats' },
+      B: { intensity: 'heavy', name: 'Thursday pull' },
+    });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedWorkout('B', ['bb_bent_over_row']);
+    await seedPlan({ [MONDAY]: 'A', [WEDNESDAY]: 'B' });
+    await logFor('A', 'Monday squats', MONDAY);
+
+    await openProgram();
+
+    const trained = await workoutCard('Monday squats');
+    await waitFor(() => expect(trained.textContent).toContain('done'));
+
+    // The one still to come says when, not whether.
+    const planned = await workoutCard('Thursday pull');
+    expect(planned.textContent).toContain(WEEKDAY_LABEL[weekdayOf(WEDNESDAY)]);
+    expect(planned.textContent).not.toContain('done');
+  });
+
+  it('says a workout has no day rather than leaving the corner empty', async () => {
+    /* Blank read as "the weekday has not loaded yet", which is a different
+       thing from a workout that is not in the week at all. */
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+
+    await openProgram();
+
+    const card = await workoutCard('Monday squats');
+    await waitFor(() => expect(card.textContent).toContain('no day yet'));
+  });
+
+  it('counts the times it has been done before, in the corner', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+    await logFor('A', 'Monday squats', shiftIso(MONDAY, -7));
+    await logFor('A', 'Monday squats', shiftIso(MONDAY, -14));
+    await logFor('A', 'Monday squats', shiftIso(MONDAY, -21));
+
+    await openProgram();
+
+    const card = await workoutCard('Monday squats');
+    await waitFor(() =>
+      expect(within(card).getByLabelText('done 3 times before')).toBeTruthy(),
+    );
+  });
+
+  it('shows no count on a workout never trained', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+
+    await openProgram();
+
+    const card = await workoutCard('Monday squats');
+    await waitFor(() => expect(card.textContent).toContain('no day yet'));
+    expect(within(card).queryByLabelText(/done .* before/)).toBeNull();
+  });
+});
+
+describe('deleting a workout', () => {
+  async function deleteWorkout(ui: ReturnType<typeof user>, name: string) {
+    const card = await editWorkout(ui, await workoutCard(name));
+    await ui.click(within(card).getByRole('button', { name: 'Delete workout' }));
+  }
+
+  it('asks nothing when there is nothing to lose', async () => {
+    /* Built and never placed or trained: a confirm box on that is a keystroke
+       tax on tidying up after a generator you did not like. */
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+    const { ui } = await openProgram();
+    const asked = vi.spyOn(window, 'confirm');
+
+    await deleteWorkout(ui, 'Monday squats');
+
+    await waitFor(async () => {
+      const schedule = (await readSchedules())[BLOCK_ID] ?? {};
+      expect(Object.keys(schedule)).toEqual([]);
+    });
+    expect(asked).not.toHaveBeenCalled();
+  });
+
+  it('says which day it is on when it is on the calendar', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedPlan({ [WEDNESDAY]: 'A' });
+    const { ui } = await openProgram();
+    confirmWith(true);
+
+    await deleteWorkout(ui, 'Monday squats');
+
+    const asked = vi.mocked(window.confirm).mock.calls[0]?.[0] ?? '';
+    expect(asked).toContain(WEEKDAY_LABEL[weekdayOf(WEDNESDAY)]);
+    expect(asked).not.toMatch(/you have done it/);
+  });
+
+  it('says how often it was done, and that the sessions survive', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+    await db.session.put({
+      id: 's_old',
+      blockId: BLOCK_ID,
+      daySlot: 'A',
+      daySlotName: 'Monday squats',
+      date: shiftIso(MONDAY, -7),
+      durationMin: 40,
+    });
+    const { ui } = await openProgram();
+    confirmWith(true);
+
+    await deleteWorkout(ui, 'Monday squats');
+
+    const asked = vi.mocked(window.confirm).mock.calls[0]?.[0] ?? '';
+    expect(asked).toMatch(/done it 1 time/);
+    // The distinction that makes the delete safe to agree to.
+    expect(asked).toMatch(/stay in History/);
+  });
+
+  it('keeps the workout when the question is declined', async () => {
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedPlan({ [WEDNESDAY]: 'A' });
+    const { ui } = await openProgram();
+    confirmWith(false);
+
+    await deleteWorkout(ui, 'Monday squats');
+
+    const schedule = (await readSchedules())[BLOCK_ID] ?? {};
+    expect(Object.keys(schedule)).toEqual(['A']);
   });
 });

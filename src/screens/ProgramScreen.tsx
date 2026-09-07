@@ -169,6 +169,7 @@ export function ProgramScreen({
       sessions: rows.map((s) => ({
         id: s.id,
         date: s.date,
+        slot: s.daySlot as DaySlot,
         name: s.daySlotName,
         exerciseIds: [
           ...new Set(logs.filter((l) => l.sessionId === s.id).map((l) => l.exerciseId)),
@@ -178,6 +179,23 @@ export function ProgramScreen({
       trainedDates: new Set(rows.map((row) => row.date)),
     };
   }, [anchor]);
+
+  /**
+   * How many times each workout has ever been done.
+   *
+   * Matched on the NAME the session was logged under where it has one, falling
+   * back to the slot letter: a letter is reused when a workout is deleted and
+   * another built in its place, so counting letters alone would credit a new
+   * workout with a previous one's sessions. A rename is the other way round —
+   * the sessions keep the old name — and the slot fallback catches those.
+   */
+  const timesDoneBySlot = useLiveQuery(async () => {
+    const sessions = await db.session.toArray();
+    return (slot: DaySlot, label: string): number =>
+      sessions.filter((row) =>
+        row.daySlotName ? row.daySlotName === label : row.daySlot === slot,
+      ).length;
+  }, []);
 
   const byId = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
 
@@ -1250,6 +1268,12 @@ export function ProgramScreen({
            claiming "Mon" for a workout that is on Wednesday this week is the
            same confusion the DatePlan layer exists to end. */
         const date = dateFor(slot);
+        /* Trained in the week on screen. Matched by slot AND by name, because
+           either can identify it: a renamed workout's old sessions keep the
+           old name, and a deleted one's letter can belong to something new. */
+        const doneThisWeek = (weekHistory?.sessions ?? []).some(
+          (session) => session.slot === slot || session.name === labelFor(slot),
+        );
         return (
           <DaySlotCard
             key={slot}
@@ -1271,6 +1295,8 @@ export function ProgramScreen({
             minutes={list.length > 0 ? realMinutes(estimateMinutes(list, byId), timeFactor) : undefined}
             editing={isEditing}
             isToday={date === todayIso()}
+            doneThisWeek={doneThisWeek}
+            timesDone={timesDoneBySlot?.(slot, labelFor(slot)) ?? 0}
             intensity={scheduled?.intensity ?? 'heavy'}
             onToggleEdit={() => setEditingSlot(isEditing ? null : slot)}
             onStart={() => onStartDay(slot)}
@@ -1286,16 +1312,40 @@ export function ProgramScreen({
             /* Only reachable on an empty workout now, so it cannot overwrite
                anything and takes variant 0 — the strongest draw. */
             onGenerate={() => void generateSlot(slot, 0)}
+            /*
+             * Asked only where there is something to lose. A workout you built
+             * five minutes ago and never placed or trained is a mistake to
+             * undo, and a confirm box on it is a keystroke tax on tidying up —
+             * so the prompt appears when it is on the calendar or has sessions
+             * behind it, and says which of the two.
+             */
             onClearDay={() => {
-              if (
-                block &&
-                window.confirm(
-                  `Delete the workout "${labelFor(slot)}"? Its exercises go with it, and it comes off the calendar.`,
-                )
-              ) {
-                void clearDaySlot(block.id, slot);
-                setEditingSlot(null);
+              if (!block) return;
+              const times = timesDoneBySlot?.(slot, labelFor(slot)) ?? 0;
+              const reasons = [
+                date !== undefined
+                  ? `it is on ${WEEKDAY_LABEL[weekdayOf(date)]} this week`
+                  : undefined,
+                times > 0
+                  ? `you have done it ${times} ${times === 1 ? 'time' : 'times'}`
+                  : undefined,
+              ].filter((reason): reason is string => reason !== undefined);
+
+              if (reasons.length > 0) {
+                const kept =
+                  times > 0
+                    ? ' The sessions you logged stay in History — this deletes the workout, not what you did.'
+                    : '';
+                if (
+                  !window.confirm(
+                    `Delete "${labelFor(slot)}"? ${reasons.join(' and ')}.${kept}`,
+                  )
+                ) {
+                  return;
+                }
               }
+              void clearDaySlot(block.id, slot);
+              setEditingSlot(null);
             }}
           />
         );

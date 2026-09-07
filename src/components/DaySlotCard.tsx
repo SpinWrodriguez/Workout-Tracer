@@ -3,7 +3,7 @@ import type { BlockExercise, Exercise } from '../db/types';
 import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
 
 import { Card, Empty, Label } from './Layout';
-import { EFFORT_COLOR, EFFORT_WORD } from '../lib/effort';
+import { EFFORT_COLOR, EFFORT_TEXT, EFFORT_WORD } from '../lib/effort';
 import { SortableRows } from './SortableRows';
 import { HapticTick } from './HapticTick';
 import { formatDuration, isTimed, prescription, repUnitWord, stepFor } from '../lib/repUnit';
@@ -98,6 +98,8 @@ export function DaySlotCard({
   noteSevere,
   editing,
   isToday,
+  doneThisWeek = false,
+  timesDone = 0,
   onToggleEdit,
   onStart,
   onAdd,
@@ -130,6 +132,14 @@ export function DaySlotCard({
   noteSevere?: boolean;
   editing: boolean;
   isToday: boolean;
+  /**
+   * A session for this workout was logged in the week on screen. The week
+   * strip says it too, in black; the card said nothing, so scrolling the list
+   * gave no way to tell Monday's finished session from Thursday's plan.
+   */
+  doneThisWeek?: boolean;
+  /** How many times it has ever been done. Zero for one never trained. */
+  timesDone?: number;
   onToggleEdit: () => void;
   onStart: () => void;
   onAdd: () => void;
@@ -197,14 +207,35 @@ export function DaySlotCard({
          only on a card you have opened — a shut card has nothing to hit but
          its own fold toggle. */
       trailing={
-        weekday !== undefined ? (
-          <Label className={isToday ? 'text-text!' : ''}>
+        <span className="flex items-center gap-2">
+          {/* How many times this one has been done, ever. Blue because it is a
+              count of history rather than a judgement on it — the effort
+              colours are the rust-and-teal pair and the ring colours are where
+              this blue comes from. */}
+          {timesDone > 0 && (
+            <span
+              aria-label={`done ${timesDone} ${timesDone === 1 ? 'time' : 'times'} before`}
+              className="flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums"
+              style={{ background: EFFORT_COLOR.golf, color: EFFORT_TEXT.golf }}
+            >
+              {timesDone}
+            </span>
+          )}
+          <Label className={isToday && !doneThisWeek ? 'text-text!' : ''}>
             {/* The effort is the line above, not a word here. It stays in the
                 label a screen reader reads, where there is no line to see. */}
             <span className="sr-only">{EFFORT_WORD[intensity]}, </span>
-            {isToday ? 'today' : WEEKDAY_LABEL[weekday]}
+            {doneThisWeek
+              ? 'done'
+              : weekday !== undefined
+                ? isToday
+                  ? 'today'
+                  : WEEKDAY_LABEL[weekday]
+                : /* Said rather than left blank: a card with no day looked
+                     identical to one whose day had simply not rendered yet. */
+                  'no day yet'}
           </Label>
-        ) : undefined
+        </span>
       }
     >
       {note && (
