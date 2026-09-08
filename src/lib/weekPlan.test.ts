@@ -135,3 +135,33 @@ describe('what belongs on the dashboard', () => {
     expect(plan?.next).toBeUndefined();
   });
 });
+
+describe('whose sessions count as done', () => {
+  it("ignores another block's session on the same slot letter", async () => {
+    /* A week that straddles a block change: Monday was trained under the OLD
+       block, whose slot A was a different workout that merely shares the
+       letter. The new block's A has never been trained and must not read as
+       done — slot letters are reused, block ids are not. */
+    await db.session.put({
+      id: 's_old_block',
+      blockId: 'block_0',
+      daySlot: 'A',
+      date: dateOf(1),
+      durationMin: 40,
+    });
+    const plan = await readWeekPlan();
+    expect(plan?.days.find((day) => day.slot === 'A')?.done).toBe(false);
+  });
+
+  it("counts this block's session, same shape, same week", async () => {
+    await db.session.put({
+      id: 's_this_block',
+      blockId: BLOCK,
+      daySlot: 'A',
+      date: dateOf(1),
+      durationMin: 40,
+    });
+    const plan = await readWeekPlan();
+    expect(plan?.days.find((day) => day.slot === 'A')?.done).toBe(true);
+  });
+});

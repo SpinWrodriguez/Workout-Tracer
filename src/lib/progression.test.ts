@@ -166,3 +166,41 @@ describe('progression rules (spec Phase 2)', () => {
     expect(topSet(sets)).toMatchObject({ weightKg: 50, reps: 10 });
   });
 });
+
+describe('advice in the exercise\'s own units', () => {
+  /* The maths is unit-blind; the prose was not. "Hit 45 reps — add a rep" on
+     a plank is advice about a quantity the exercise does not have. */
+  const hold = (reps: number): HistorySet[] => [
+    { sessionId: 's1', date: '2026-09-01', reps },
+  ];
+
+  it('talks about time on a timed hold at the top of its range', () => {
+    const got = suggestProgression({
+      ladder: [],
+      history: hold(60),
+      repRangeLow: 30,
+      repRangeHigh: 60,
+      timed: true,
+    });
+    expect(got.outcome).toBe('increase');
+    expect(got.reason).toContain('Held 60 seconds');
+    expect(got.reason).toContain('add time');
+    expect(got.reason).not.toContain('rep');
+  });
+
+  it('talks about seconds under the range too', () => {
+    const got = suggestProgression({
+      ladder: [],
+      history: hold(40),
+      repRangeLow: 30,
+      repRangeHigh: 60,
+      timed: true,
+    });
+    expect(got.reason).toBe('Work up to 60 seconds at this difficulty.');
+  });
+
+  it('keeps saying reps for everything else, exactly as before', () => {
+    const got = suggestProgression({ ladder: [], history: hold(10) });
+    expect(got.reason).toContain('Hit 10 reps — add a rep');
+  });
+});

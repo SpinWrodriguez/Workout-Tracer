@@ -641,6 +641,8 @@ export function SessionScreen({
           history: allHistory[activeExercise.id] ?? [],
           repRangeLow: repLow,
           repRangeHigh: repHigh,
+          // So a plank's advice talks about seconds, not reps it does not have.
+          timed: isTimed(activeExercise),
         })
       : undefined;
 

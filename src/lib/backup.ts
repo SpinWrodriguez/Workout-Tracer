@@ -251,8 +251,33 @@ export function normaliseSavedMeals(value: unknown): SavedMeal[] {
 
 /* --- import --------------------------------------------------------------- */
 
-function asArray<T>(value: unknown): T[] {
-  return Array.isArray(value) ? (value as T[]) : [];
+/**
+ * The workout tables get the same courtesy the nutrition ones always had:
+ * nothing reaches Dexie unread. A backup is usually this app's own export,
+ * but a file is a file — truncated, hand-edited, merged — and a row missing
+ * the fields its table is keyed on aborts the whole import transaction with
+ * an error that names none of this, while a set log without a numeric rep
+ * count imports fine and then poisons every volume sum it touches with NaN.
+ * Bad rows are dropped and counted where the import report can say so.
+ */
+function keyedRows<T>(
+  value: unknown,
+  table: string,
+  warnings: string[],
+  valid: (row: Record<string, unknown>) => boolean,
+): T[] {
+  const kept: T[] = [];
+  let dropped = 0;
+  for (const row of Array.isArray(value) ? value : []) {
+    if (isRecord(row) && valid(row)) kept.push(row as T);
+    else dropped += 1;
+  }
+  if (dropped > 0) {
+    warnings.push(
+      `workout.${table}: skipped ${dropped} row${dropped === 1 ? '' : 's'} missing required fields.`,
+    );
+  }
+  return kept;
 }
 
 /**
@@ -288,13 +313,40 @@ export async function importBackup(raw: unknown): Promise<ImportReport> {
     checked = normaliseNutritionDays(nutrition.checked);
     savedMeals = normaliseSavedMeals(nutrition.savedMeals);
     workout = {
-      exercise: asArray<Exercise>(w.exercise),
-      block: asArray<Block>(w.block),
-      blockExercise: asArray<BlockExercise>(w.blockExercise),
-      session: asArray<Session>(w.session),
-      setLog: asArray<SetLog>(w.setLog),
-      settings: asArray<SettingRow>(w.settings),
-      golfDay: asArray<GolfDay>(w.golfDay),
+      exercise: keyedRows<Exercise>(w.exercise, 'exercise', warnings, (r) => str(r.id) !== undefined),
+      block: keyedRows<Block>(w.block, 'block', warnings, (r) => str(r.id) !== undefined),
+      blockExercise: keyedRows<BlockExercise>(
+        w.blockExercise,
+        'blockExercise',
+        warnings,
+        (r) =>
+          str(r.blockId) !== undefined &&
+          str(r.exerciseId) !== undefined &&
+          str(r.daySlot) !== undefined,
+      ),
+      session: keyedRows<Session>(
+        w.session,
+        'session',
+        warnings,
+        (r) => str(r.id) !== undefined && typeof r.date === 'string' && ISO_DATE.test(r.date),
+      ),
+      setLog: keyedRows<SetLog>(
+        w.setLog,
+        'setLog',
+        warnings,
+        (r) =>
+          str(r.sessionId) !== undefined &&
+          str(r.exerciseId) !== undefined &&
+          num(r.setNo) !== undefined &&
+          num(r.reps) !== undefined,
+      ),
+      settings: keyedRows<SettingRow>(w.settings, 'settings', warnings, (r) => str(r.key) !== undefined),
+      golfDay: keyedRows<GolfDay>(
+        w.golfDay,
+        'golfDay',
+        warnings,
+        (r) => typeof r.date === 'string' && ISO_DATE.test(r.date),
+      ),
     };
     if (version > BACKUP_VERSION) {
       warnings.push(

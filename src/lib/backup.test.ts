@@ -431,3 +431,53 @@ describe('what a backup leaves out', () => {
     expect(JSON.stringify(backup)).not.toContain('is my squat moving?');
   });
 });
+
+describe('a damaged workout section', () => {
+  /*
+   * The nutrition half always went through normalisers; the workout half was
+   * a blind cast, so a truncated or hand-edited file could abort the whole
+   * transaction on a keyless row — or worse, import a set log without a rep
+   * count and quietly turn every volume sum it touched into NaN.
+   */
+  const damaged = {
+    _version: 3,
+    _exportedAt: '2026-09-08T10:00:00+10:00',
+    shared: {},
+    workout: {
+      session: [
+        { id: 's_good', blockId: 'b1', daySlot: 'A', date: '2026-09-01' },
+        { blockId: 'b1', daySlot: 'A', date: '2026-09-02' }, // no id
+        { id: 's_undated', blockId: 'b1', daySlot: 'A' }, // no date
+      ],
+      setLog: [
+        { sessionId: 's_good', exerciseId: 'bb_back_squat', setNo: 1, reps: 8, weightKg: 60 },
+        { sessionId: 's_good', exerciseId: 'bb_back_squat', setNo: 2 }, // no reps → NaN volume
+        { exerciseId: 'bb_back_squat', setNo: 3, reps: 8 }, // no session
+      ],
+      settings: [{ value: 42 }], // no key
+    },
+  };
+
+  it('keeps the good rows, drops the bad ones, and says so', async () => {
+    const report = await importBackup(damaged);
+
+    expect(await db.session.count()).toBe(1);
+    expect((await db.setLog.toArray()).every((row) => typeof row.reps === 'number')).toBe(true);
+    expect(await db.setLog.count()).toBe(1);
+
+    const text = report.warnings.join(' ');
+    expect(text).toContain('workout.session: skipped 2 rows');
+    expect(text).toContain('workout.setLog: skipped 2 rows');
+    expect(text).toContain('workout.settings: skipped 1 row ');
+  });
+
+  it('imports nothing and throws nothing on a workout section of garbage', async () => {
+    const report = await importBackup({
+      _version: 3,
+      workout: { session: ['not a row', 42, null], setLog: 'not even an array' },
+    });
+    expect(await db.session.count()).toBe(0);
+    expect(report.counts.session).toBe(0);
+    expect(report.counts.setLog).toBe(0);
+  });
+});

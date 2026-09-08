@@ -78,6 +78,12 @@ export interface ProgressionInput {
   history: HistorySet[];
   repRangeLow?: number;
   repRangeHigh?: number;
+  /**
+   * True for a hold measured in seconds. The maths is identical — a number in
+   * a range is a number in a range — but the prose is not: "Hit 45 reps — add
+   * a rep" on a plank is advice about a quantity the exercise does not have.
+   */
+  timed?: boolean;
 }
 
 export function suggestProgression({
@@ -85,6 +91,7 @@ export function suggestProgression({
   history,
   repRangeLow = DEFAULT_REP_RANGE.low,
   repRangeHigh = DEFAULT_REP_RANGE.high,
+  timed = false,
 }: ProgressionInput): Progression {
   const sessions = sessionsFromHistory(history);
   const latest = sessions[0] ? topSet(sessions[0]) : undefined;
@@ -99,6 +106,7 @@ export function suggestProgression({
 
   const base = { lastKg: latest.weightKg, lastReps: latest.reps, lastRir: latest.rir };
   const loaded = latest.weightKg;
+  const unit = timed ? 'seconds' : 'reps';
 
   // Unloaded work (pull-ups, planks, bands) has no rung to move to; the rep
   // range is the progression.
@@ -108,8 +116,10 @@ export function suggestProgression({
       ...base,
       outcome: hitTop ? 'increase' : 'repeat',
       reason: hitTop
-        ? `Hit ${latest.reps} reps — add a rep or slow the tempo, there is no load to add.`
-        : `Work up to ${repRangeHigh} reps at this difficulty.`,
+        ? timed
+          ? `Held ${latest.reps} seconds — add time or slow the breathing, there is no load to add.`
+          : `Hit ${latest.reps} reps — add a rep or slow the tempo, there is no load to add.`
+        : `Work up to ${repRangeHigh} ${unit} at this difficulty.`,
     };
   }
 
@@ -128,14 +138,14 @@ export function suggestProgression({
         ...base,
         outcome: 'hold_review',
         suggestedKg: back,
-        reason: `Missed ${repRangeLow} reps twice at ${loaded} kg — hold here and review the exercise.`,
+        reason: `Missed ${repRangeLow} ${unit} twice at ${loaded} kg — hold here and review the exercise.`,
       };
     }
     return {
       ...base,
       outcome: 'repeat',
       suggestedKg: snapToLadder(loaded, ladder),
-      reason: `Short of ${repRangeLow} reps — repeat ${loaded} kg.`,
+      reason: `Short of ${repRangeLow} ${unit} — repeat ${loaded} kg.`,
     };
   }
 
@@ -159,8 +169,8 @@ export function suggestProgression({
       suggestedKg: up,
       reason:
         rir === undefined
-          ? `Hit ${repRangeHigh} reps — go to ${up} kg. No RIR logged, so this assumes it was not a grinder.`
-          : `Hit ${repRangeHigh} reps at RIR ${rir} — go to ${up} kg.`,
+          ? `Hit ${repRangeHigh} ${unit} — go to ${up} kg. No RIR logged, so this assumes it was not a grinder.`
+          : `Hit ${repRangeHigh} ${unit} at RIR ${rir} — go to ${up} kg.`,
       microplateNote: microplateHint(loaded, ladder),
     };
   }
@@ -170,8 +180,8 @@ export function suggestProgression({
     outcome: 'repeat',
     suggestedKg: snapToLadder(loaded, ladder),
     reason: hitTop
-      ? `Hit ${repRangeHigh} reps but at RIR ${rir} — repeat ${loaded} kg until it is not a grinder.`
-      : `In range at ${latest.reps} reps — repeat ${loaded} kg and work toward ${repRangeHigh}.`,
+      ? `Hit ${repRangeHigh} ${unit} but at RIR ${rir} — repeat ${loaded} kg until it is not a grinder.`
+      : `In range at ${latest.reps} ${unit} — repeat ${loaded} kg and work toward ${repRangeHigh}.`,
   };
 }
 

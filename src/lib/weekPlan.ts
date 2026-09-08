@@ -59,7 +59,15 @@ export async function readWeekPlan(anchorDate?: string): Promise<WeekPlan | unde
     .where('date')
     .between(from, shiftIso(from, 7), true, false)
     .toArray();
-  const loggedSlots = new Set(sessions.map((session) => session.daySlot));
+  /*
+   * Only this block's sessions count toward "done". Slot letters get reused
+   * across blocks, so in a week that straddles a block change, Monday's
+   * session under the OLD block's slot A must not tick off the new block's
+   * slot-A workout before it has ever been trained.
+   */
+  const loggedSlots = new Set(
+    sessions.filter((session) => session.blockId === plan.block.id).map((s) => s.daySlot),
+  );
 
   // Every slot the block defines, scheduled or not: a day with no weekday
   // still exists and still has to be startable.
