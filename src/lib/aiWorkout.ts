@@ -111,7 +111,7 @@ Rules:
 
 - Use only \`id\` values from the library. Never invent an exercise, a name, or an id. An id that is not in the library fails the whole response.
 - Respect each exercise's own \`reps\` bounds and \`unit\`. A hold measured in seconds is not a number of reps.
-- Do not repeat what the other workouts in the block already contain, unless the goal explicitly asks for it.
+- The other workouts in the block are context, not a reservation list: an exercise used in one of them is still fully available here, and the staples earn their repetition — two upper-body workouts sharing a bench press is normal programming. What to avoid is a near-copy of an existing workout under a new name: make this one differ where the goal allows, in movements, angles or rep ranges. Never hand back a worse exercise only because a better one appears in another workout.
 - Read the goal for effort and emphasis and set \`focus\` and \`intensity\` from it. "Tired", "easy", "gentle" mean \`intensity: "light"\`. Trust the words: a request for an easy session is not an invitation to program a hard one differently.
 - \`effort.suggested\`, where given, is what the lifter last had selected on the workout sheet. It is a starting point and the goal outranks it. Start there when the goal says nothing about effort; ignore it when the goal does.
 - Obey every entry in \`constraints\` exactly. They are not preferences.

@@ -56,9 +56,11 @@ number you were given.
 Every rule above applies to each workout on its own. Two more apply across the
 week:
 
-- Do not repeat an exercise between slots unless the library leaves no
-  alternative. Seeing all the slots at once is the point: a week that trains
-  the same four movements four times is a worse week.
+- Spread the week's work. Repeating a staple between two slots is fine —
+  pressing twice in a week is training, not an error — but two slots that are
+  near-copies of each other is a wasted week. Where slots share a focus, vary
+  the accessories and angles between them; seeing all the slots at once is
+  what lets you.
 - A slot's constraints bind only that slot. A prohibition on one is not a
   prohibition on the others.
 

@@ -275,9 +275,13 @@ describe('building a week with a model', () => {
     expect(asked[0]?.slots.map((slot) => slot.slot)).toEqual([1, 2, 3]);
   }, 20000);
 
-  it('does not repeat exercises across the week', async () => {
+  it("keeps each slot's own picks distinct through the writes", async () => {
     /* Seeing every day at once is what one call buys, beyond the speed: the
-       day-by-day version only ever saw the days before it. */
+       day-by-day version only ever saw the days before it. The prompt no
+       longer FORBIDS repeating a staple across the week — it asks for spread,
+       not uniqueness — so this pins the plumbing: a model that does choose
+       distinct exercises gets exactly those stored, none merged or dropped
+       on the compound key. */
     stubModel();
     const { ui } = await openProgram();
     await planDays(ui, [0, 2, 3]);
