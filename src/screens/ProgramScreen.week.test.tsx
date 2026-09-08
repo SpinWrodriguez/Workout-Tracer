@@ -44,7 +44,12 @@ function stubModel() {
   /** How many times the API was called. One week should be one call. */
   let calls = 0;
 
-  const pickFor = (focus: string, noHighGrip: boolean, avoid: Set<string>) => {
+  const pickFor = (
+    focus: string,
+    noHighGrip: boolean,
+    noHighSpinal: boolean,
+    avoid: Set<string>,
+  ) => {
     const wanted = new Set<string>(patternsForFocus(focus as WorkoutFocus));
     return [...exercisesById.values()]
       .filter(
@@ -53,7 +58,8 @@ function stubModel() {
           !exercise.isMobility &&
           exercise.skillLevel !== 'advanced' &&
           !avoid.has(exercise.id) &&
-          (!noHighGrip || exercise.gripLoad !== 'high'),
+          (!noHighGrip || exercise.gripLoad !== 'high') &&
+          (!noHighSpinal || exercise.spinalLoad !== 'high'),
       )
       /* One heavy spinal lift at most: two in a session is a lower-back
          stacking bug and the validator would rightly reject it. */
@@ -78,8 +84,13 @@ function stubModel() {
        once is for — and what the prompt asks of a real model. */
     const used = new Set<string>();
     const workouts = slots.map((slot) => {
+      /* A cooperating model obeys every constraint line it is sent — and the
+         light-day rules are problems now, so a stub that shipped a deadlift or
+         three sets into a light slot would loop through every retry. */
       const noHighGrip = slot.constraints.some((line) => line.includes('gripLoad "high"'));
-      const chosen = pickFor(slot.focus, noHighGrip, used);
+      const noHighSpinal = slot.constraints.some((line) => line.includes('spinalLoad "high"'));
+      const light = slot.intensity === 'light';
+      const chosen = pickFor(slot.focus, noHighGrip, noHighSpinal, used);
       for (const exercise of chosen) used.add(exercise.id);
       return {
         slot: slot.slot,
@@ -88,7 +99,7 @@ function stubModel() {
         intensity: slot.intensity,
         exercises: chosen.map((exercise) => ({
           exerciseId: exercise.id,
-          sets: 3,
+          sets: light ? 2 : 3,
           repLow: exercise.repMin,
           repHigh: exercise.repMax,
         })),

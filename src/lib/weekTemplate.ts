@@ -159,13 +159,15 @@ export function workoutTemplate({
     ...base,
     patterns,
     /*
-     * Nothing is excluded on calendar grounds while a workout is unplaced:
-     * there is no date to be clear of. Assigning it to a day inside a buffer
-     * is what surfaces the conflict, and the rule check says so there. The
-     * spine exclusion needs no line here — heavyDay is handed an empty golf
-     * calendar, so it computes false on its own.
+     * Nothing is excluded on CALENDAR grounds while a workout is unplaced:
+     * there is no date to be clear of, and heavyDay handed an empty golf
+     * calendar computes no exclusions on its own. No override is needed to
+     * say so — and the one that used to sit here (`excludeGripHigh: false`)
+     * quietly overreached: it also stripped the LIGHT template's grip
+     * exclusion, which is not a calendar rule at all but part of what light
+     * means, leaving an unplaced light workout barred from heavy spinal work
+     * yet free to take chin-ups the sheet had just promised it would not.
      */
-    excludeGripHigh: false,
     maxExercises: intensity === 'light' ? 5 : 7,
   };
 }

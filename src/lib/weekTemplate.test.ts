@@ -131,6 +131,18 @@ describe('what heavy means', () => {
     expect(unplaced.excludeGripHigh).toBe(false);
     expect(unplaced.excludeSpinalHigh).toBe(false);
   });
+
+  it('but an unplaced LIGHT workout keeps what light means', () => {
+    /*
+     * The old blanket `excludeGripHigh: false` was aimed at the calendar and
+     * hit the definition: it left an unplaced light workout barred from heavy
+     * spinal work yet free to take chin-ups — against the sheet's own hint
+     * and the note the model is sent. Sub-maximal is not a calendar rule.
+     */
+    const light = workoutTemplate({ slot: 'A', focus: 'pull', intensity: 'light' });
+    expect(light.excludeGripHigh).toBe(true);
+    expect(light.excludeSpinalHigh).toBe(true);
+  });
 });
 
 describe('templateDayFor honours a stored focus', () => {

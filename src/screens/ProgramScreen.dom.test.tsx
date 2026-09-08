@@ -764,7 +764,9 @@ describe('the golf buffer, said out loud', () => {
 
     const card = await workoutCard('Friday push');
     await waitFor(() =>
-      expect(card.textContent).toContain('Golf tomorrow (Sat) — no grip, lat or forearm work.'),
+      expect(card.textContent).toContain(
+          'Golf tomorrow (Sat) — no grip, lat or forearm work, and no heavy spinal lifts.',
+        ),
     );
   });
 

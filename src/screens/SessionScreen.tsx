@@ -554,9 +554,11 @@ export function SessionScreen({
           ...draft,
           // Keep an edited session's recorded duration; time a live one.
           durationMin: draft.durationMin ?? (sessionId ? undefined : elapsedMin),
-          // Stamped at save time: the slot gets reused every block, so looking
-          // this up later would caption an old session with today's workout.
-          daySlotName: labelFor(draft.daySlot as DaySlot),
+          /* Stamped ONCE, at the save that ends a live session, then kept:
+             the slot gets reused every block, so stamping again on a later
+             edit would caption an old session with today's workout — the
+             exact drift the stamp exists to prevent. */
+          daySlotName: draft.daySlotName ?? (sessionId ? undefined : labelFor(draft.daySlot as DaySlot)),
         },
         exercisesById,
       );

@@ -126,13 +126,36 @@ export function gripBufferNote(dateIso: string, golfDates: string[]): GripNote |
   /* Two wordings for two different claims. Barred is an instruction; advised
      is information, and dressing information up as an instruction is how a
      rule stops being believed. */
+  /* Computed rather than assumed from the grip verdict: the two buffers are
+     equal today, but they are separate constants and this note must keep
+     telling the truth if they ever part ways. */
+  const spine = spineConflictOn(dateIso, golfDates) !== undefined;
   return {
     text:
       conflict.severity === 'blocked'
-        ? `${when} (${day}) — no grip, lat or forearm work.`
+        ? `${when} (${day}) — no grip, lat or forearm work${spine ? ', and no heavy spinal lifts' : ''}.`
         : `${when} (${day}) — may affect your swing.`,
     severity: conflict.severity,
   };
+}
+
+/**
+ * The soonest round close enough that heavy axial loading is barred, if any.
+ * Binary where grip has an advisory tier: a heavy pull two days out shows up
+ * in the swing as forearm fatigue and is worth a heads-up, but a spinal lift
+ * outside its buffer is just training, and a note about it would be noise.
+ */
+export function spineConflictOn(
+  dateIso: string,
+  golfDates: string[],
+): { golfDate: string; daysBefore: number } | undefined {
+  let best: { golfDate: string; daysBefore: number } | undefined;
+  for (const golfDate of golfDates) {
+    const daysBefore = daysBetween(dateIso, golfDate);
+    if (daysBefore < 0 || daysBefore > SPINE_BUFFER_DAYS) continue;
+    if (!best || daysBefore < best.daysBefore) best = { golfDate, daysBefore };
+  }
+  return best;
 }
 
 /** True when the rule permits high-grip work. An advisory day still does. */
@@ -227,6 +250,26 @@ export function sessionWarnings(
               ? `Golf is tomorrow (${conflict.golfDate}). Grip and lat work now will show up in the swing.`
               : `Golf is in ${conflict.daysBefore} days (${conflict.golfDate}). This may affect your swing.`,
       });
+    }
+
+    /*
+     * The spine rule's session-time voice. Until now it existed in the
+     * validator, the templates and the model constraints, and said nothing on
+     * the one screen where the lifter is actually holding the bar.
+     */
+    if (exercise.spinalLoad === 'high') {
+      const spine = spineConflictOn(session.date, golfDates);
+      if (spine) {
+        warnings.push({
+          level: 'warn',
+          exerciseId: exercise.id,
+          title: `${exercise.name} loads the spine heavily`,
+          detail:
+            spine.daysBefore === 0
+              ? 'You are playing golf today. A round is hours of rotation, and this lift will still be in your back for it.'
+              : `Golf is tomorrow (${spine.golfDate}). A heavy spinal lift now will still be in your back during the round.`,
+        });
+      }
     }
 
     if (

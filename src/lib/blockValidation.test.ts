@@ -182,6 +182,46 @@ describe('rule c2 — spine clearance computed from the same calendar', () => {
   });
 });
 
+describe('what light means is enforced, not advised', () => {
+  it('is a problem, because only problems make the generators retry', () => {
+    /*
+     * As a suggestion this rule was decorative on the AI paths: the retry
+     * loops filter to problems, so a reply that called itself light and
+     * carried a deadlift at three sets was stored on the first attempt —
+     * while the comments around it promised a validator that would catch it.
+     */
+    expect(severityOf('light_day_violation')).toBe('problem');
+  });
+
+  it('reports each load near golf once, not once per rule that hates it', () => {
+    /*
+     * Friday light day, Saturday golf, a deadlift — high grip AND high
+     * spinal, so both calendar rules rightly fire. What must NOT fire is the
+     * light rule's copy of either: one defect per load, and the calendar's
+     * version wins because it carries a fix.
+     */
+    const p = proposal([{ slot: 'C', weekday: 5, ids: ['bb_deadlift'] }]);
+    p.days[0]!.exercises[0]!.targetSets = 2; // inside the light cap, not the point here
+    const template = templateDayFor({ slot: 'C', weekday: 5, intensity: 'light', golfWeekdays: [6] });
+    const all = validateBlock(p, { ...CONTEXT, template: [template] }).filter(
+      (v) => v.exerciseId === 'bb_deadlift',
+    );
+    expect(all.map((v) => v.code)).toContain('grip_conflict');
+    expect(all.map((v) => v.code)).toContain('spine_conflict');
+    expect(all.map((v) => v.code)).not.toContain('light_day_violation');
+  });
+
+  it('still speaks for itself away from golf', () => {
+    // Monday light day: the calendar says nothing, so the light rule must.
+    const p = proposal([{ slot: 'C', weekday: 1, ids: ['bb_deadlift'] }]);
+    const template = templateDayFor({ slot: 'C', weekday: 1, intensity: 'light', golfWeekdays: [6] });
+    const found = validateBlock(p, { ...CONTEXT, template: [template] }).filter(
+      (v) => v.code === 'light_day_violation' && v.exerciseId === 'bb_deadlift',
+    );
+    expect(found.length).toBeGreaterThan(0);
+  });
+});
+
 describe('rule d — one heavy spinal lift per session (defect 3)', () => {
   it('rejects a deadlift stacked with a bent-over row', () => {
     const p = proposal([

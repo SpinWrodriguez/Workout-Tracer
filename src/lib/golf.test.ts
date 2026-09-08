@@ -140,13 +140,15 @@ describe('saying the buffer out loud', () => {
      pulling in it and no screen explained why. The model is still told the
      bare prohibition — it reasons badly about calendars — but the lifter is
      not a model. */
-  it('states the prohibition on a day that is barred', () => {
+  it('states the prohibition on a day that is barred, spine included', () => {
+    // Both loads are barred this close to a round, so the note names both:
+    // a rule enforced by the validator but unsaid here read as arbitrary.
     expect(gripBufferNote(FRI, [SAT])).toEqual({
-      text: 'Golf tomorrow (Sat) — no grip, lat or forearm work.',
+      text: 'Golf tomorrow (Sat) — no grip, lat or forearm work, and no heavy spinal lifts.',
       severity: 'blocked',
     });
     expect(gripBufferNote(SAT, [SAT])).toEqual({
-      text: 'Golf today (Sat) — no grip, lat or forearm work.',
+      text: 'Golf today (Sat) — no grip, lat or forearm work, and no heavy spinal lifts.',
       severity: 'blocked',
     });
   });
@@ -178,6 +180,32 @@ describe('saying the buffer out loud', () => {
       expect(barred, date).toBe(note?.severity === 'blocked');
       expect(note === undefined || note.text.includes('no grip') === barred, date).toBe(true);
     }
+  });
+});
+
+describe('the spine warning at session time', () => {
+  it('warns on a heavy spinal lift the day before a round', () => {
+    /* The rule existed in the validator, the templates and the model
+       constraints, and said nothing on the one screen where the lifter is
+       actually holding the bar. */
+    const warnings = sessionWarnings(
+      { date: FRI, exercises: [{ exerciseId: 'bb_deadlift', loggedSets: 0 }] },
+      byId,
+      [SAT],
+    );
+    const spine = warnings.find((w) => w.title.includes('loads the spine heavily'));
+    expect(spine?.level).toBe('warn');
+    expect(spine?.exerciseId).toBe('bb_deadlift');
+    expect(spine?.detail).toContain('still be in your back');
+  });
+
+  it('says nothing two days out — outside the buffer is just training', () => {
+    const warnings = sessionWarnings(
+      { date: THU, exercises: [{ exerciseId: 'bb_deadlift', loggedSets: 0 }] },
+      byId,
+      [SAT],
+    );
+    expect(warnings.some((w) => w.title.includes('spine'))).toBe(false);
   });
 });
 

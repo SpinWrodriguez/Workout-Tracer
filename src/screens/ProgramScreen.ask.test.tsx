@@ -64,11 +64,19 @@ function stubModel({ intensity = 'heavy' }: { intensity?: 'heavy' | 'light' } = 
     });
 
     /* Three rows the validator will accept: no repeated id, at most one heavy
-       spinal lift, nothing advanced. */
+       spinal lift, nothing advanced — and on a light reply nothing high grip
+       or high spinal at all, because a cooperating model obeys the light-day
+       rules the effort note spells out, and since those rules became problems
+       a stub that ignored them would loop through every retry and time out. */
     const chosen = library
       .map((row) => exercisesById.get(row.id))
       .filter((exercise) => exercise !== undefined)
       .filter((exercise) => exercise.skillLevel !== 'advanced')
+      .filter((exercise) =>
+        intensity === 'light'
+          ? exercise.gripLoad !== 'high' && exercise.spinalLoad !== 'high'
+          : true,
+      )
       .filter((exercise, index, all) =>
         exercise.spinalLoad !== 'high'
           ? true

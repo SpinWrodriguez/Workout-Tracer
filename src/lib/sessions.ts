@@ -121,6 +121,11 @@ export async function loadDraft(sessionId: string): Promise<SessionDraft | undef
     id: session.id,
     blockId: session.blockId,
     daySlot: session.daySlot,
+    /* Carried through so a re-save keeps the name stamped when the session was
+       first saved. Dropping it here made every edit of an old session erase
+       or restamp its name against TODAY'S schedule — and slots get reused, so
+       a March "Lower body" re-saved in September became "Upper Push". */
+    daySlotName: session.daySlotName,
     date: session.date,
     durationMin: session.durationMin,
     notes: session.notes,

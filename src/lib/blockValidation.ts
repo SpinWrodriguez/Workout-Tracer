@@ -124,7 +124,16 @@ const SEVERITY: Record<ViolationCode, Severity> = {
   pattern_coverage: 'suggestion',
   weekly_set_total: 'suggestion',
   over_time_budget: 'suggestion',
-  light_day_violation: 'suggestion',
+  /*
+   * A problem, because the generators' retry loops re-ask only on problems:
+   * as a suggestion, a model reply that called itself light and carried a
+   * deadlift at three sets was stored on the first attempt, and the effort
+   * note's promise that the validator would catch it was empty. On screen
+   * nothing changes — the Program banner shows only problems that carry a
+   * fix, and these carry none, so a hand-built light day stays the lifter's
+   * business.
+   */
+  light_day_violation: 'problem',
 };
 
 export function severityOf(code: ViolationCode): Severity {
@@ -355,64 +364,69 @@ export function validateBlock(
         });
       }
 
-      // (c) grip clearance, computed from the calendar
-      if (exercise.gripLoad === 'high') {
-        const clear = daysClearOfGolf(day.weekday, golfWeekdays);
-        if (clear <= GRIP_BUFFER_DAYS) {
-          violations.push({
-            code: 'grip_conflict',
-            slot: day.slot,
-            exerciseId: exercise.id,
-            message: `${nameOf(day)} is ${WEEKDAY_LABEL[day.weekday]}, ${clear} day${clear === 1 ? '' : 's'} before your next round, and ${exercise.name} is high grip load.`,
-            // Moving the whole day is the better fix where a clear day exists:
-            // the session is fine, its placement is not. Dropping the movement
-            // is the fallback when the calendar has no room.
-            fix:
-              moveFix(day.slot, freeWeekday('grip')) ??
-              ({
-                kind: 'remove_exercise',
-                slot: day.slot,
-                exerciseId: exercise.id,
-                label: `Drop ${exercise.name}`,
-              } as Fix),
-          });
-        }
-      }
-
       /*
-       * (c2) spine clearance, computed from the same calendar. A round is
-       * hours of loaded rotation, and the veto used to live on the light day's
-       * template instead of on the date — so the one session that needed it,
-       * a heavy day before a round, was the one session that never got it.
+       * (c) grip and spine clearance, computed from the calendar. One
+       * mechanism, two loads: a round is a swing under forearms the day's
+       * pulling has spent and hours of rotation under a spine a deadlift has
+       * loaded, so each load has its own buffer constant and the same shape of
+       * check. The spine one used to live on the light day's template instead
+       * of on the date — which left a heavy day before a round, the one
+       * session that needed it, as the one session that never got it.
        */
-      if (exercise.spinalLoad === 'high') {
+      const clearances = [
+        {
+          applies: exercise.gripLoad === 'high',
+          buffer: GRIP_BUFFER_DAYS,
+          code: 'grip_conflict' as const,
+          phrase: 'is high grip load',
+          moveTo: 'grip' as const,
+        },
+        {
+          applies: exercise.spinalLoad === 'high',
+          buffer: SPINE_BUFFER_DAYS,
+          code: 'spine_conflict' as const,
+          phrase: 'loads the spine heavily',
+          moveTo: 'spine' as const,
+        },
+      ];
+      /* Which loads the calendar already flagged, so the light-day check
+         below does not report the same exercise a second time. */
+      const calendarFlagged = new Set<'grip' | 'spine'>();
+      for (const rule of clearances) {
+        if (!rule.applies) continue;
         const clear = daysClearOfGolf(day.weekday, golfWeekdays);
-        if (clear <= SPINE_BUFFER_DAYS) {
-          violations.push({
-            code: 'spine_conflict',
-            slot: day.slot,
-            exerciseId: exercise.id,
-            message: `${nameOf(day)} is ${WEEKDAY_LABEL[day.weekday]}, ${clear} day${clear === 1 ? '' : 's'} before your next round, and ${exercise.name} loads the spine heavily.`,
-            // Same order as grip: move the session if the week has room,
-            // drop the movement only when it has none.
-            fix:
-              moveFix(day.slot, freeWeekday('spine')) ??
-              ({
-                kind: 'remove_exercise',
-                slot: day.slot,
-                exerciseId: exercise.id,
-                label: `Drop ${exercise.name}`,
-              } as Fix),
-          });
-        }
+        if (clear > rule.buffer) continue;
+        calendarFlagged.add(rule.moveTo);
+        violations.push({
+          code: rule.code,
+          slot: day.slot,
+          exerciseId: exercise.id,
+          message: `${nameOf(day)} is ${WEEKDAY_LABEL[day.weekday]}, ${clear} day${clear === 1 ? '' : 's'} before your next round, and ${exercise.name} ${rule.phrase}.`,
+          // Moving the whole day is the better fix where a clear day exists:
+          // the session is fine, its placement is not. Dropping the movement
+          // is the fallback when the calendar has no room.
+          fix:
+            moveFix(day.slot, freeWeekday(rule.moveTo)) ??
+            ({
+              kind: 'remove_exercise',
+              slot: day.slot,
+              exerciseId: exercise.id,
+              label: `Drop ${exercise.name}`,
+            } as Fix),
+        });
       }
 
       // (d) one heavy axial lift per session
       if (exercise.spinalLoad === 'high') spinalHigh += 1;
 
-      // A light day is defined by what it excludes, so those are hard rules.
+      /*
+       * A light day is defined by what it excludes, so those are hard rules.
+       * An exercise the calendar already flagged is skipped here: two
+       * violations naming one exercise for one defect is a list that reads as
+       * longer than the problem is.
+       */
       if (template?.intensity === 'light') {
-        if (template.excludeGripHigh && exercise.gripLoad === 'high') {
+        if (template.excludeGripHigh && exercise.gripLoad === 'high' && !calendarFlagged.has('grip')) {
           violations.push({
             code: 'light_day_violation',
             slot: day.slot,
@@ -420,7 +434,11 @@ export function validateBlock(
             message: `${nameOf(day)} is the light session: ${exercise.name} is high grip load and does not belong on it.`,
           });
         }
-        if (template.excludeSpinalHigh && exercise.spinalLoad === 'high') {
+        if (
+          template.excludeSpinalHigh &&
+          exercise.spinalLoad === 'high' &&
+          !calendarFlagged.has('spine')
+        ) {
           violations.push({
             code: 'light_day_violation',
             slot: day.slot,

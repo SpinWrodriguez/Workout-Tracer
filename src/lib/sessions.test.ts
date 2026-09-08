@@ -128,3 +128,25 @@ describe('what a session left behind', () => {
     expect(bench?.sets.some((set) => set.done)).toBe(false);
   });
 });
+
+describe('the name a session was saved under', () => {
+  /*
+   * The name is a stamp, not a lookup: slot letters get reused every block,
+   * so the only trustworthy caption for an old session is the one written
+   * when it was first saved. loadDraft used to drop it, which meant every
+   * edit-and-resave of a historical session erased the stamp — and with it
+   * the times-done count and the History caption.
+   */
+  it('survives a reopen-and-resave round trip', async () => {
+    await saveSession({ ...partial(), daySlotName: 'Lower body' }, byId);
+
+    const reopened = await loadDraft('s_partial');
+    expect(reopened?.daySlotName).toBe('Lower body');
+
+    // Resave exactly what was loaded — a notes edit, say — and read it back.
+    await saveSession({ ...(reopened as SessionDraft), notes: 'fixed a typo' }, byId);
+    const row = await db.session.get('s_partial');
+    expect(row?.daySlotName).toBe('Lower body');
+    expect(row?.notes).toBe('fixed a typo');
+  });
+});
