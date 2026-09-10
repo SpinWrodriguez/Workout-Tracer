@@ -983,10 +983,11 @@ describe('what a day is, said as a colour', () => {
 });
 
 describe('what one strip column can hold', () => {
-  it('shows the round AND the workout when a day has both', async () => {
-    /* Golf is not an either/or with the gym: a Sunday can hold a session and
-       a round, and the strip used to show whichever branch won — the workout,
-       leaving the round invisible exactly where it shapes the day. */
+  it('marks a round sharing the day with a blue dot, not a second chip', async () => {
+    /* Golf is not an either/or with the gym, but stacking a GOLF chip under
+       the workout stretched that one column taller than the rest of the week.
+       The chip belongs to the session; the round beside it is the dot, in the
+       same blue the golf chip and dashboard ring use. */
     const saturday = dayOfThisWeek(5);
     await db.golfDay.put({ date: saturday, status: 'planned', holes: 18 });
     await seedSchedule({ A: { intensity: 'heavy', name: 'Arms and Accessories' } });
@@ -997,9 +998,24 @@ describe('what one strip column can hold', () => {
     await workoutCard('Arms and Accessories');
     const column = dayButton(saturday).parentElement as HTMLElement;
     await waitFor(() => {
-      expect(column.textContent).toContain('AA'); // the workout's pill
-      expect(column.textContent).toContain('GOLF');
+      expect(column.textContent).toContain('AA'); // the workout keeps the chip
+      expect(column.textContent).not.toContain('GOLF'); // no second chip
+      const dot = column.querySelector('span.rounded-full[style]') as HTMLElement;
+      expect(dot.style.background).toBe('var(--color-muscle)'); // the ring blue
     });
+    // And the fact still reaches a screen reader through the day's own label.
+    expect(dayButton(saturday).getAttribute('aria-label')).toContain('golf');
+  });
+
+  it('keeps the GOLF chip on a day that is only a round', async () => {
+    await db.golfDay.put({ date: dayOfThisWeek(5), status: 'planned', holes: 18 });
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Push day' } });
+    await seedWorkout('A', ['bb_bench_press']);
+    await openProgram();
+
+    await workoutCard('Push day');
+    const column = dayButton(dayOfThisWeek(5)).parentElement as HTMLElement;
+    await waitFor(() => expect(column.textContent).toContain('GOLF'));
   });
 
   it('shortens a logged-only day the way it shortens every planned one', async () => {

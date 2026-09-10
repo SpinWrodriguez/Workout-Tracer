@@ -28,15 +28,19 @@ export interface WeekStripDay extends WeekDay {
 }
 
 /*
- * The dot says one thing: this day breaks the golf rule.
- *
- * It used to carry a second colour for golf and a third for "there is a
- * workout here", both of which the chip underneath already says in words. With
- * the chip coloured by effort, a dot that also coloured itself would be a
- * second colour language in a 6px space.
+ * The dot says one of two things, in priority order: red, this day breaks the
+ * golf rule; blue, a round shares this day with a session. The blue exists
+ * because the alternative was a second GOLF chip stacked under the workout,
+ * which stretched that one column taller than the rest of the week — the chip
+ * belongs to the session, the dot to the round beside it. On a pure golf day
+ * the chip itself says GOLF and the dot stays quiet.
  */
 function dotColor(day: WeekStripDay): string | undefined {
-  return day.violation ? 'var(--color-rir-1)' : undefined;
+  if (day.violation) return 'var(--color-rir-1)';
+  if (day.golf && (day.plannedSlot !== undefined || day.sessionIds.length > 0)) {
+    return EFFORT_COLOR.golf;
+  }
+  return undefined;
 }
 
 export function WeekStrip({
@@ -172,22 +176,16 @@ export function WeekStrip({
                 >
                   {day.loggedName ? pillLabel(day.loggedName) : 'Log'}
                 </div>
-              ) : !day.golf ? (
-                <div className="mt-1.5 py-1 text-center text-[10px] font-medium text-text-faint">
-                  Rest
-                </div>
-              ) : null}
-
-              {/* Golf is not an either/or with the gym: a Sunday can hold a
-                  session AND a round, and the strip used to show whichever
-                  branch won. The round gets its own chip below the day's
-                  workout — or stands alone on a pure golf day. */}
-              {day.golf && (
+              ) : day.golf ? (
                 <div
-                  className="mt-1 rounded-lg py-1 text-center text-[10px] font-bold"
+                  className="mt-1.5 rounded-lg py-1 text-center text-[10px] font-bold"
                   style={{ background: EFFORT_COLOR.golf, color: EFFORT_TEXT.golf }}
                 >
                   GOLF
+                </div>
+              ) : (
+                <div className="mt-1.5 py-1 text-center text-[10px] font-medium text-text-faint">
+                  Rest
                 </div>
               )}
             </div>
