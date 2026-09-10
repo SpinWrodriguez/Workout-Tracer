@@ -982,6 +982,51 @@ describe('what a day is, said as a colour', () => {
   });
 });
 
+describe('what one strip column can hold', () => {
+  it('shows the round AND the workout when a day has both', async () => {
+    /* Golf is not an either/or with the gym: a Sunday can hold a session and
+       a round, and the strip used to show whichever branch won — the workout,
+       leaving the round invisible exactly where it shapes the day. */
+    const saturday = dayOfThisWeek(5);
+    await db.golfDay.put({ date: saturday, status: 'planned', holes: 18 });
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Arms and Accessories' } });
+    await seedWorkout('A', ['bb_curl']);
+    await seedPlan({ [saturday]: 'A' });
+    await openProgram();
+
+    await workoutCard('Arms and Accessories');
+    const column = dayButton(saturday).parentElement as HTMLElement;
+    await waitFor(() => {
+      expect(column.textContent).toContain('AA'); // the workout's pill
+      expect(column.textContent).toContain('GOLF');
+    });
+  });
+
+  it('shortens a logged-only day the way it shortens every planned one', async () => {
+    /* A session whose workout is gone or moved is captioned by its stamped
+       name — which used to render in FULL, wrapping three lines beside a row
+       of neat initials. Same pill rule for everyone. */
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Push day' } });
+    await seedWorkout('A', ['bb_bench_press']);
+    await db.session.put({
+      id: 's_moved',
+      blockId: BLOCK_ID,
+      daySlot: 'Z' as never,
+      daySlotName: 'Lower Body Power',
+      date: WEDNESDAY,
+      durationMin: 40,
+    });
+    await openProgram();
+
+    await workoutCard('Push day');
+    const column = dayButton(WEDNESDAY).parentElement as HTMLElement;
+    await waitFor(() => {
+      expect(column.textContent).toContain('LBP');
+      expect(column.textContent).not.toContain('Lower Body Power');
+    });
+  });
+});
+
 describe('the day editor', () => {
   async function openDay(date: string) {
     const { ui } = await openProgram();

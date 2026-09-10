@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EXERCISES } from '../db/seed/exercises';
-import { dayLabel, describeDay, shortDayLabels } from './dayLabel';
+import { dayLabel, describeDay, shortDayLabels, pillLabel } from './dayLabel';
 
 const byId = new Map(EXERCISES.map((e) => [e.id, e]));
 const pick = (...ids: string[]) =>
@@ -115,5 +115,19 @@ describe('names small enough for a calendar pill', () => {
     // Stable across weeks: Monday should not be called "Pull" one week and
     // "FBP" the next because of what else happened to be scheduled.
     expect(shortDayLabels(['Full Body Pull'])).toEqual(['Pull']);
+  });
+});
+
+describe('pillLabel — one name, no week around it', () => {
+  it('keeps a short name whole and turns a long one into initials', () => {
+    expect(pillLabel('Push day')).toBe('Push day');
+    expect(pillLabel('Lower Body Power')).toBe('LBP');
+    expect(pillLabel('Hip Mobility Plus Chest Delts')).toBe('HMPC');
+  });
+
+  it('reads a bare slot as its letter and drops joiners before counting', () => {
+    expect(pillLabel('Day A')).toBe('A');
+    // "+" is a joiner, not a word: no "+" initial, no phantom letter.
+    expect(pillLabel('Hip Mobility + Rotation')).toBe('HMR');
   });
 });

@@ -152,6 +152,26 @@ function initials(parts: string[]): string {
     .slice(0, 4);
 }
 
+/** One list of words, fitted to the pill: kept whole if short, else initials. */
+function fitToPill(list: string[]): string {
+  const joined = list.join(' ');
+  if (joined.length === 0) return '--';
+  return joined.length <= PILL_CHARS ? joined : initials(list);
+}
+
+/**
+ * The pill form of ONE name, with no week around it to shorten against.
+ *
+ * For the chip of a logged session whose workout is gone or moved: the strip
+ * shortened every planned name and printed this one in full, so "Lower Body
+ * Power" wrapped across three lines beside a row of neat initials.
+ */
+export function pillLabel(label: string): string {
+  const bare = /^Day (\w+)$/.exec(label.trim());
+  if (bare) return bare[1] as string;
+  return fitToPill(words(label));
+}
+
 /**
  * Short forms for a row of day names, shortened against each other. Pass the
  * whole week: what to drop depends on what the other days are called.
@@ -180,9 +200,5 @@ export function shortDayLabels(labels: string[]): string[] {
     for (let i = 0; i < parts.length; i += 1) parts[i] = (parts[i] as string[]).slice(1);
   }
 
-  return parts.map((list) => {
-    const joined = list.join(' ');
-    if (joined.length === 0) return '--';
-    return joined.length <= PILL_CHARS ? joined : initials(list);
-  });
+  return parts.map(fitToPill);
 }

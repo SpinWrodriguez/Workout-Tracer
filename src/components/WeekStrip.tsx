@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { DaySlot } from '../db/types';
 
 import { WEEKDAY_LABEL, type WeekDay } from '../lib/golf';
+import { pillLabel } from '../lib/dayLabel';
 import { fromIsoDate } from '../lib/format';
 import { EFFORT_COLOR, EFFORT_TEXT, EFFORT_WORD } from '../lib/effort';
 import type { Intensity } from '../lib/weekTemplate';
@@ -157,28 +158,36 @@ export function WeekStrip({
                 >
                   {shortLabelFor(day.plannedSlot)}
                 </div>
-              ) : day.golf ? (
+              ) : done ? (
+                /* Trained, but the workout it came from is gone or moved —
+                   ordinary things to do. The session is the durable record, so
+                   the day is called by what was done on it rather than by
+                   "Log" — in the same pill form as every planned chip, because
+                   one full name wrapping beside a row of initials read as a
+                   different kind of thing rather than a longer name. Not
+                   draggable: it already happened. */
                 <div
-                  className="mt-1.5 rounded-lg py-1 text-center text-[10px] font-bold"
+                  className="mt-1.5 rounded-lg bg-cta px-0.5 py-1 text-center text-[9px] leading-[1.15] font-bold break-words text-bg"
+                  title={day.loggedName}
+                >
+                  {day.loggedName ? pillLabel(day.loggedName) : 'Log'}
+                </div>
+              ) : !day.golf ? (
+                <div className="mt-1.5 py-1 text-center text-[10px] font-medium text-text-faint">
+                  Rest
+                </div>
+              ) : null}
+
+              {/* Golf is not an either/or with the gym: a Sunday can hold a
+                  session AND a round, and the strip used to show whichever
+                  branch won. The round gets its own chip below the day's
+                  workout — or stands alone on a pure golf day. */}
+              {day.golf && (
+                <div
+                  className="mt-1 rounded-lg py-1 text-center text-[10px] font-bold"
                   style={{ background: EFFORT_COLOR.golf, color: EFFORT_TEXT.golf }}
                 >
                   GOLF
-                </div>
-              ) : done ? (
-                /* Trained, but the workout it came from is gone — deleted after
-                   the fact, which is an ordinary thing to do. The session is
-                   the durable record, so the day is called by what was done on
-                   it rather than by "Log". Not draggable: it already happened,
-                   and there is no workout left to move. */
-                <div
-                  className="mt-1.5 rounded-lg bg-cta px-0.5 py-1 text-center text-[9px] leading-[1.15] font-bold break-words hyphens-auto text-bg"
-                  title={day.loggedName}
-                >
-                  {day.loggedName ?? 'Log'}
-                </div>
-              ) : (
-                <div className="mt-1.5 py-1 text-center text-[10px] font-medium text-text-faint">
-                  Rest
                 </div>
               )}
             </div>
