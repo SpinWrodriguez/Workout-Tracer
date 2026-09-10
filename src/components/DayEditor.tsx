@@ -1,6 +1,6 @@
 import type { DaySlot, GolfDay } from '../db/types';
 import { longDate } from '../lib/format';
-import { WEEKDAY_LABEL, gripBufferNote, weekdayOf } from '../lib/golf';
+import { WEEKDAY_LABEL, gripBufferNote, weekdayOf, type Weekday } from '../lib/golf';
 import { EFFORT_COLOR, EFFORT_WORD } from '../lib/effort';
 import type { Intensity } from '../lib/weekTemplate';
 
@@ -31,12 +31,20 @@ export interface DayEditorSlot {
   sets: number;
   /** Undefined while the workout is empty and there is nothing to time. */
   minutes?: number;
+  /**
+   * The weekday this workout already occupies in the week BEING VIEWED, if it
+   * is in it. Resolved from that week's plan, not the standing weekday: the
+   * same workout can say Mon this week and Tue the next, and when choosing
+   * what to put on Sunday the question is where everything sits THIS week.
+   */
+  onWeekday?: Weekday;
 }
 
 function Tile({
   accent,
   title,
   detail,
+  tag,
   active,
   onClick,
   ariaLabel,
@@ -44,6 +52,8 @@ function Tile({
   accent: string;
   title: string;
   detail: string;
+  /** A short fact worth seeing at a glance — the day this already sits on. */
+  tag?: string;
   active: boolean;
   onClick: () => void;
   ariaLabel?: string;
@@ -69,6 +79,15 @@ function Tile({
           {detail}
         </span>
       </span>
+      {tag && (
+        <span
+          className={`mr-3 -ml-2 self-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+            active ? 'bg-bg/20 text-bg' : 'bg-surface text-text-dim'
+          }`}
+        >
+          {tag}
+        </span>
+      )}
     </button>
   );
 }
@@ -161,12 +180,24 @@ export function DayEditor({
               /* Spelled out, because the tile says two of these three things
                  in ways a screen reader cannot get at: the effort is a colour
                  and the totals are a second line under the name. */
+              /* Where it already sits in the week on screen. The tapped day's
+                 own workout skips the tag: the sheet is titled with that day,
+                 and a tag agreeing with the title is noise. */
+              tag={
+                row.onWeekday !== undefined && row.onWeekday !== weekday
+                  ? WEEKDAY_LABEL[row.onWeekday]
+                  : undefined
+              }
               ariaLabel={`${row.label}, ${EFFORT_WORD[row.intensity]}, ${
                 row.exercises === 0
                   ? 'empty'
                   : `${row.exercises} ${row.exercises === 1 ? 'exercise' : 'exercises'}, ${
                       row.sets
                     } sets`
+              }${
+                row.onWeekday !== undefined && row.onWeekday !== weekday
+                  ? `, on ${WEEKDAY_LABEL[row.onWeekday]} this week`
+                  : ''
               }`}
               active={currentSlot === row.slot}
               onClick={() => onSetSlot(row.slot)}

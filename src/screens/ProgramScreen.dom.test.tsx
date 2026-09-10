@@ -1003,6 +1003,35 @@ describe('the day editor', () => {
     expect(tile.textContent).toMatch(/2 exercises · 6 sets · about \d+ min/);
   });
 
+  it('tags each workout with the day it already sits on in this week', async () => {
+    /* Choosing what to put on Sunday needs to know where everything else
+       already is — and "where" is a fact about the week on screen, since the
+       same workout can sit on Mon this week and Tue the next. */
+    await seedSchedule({
+      A: { weekday: 1, intensity: 'heavy', name: 'Monday squats' },
+      B: { intensity: 'heavy', name: 'Free pull' },
+    });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedWorkout('B', ['bb_bent_over_row']);
+
+    const { sheet } = await openDay(WEDNESDAY);
+    // Placed elsewhere in this week: the tile says where.
+    const placed = within(sheet).getByRole('button', { name: /^Monday squats,.*on Mon this week$/ });
+    expect(placed.textContent).toContain('Mon');
+    // Not in this week at all: nothing to point at.
+    const free = within(sheet).getByRole('button', { name: /^Free pull,/ });
+    expect(free.textContent).not.toMatch(/\bMon|Tue|Wed|Thu|Fri|Sat|Sun\b/);
+  });
+
+  it('keeps the tag off the day being edited — the sheet title already says it', async () => {
+    await seedSchedule({ A: { weekday: 1, intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+
+    const { sheet } = await openDay(MONDAY);
+    const tile = within(sheet).getByRole('button', { name: /^Monday squats,/ });
+    expect(tile.getAttribute('aria-label')).not.toContain('this week');
+  });
+
   it('asks about a round of golf once, not about its tense', async () => {
     await seedSchedule({ A: { intensity: 'heavy', name: 'Monday squats' } });
     await seedWorkout('A', ['bb_back_squat']);

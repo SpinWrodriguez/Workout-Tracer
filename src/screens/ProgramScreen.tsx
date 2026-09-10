@@ -334,6 +334,7 @@ export function ProgramScreen({
    */
   const editorSlots: DayEditorSlot[] = definedSlots.map((slot) => {
     const list = entriesForSlot(slots ?? [], slot);
+    const onDate = dateFor(slot);
     return {
       slot,
       label: labelFor(slot),
@@ -342,6 +343,9 @@ export function ProgramScreen({
       sets: list.reduce((sum, entry) => sum + entry.targetSets, 0),
       minutes:
         list.length > 0 ? realMinutes(estimateMinutes(list, byId), timeFactor) : undefined,
+      /* Resolved against the week ON SCREEN, so planning next week tags where
+         things sit in THAT week, not where they were this one. */
+      onWeekday: onDate !== undefined ? weekdayOf(onDate) : undefined,
     };
   });
 
