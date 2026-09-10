@@ -18,6 +18,7 @@
 
 /** Exercises with illustrations of their own, in the order the frames go. */
 export const ILLUSTRATED: string[] = [
+  'bw_copenhagen_plank',
   'bw_neutral_pull_up',
   'bw_side_plank_reach',
   'cb_punch',
@@ -38,16 +39,32 @@ export const ILLUSTRATED: string[] = [
  * rule exists to catch. These two show the fallback tile until the frames are
  * made, which is a picture missing rather than a wrong picture shown.
  */
-export const AWAITING_ART: string[] = ['bw_copenhagen_plank', 'kb_cossack_squat'];
+export const AWAITING_ART: string[] = ['kb_cossack_squat'];
 
 const set = new Set(ILLUSTRATED);
 
+/*
+ * Most artwork is two frames — the start and the finish, the convention
+ * upstream uses. An isometric hold has no second position worth drawing, so
+ * its picture is a single anatomy plate and pretending otherwise would mean
+ * shipping the same file twice under two names.
+ */
+const SINGLE_FRAME = new Set(['bw_copenhagen_plank']);
+
+/** How many frames an illustrated exercise ships. */
+export function frameCount(exerciseId: string): number {
+  return SINGLE_FRAME.has(exerciseId) ? 1 : 2;
+}
+
 /**
- * The two frames for an exercise, or nothing. Nothing is the normal case:
+ * The frames for an exercise, or nothing. Nothing is the normal case:
  * most exercises resolve to an upstream reference photo instead.
  */
 export function photosFor(exerciseId: string): string[] {
   if (!set.has(exerciseId)) return [];
   const base = import.meta.env.BASE_URL;
-  return [1, 2].map((frame) => `${base}exercise-photos/${exerciseId}-${frame}.webp`);
+  return Array.from(
+    { length: frameCount(exerciseId) },
+    (_, index) => `${base}exercise-photos/${exerciseId}-${index + 1}.webp`,
+  );
 }

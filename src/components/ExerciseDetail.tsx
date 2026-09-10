@@ -183,7 +183,12 @@ export function ExerciseDetail({
                 >
                   <img
                     src={src}
-                    alt={`${exercise.name}, ${index === 0 ? 'start' : 'finish'}`}
+                    /* Two frames are the movement's ends; a single plate is
+                       the muscles it works, and calling it "start" would
+                       describe a sequence that is not there. */
+                    alt={`${exercise.name}, ${
+                      illustrations.length === 1 ? 'muscles worked' : index === 0 ? 'start' : 'finish'
+                    }`}
                     loading="lazy"
                     className="size-full object-contain"
                   />

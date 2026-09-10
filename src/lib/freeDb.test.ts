@@ -6,7 +6,7 @@ import { EXERCISES } from '../db/seed/exercises';
 import { FREE_DB_IDS, FREE_DB_WITHOUT_INSTRUCTIONS } from '../db/seed/freeDbIds';
 import { existsSync, statSync } from 'node:fs';
 import { CUES, SCALING, STEPS } from '../db/seed/cues';
-import { AWAITING_ART, ILLUSTRATED } from '../db/seed/photos';
+import { AWAITING_ART, ILLUSTRATED, frameCount } from '../db/seed/photos';
 import {
   FREE_DB_IMAGE_BASE,
   fetchAndStoreFreeDb,
@@ -131,14 +131,19 @@ describe('hand-mapped freeDbId values (spec §9)', () => {
     }
   });
 
-  it('has both frames on disk for every exercise that claims them', () => {
+  it('has every frame on disk for every exercise that claims them', () => {
     /* The filename is the contract — photosFor builds the URL from the id, so
-       a typo here is a broken image on the phone and nothing anywhere else. */
+       a typo here is a broken image on the phone and nothing anywhere else.
+       The count comes from the same module the URLs do: two frames for a
+       movement, one plate for a hold with no second position to draw. */
     for (const id of ILLUSTRATED) {
-      for (const frame of [1, 2]) {
+      for (let frame = 1; frame <= frameCount(id); frame += 1) {
         const file = `public/exercise-photos/${id}-${frame}.webp`;
         expect(existsSync(file), `${file} is missing`).toBe(true);
       }
+      // And no stray extra frame the app would never show.
+      const beyond = `public/exercise-photos/${id}-${frameCount(id) + 1}.webp`;
+      expect(existsSync(beyond), `${beyond} exists but is never shown`).toBe(false);
     }
   });
 
@@ -148,7 +153,7 @@ describe('hand-mapped freeDbId values (spec §9)', () => {
        ~1.2 MB each; scripts/photos-optimise.mjs is what stands between those
        and this. */
     for (const id of ILLUSTRATED) {
-      for (const frame of [1, 2]) {
+      for (let frame = 1; frame <= frameCount(id); frame += 1) {
         const file = `public/exercise-photos/${id}-${frame}.webp`;
         expect(statSync(file).size, `${file} is too big`).toBeLessThan(60 * 1024);
       }
