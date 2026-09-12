@@ -10,13 +10,16 @@
 /*  the library and the logs are already here, and a copy in Supabase would    */
 /*  be a second thing to keep in step for no gain.                            */
 /*                                                                            */
-/*  Every tool is read-only. A model cannot log a set, move a workout or       */
-/*  change a weight — the worst a wrong tool call can do is describe           */
-/*  something that is not there.                                              */
+/*  Every tool that touches training data is read-only. A model cannot log a  */
+/*  set, move a workout or change a weight — the worst a wrong lookup can do   */
+/*  is describe something that is not there. The one write is save_memory,     */
+/*  and it is scoped to match: it can only APPEND a short dated note to the    */
+/*  coach's own memory, a list the lifter can read and delete in Settings.     */
+/*  Nothing the generators or the screens compute reads from it.               */
 /* -------------------------------------------------------------------------- */
 
 import { db } from '../db/db';
-import { readInventory } from '../db/settings';
+import { MAX_MEMORY_NOTE_CHARS, addCoachMemory, readInventory } from '../db/settings';
 import { barWeightFor } from './loadable';
 import { MUSCLE_BY_ID } from '../db/seed/muscles';
 import type { Exercise, MovementPattern, MuscleId, SetLog } from '../db/types';
@@ -122,6 +125,28 @@ export const COACH_TOOLS: unknown[] = [
       },
     },
   },
+  {
+    name: 'save_memory',
+    description:
+      'Save one short note to your own long-term memory. The note is stored with ' +
+      "today's date, survives app reinstalls and rides in the lifter's backups, and " +
+      'is shown to you in every future conversation. Call it ONLY when the lifter ' +
+      'asks you to remember or save something — "save this", "remember that my back ' +
+      'was sore" — never on your own initiative, and never for routine chat. Write ' +
+      'the note yourself: distil what matters — the fact, the decision and its ' +
+      'reason — into one to three plain sentences, not a transcript. At most ' +
+      `${MAX_MEMORY_NOTE_CHARS} characters.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        note: {
+          type: 'string',
+          description: 'The distilled note to keep. Plain sentences, no quotes of the chat.',
+        },
+      },
+      required: ['note'],
+    },
+  },
 ];
 
 export const COACH_TOOL_NAMES = [
@@ -129,6 +154,7 @@ export const COACH_TOOL_NAMES = [
   'exercise_detail',
   'exercise_history',
   'session_detail',
+  'save_memory',
 ];
 
 const muscleName = (id: MuscleId): string => MUSCLE_BY_ID[id]?.name ?? id;
@@ -359,6 +385,28 @@ export interface ToolOutcome {
  * the model can read and work around, because the alternative is a conversation
  * that dies halfway with the user watching a spinner.
  */
+/**
+ * The one write. Append-only, capped, dated by the app rather than the model,
+ * and the lifter can read and delete every note in Settings — so the worst a
+ * wrong call can do is store a note that was not worth keeping.
+ */
+async function saveMemory(input: unknown): Promise<ToolOutcome> {
+  const note = asRecord(input).note;
+  if (typeof note !== 'string' || !note.trim()) {
+    return {
+      content: JSON.stringify({ error: 'save_memory needs a non-empty `note` string.' }),
+      isError: true,
+    };
+  }
+  const saved = await addCoachMemory(note);
+  return {
+    content: JSON.stringify({
+      saved: { on: saved.savedAt.slice(0, 10), note: saved.note },
+    }),
+    isError: false,
+  };
+}
+
 export async function runCoachTool(
   name: string,
   input: unknown,
@@ -376,6 +424,9 @@ export async function runCoachTool(
     }
     if (name === 'session_detail') {
       return { content: JSON.stringify(await sessionDetail(exercises, input)), isError: false };
+    }
+    if (name === 'save_memory') {
+      return await saveMemory(input);
     }
     return { content: JSON.stringify({ error: `No tool named ${name}.` }), isError: true };
   } catch (cause) {

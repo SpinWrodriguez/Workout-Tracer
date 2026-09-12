@@ -20,7 +20,7 @@
 import { db } from '../db/db';
 import { MUSCLE_BY_ID } from '../db/seed/muscles';
 import type { Exercise, MuscleId, SetLog } from '../db/types';
-import { readAiInstructions, readTraining } from '../db/settings';
+import { readAiInstructions, readCoachMemory, readTraining } from '../db/settings';
 import { streamConversation, type AskUsage } from './askModel';
 import { COACH_TOOLS, runCoachTool } from './coachTools';
 import { shiftIso, todayIso, weekStart } from './format';
@@ -69,7 +69,9 @@ Answering:
 
 - Lead with the answer. If the data disagrees with the premise of the question, say so first.
 - Two to five sentences for a straight question. Up to eight when they asked why, or when the honest answer is a general figure and then their numbers against it. Never pad to fill the space.
-- Plain sentences, no headings and no bold. A short list is fine when the answer genuinely is a list of numbers — a range per muscle, say — because that reads better on a phone than the same thing in a paragraph.`;
+- Plain sentences, no headings and no bold. A short list is fine when the answer genuinely is a list of numbers — a range per muscle, say — because that reads better on a phone than the same thing in a paragraph.
+
+Memory: \`memory\` in the context is notes you saved in earlier conversations, each dated — an injury, an intention, a decision and its reason. Treat them as things the lifter told you before and use them unprompted where they matter: do not suggest heavy hinging over a note about a sore back from three days ago. Asked what was said or done about something earlier, answer from these notes and name the date. Asked to remember or save something, call save_memory with a short distilled note — the point that matters, never a transcript — and only when asked: routine chat is not memory. If nothing in memory covers what they are recalling, say so rather than reconstructing it.`;
 
 /* --- the context ---------------------------------------------------------- */
 
@@ -137,9 +139,10 @@ export async function buildCoachContext(
   const from = weekStart(weekOf ?? today);
   const currentWeek = from === weekStart(today);
 
-  const [training, instructions, plan, sessions, weight] = await Promise.all([
+  const [training, instructions, memory, plan, sessions, weight] = await Promise.all([
     readTraining(),
     readAiInstructions(),
+    readCoachMemory(),
     readWeekPlan(weekOf),
     recentSessions(6),
     db.sharedBodyWeight.orderBy('date').reverse().first(),
@@ -216,6 +219,22 @@ export async function buildCoachContext(
         })),
       },
       recentSessions: sessions,
+      /* Newest first, inside a character budget: memory is a privilege of the
+         recent and the short, not a second transcript. Each note carries the
+         weekday-stamped date it was saved, because "last week" is how the
+         lifter will ask for it back. */
+      memory: (() => {
+        const MEMORY_CHAR_BUDGET = 1600;
+        const rows: { on: string; note: string }[] = [];
+        let spent = 0;
+        for (const note of [...memory].reverse()) {
+          spent += note.note.length;
+          if (spent > MEMORY_CHAR_BUDGET && rows.length > 0) break;
+          const day = note.savedAt.slice(0, 10);
+          rows.push({ on: `${WEEKDAY_LABEL[weekdayOf(day)]} ${day}`, note: note.note });
+        }
+        return rows;
+      })(),
     },
   };
 }

@@ -5,7 +5,7 @@ import { seedDatabase } from '../db/seed';
 import { CABLE_SINGLE_PULLEY, EXERCISES } from '../db/seed/exercises';
 import type { SetLog } from '../db/types';
 import { COACH_TOOLS, runCoachTool } from './coachTools';
-import { writeInventory } from '../db/settings';
+import { readCoachMemory, writeInventory } from '../db/settings';
 import { DEFAULT_INVENTORY } from './loadable';
 
 /*
@@ -52,7 +52,7 @@ describe('the tools the coach is offered', () => {
       const row = tool as { name: string; description: string };
       expect(row.description.length).toBeGreaterThan(60);
       // Named for what it does to the data, not "get" or "info".
-      expect(row.name).toMatch(/^(search|exercise|session)_/);
+      expect(row.name).toMatch(/^(search|exercise|session|save)_/);
     }
   });
 });
@@ -235,5 +235,29 @@ describe('reading one session', () => {
     expect(String(missing.error)).toMatch(/No session/);
     // Nothing asked for at all is the same: an answer, not an exception.
     expect(String((await call('session_detail', {})).error)).toMatch(/No session/);
+  });
+});
+
+describe('the one write: save_memory', () => {
+  it('stores a dated note and reads it back', async () => {
+    const result = await call('save_memory', { note: 'Back was sore after Thursday deadlifts; agreed to keep hinges light for a week.' });
+    expect((result.saved as { on: string }).on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    const kept = await readCoachMemory();
+    expect(kept).toHaveLength(1);
+    expect(kept[0]?.note).toContain('keep hinges light');
+  });
+
+  it('refuses an empty note rather than storing a blank memory', async () => {
+    const outcome = await runCoachTool('save_memory', { note: '   ' }, EXERCISES);
+    expect(outcome.isError).toBe(true);
+    expect(await readCoachMemory()).toHaveLength(0);
+  });
+
+  it('appends — a second save never overwrites the first', async () => {
+    await call('save_memory', { note: 'First.' });
+    await call('save_memory', { note: 'Second.' });
+    const kept = await readCoachMemory();
+    expect(kept.map((row) => row.note)).toEqual(['First.', 'Second.']);
   });
 });

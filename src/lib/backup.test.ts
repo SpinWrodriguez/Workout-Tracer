@@ -2,7 +2,13 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../db/db';
 import { seedDatabase } from '../db/seed';
-import { COACH_CHAT_KEY, writeCoachChat } from '../db/settings';
+import {
+  COACH_CHAT_KEY,
+  COACH_MEMORY_KEY,
+  addCoachMemory,
+  readCoachMemory,
+  writeCoachChat,
+} from '../db/settings';
 import { EXERCISES } from '../db/seed/exercises';
 import { buildBackup, importBackup, normaliseGoals } from './backup';
 import { loadDraft, saveSession, type SessionDraft } from './sessions';
@@ -479,5 +485,26 @@ describe('a damaged workout section', () => {
     expect(await db.session.count()).toBe(0);
     expect(report.counts.session).toBe(0);
     expect(report.counts.setLog).toBe(0);
+  });
+});
+
+describe('coach memory in the backup', () => {
+  it('exports the notes the chat log deliberately is not', async () => {
+    /* The raw conversation is filtered out of every export — it is a chat log,
+       not a training fact, and it dies with the device by design. Memory is
+       the opposite: the notes the lifter asked to keep, so losing a phone must
+       not lose them. */
+    await addCoachMemory('Back was sore; keep hinges light for a week.');
+    const backup = await buildBackup();
+    const keys = backup.workout.settings.map((row) => row.key);
+    expect(keys).toContain(COACH_MEMORY_KEY);
+    expect(keys).not.toContain(COACH_CHAT_KEY);
+
+    // And a fresh import of that file brings the memory back.
+    await Promise.all(db.tables.map((t) => t.clear()));
+    await importBackup(JSON.parse(JSON.stringify(backup)));
+    const notes = await readCoachMemory();
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.note).toContain('keep hinges light');
   });
 });

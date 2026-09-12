@@ -317,3 +317,69 @@ export async function writeCoachChat(chat: Omit<StoredCoachChat, 'savedAt'>): Pr
 export async function clearCoachChat(): Promise<void> {
   await db.settings.delete(COACH_CHAT_KEY);
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Coach memory: what the lifter asked the coach to keep.                    */
+/*                                                                            */
+/*  The chat thread is a transcript — trimmed to eight turns, deliberately     */
+/*  left out of backups, gone with the device. These notes are the opposite:   */
+/*  short, distilled, dated facts the lifter explicitly asked to keep ("save   */
+/*  this", "remember my back"), stored where the backup exports them and       */
+/*  shown to the coach in every conversation after.                           */
+/* -------------------------------------------------------------------------- */
+
+export const COACH_MEMORY_KEY = 'coachMemory';
+
+export interface MemoryNote {
+  id: string;
+  /** ISO date-time the note was saved — the date is part of the memory. */
+  savedAt: string;
+  note: string;
+}
+
+/** Enough for a year of deliberate saves; old enough to forget past that. */
+export const MAX_MEMORY_NOTES = 40;
+/** A note is a distillation. Past this it is a transcript wearing a hat. */
+export const MAX_MEMORY_NOTE_CHARS = 600;
+
+function parseMemory(value: unknown): MemoryNote[] {
+  if (!Array.isArray(value)) return [];
+  const out: MemoryNote[] = [];
+  for (const row of value) {
+    if (!isRecord(row)) continue;
+    if (typeof row.note !== 'string' || !row.note.trim()) continue;
+    out.push({
+      id: typeof row.id === 'string' && row.id ? row.id : `m_${out.length}`,
+      savedAt: typeof row.savedAt === 'string' ? row.savedAt : new Date().toISOString(),
+      note: row.note.trim().slice(0, MAX_MEMORY_NOTE_CHARS),
+    });
+  }
+  return out;
+}
+
+/** Oldest first, the order they were saved. */
+export async function readCoachMemory(): Promise<MemoryNote[]> {
+  const row = await db.settings.get(COACH_MEMORY_KEY);
+  return parseMemory(row?.value);
+}
+
+async function writeCoachMemory(notes: MemoryNote[]): Promise<void> {
+  await db.settings.put({ key: COACH_MEMORY_KEY, value: notes });
+}
+
+/** Appends one note, dropping the oldest past the cap, and returns it. */
+export async function addCoachMemory(text: string): Promise<MemoryNote> {
+  const note: MemoryNote = {
+    id: `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    savedAt: new Date().toISOString(),
+    note: text.trim().slice(0, MAX_MEMORY_NOTE_CHARS),
+  };
+  const kept = [...(await readCoachMemory()), note].slice(-MAX_MEMORY_NOTES);
+  await writeCoachMemory(kept);
+  return note;
+}
+
+export async function deleteCoachMemory(id: string): Promise<void> {
+  const kept = (await readCoachMemory()).filter((note) => note.id !== id);
+  await writeCoachMemory(kept);
+}

@@ -6,6 +6,7 @@ import { Card, Label, Screen } from '../components/Layout';
 import { InventoryEditor } from '../components/InventoryEditor';
 import { ThemePicker } from '../components/ThemePicker';
 import { AiInstructionsEditor, ModelKeyEditor } from '../components/ModelKeyEditor';
+import { CoachMemory } from '../components/CoachMemory';
 import { TrainingPrefsEditor } from '../components/TrainingPrefsEditor';
 import { NutritionSync } from '../components/NutritionSync';
 import { clearFreeDb, fetchAndStoreFreeDb, mappedIds, type EnrichReport } from '../lib/freeDb';
@@ -92,6 +93,10 @@ export function SettingsScreen() {
 
       <div className="mt-3">
         <AiInstructionsEditor />
+      </div>
+
+      <div className="mt-3">
+        <CoachMemory />
       </div>
 
       <Card title="Backup" className="mt-3" collapsible summary="import or export the training data">

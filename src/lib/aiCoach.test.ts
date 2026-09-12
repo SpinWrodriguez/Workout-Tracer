@@ -10,6 +10,7 @@ vi.mock('./supabaseSource', () => ({
 
 import { db } from '../db/db';
 import { seedDatabase } from '../db/seed';
+import { addCoachMemory } from '../db/settings';
 import { EXERCISES } from '../db/seed/exercises';
 import { writeApiKey } from './askModel';
 import { shiftIso, todayIso, weekStart } from './format';
@@ -214,12 +215,13 @@ describe('what the coach is sent', () => {
        rules and context on an empty database — a fraction of one library, and
        the whole reason a question costs a fraction of a cent.
 
-       The ceiling has moved twice, each time for a rule that fixed a wrong
-       answer: which week the question is about, never working a weekday out
-       from a date, and what the effort ceiling means. It is a budget, not a
-       target — raise it when a rule earns it and not to make room for
-       prose. */
-    expect(system.length).toBeLessThan(5600);
+       The ceiling has moved three times, each time for a rule that fixed a
+       wrong answer or added a capability: which week the question is about,
+       never working a weekday out from a date, what the effort ceiling means,
+       and now memory — what the dated notes are and when save_memory may be
+       called. It is a budget, not a target — raise it when a rule earns it
+       and not to make room for prose. */
+    expect(system.length).toBeLessThan(6600);
   });
 
   it('licenses general training knowledge, not just a read of the data', async () => {
@@ -243,6 +245,7 @@ describe('what the coach is sent', () => {
       'exercise_detail',
       'exercise_history',
       'session_detail',
+      'save_memory',
     ]);
     /* A schema would bar the tool_use blocks this shape exists for. `effort`
        is thinking depth and still applies. */
@@ -564,5 +567,35 @@ describe('which week the question is about', () => {
     const { sent } = await ask([says('ok')]);
     const system = sent[0]?.system[0]?.text ?? '';
     expect(system).toMatch(/week they are LOOKING AT/);
+  });
+});
+
+describe('what the coach remembers', () => {
+  it('carries saved notes into every context, dated with their weekday', async () => {
+    await addCoachMemory('Back was sore after deadlifts; agreed to keep hinges light for a week.');
+    const context = await buildCoachContext(EXERCISES);
+    const memory = context.payload.memory as { on: string; note: string }[];
+    expect(memory).toHaveLength(1);
+    expect(memory[0]?.note).toContain('keep hinges light');
+    // "Last week" is how it will be asked for back, so the date carries its day.
+    expect(memory[0]?.on).toMatch(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('sends the newest notes when there are too many to send whole', async () => {
+    for (let i = 0; i < 30; i += 1) {
+      await addCoachMemory(`Note number ${i}: ${'padding '.repeat(20)}`);
+    }
+    const context = await buildCoachContext(EXERCISES);
+    const memory = context.payload.memory as { on: string; note: string }[];
+    expect(memory.length).toBeLessThan(30);
+    // Newest first: the most recent conversation is the most likely referent.
+    expect(memory[0]?.note).toContain('Note number 29');
+  });
+
+  it('tells the model what memory is and when it may write to it', async () => {
+    const { sent } = await ask([says('ok')]);
+    const system = sent[0]?.system[0]?.text ?? '';
+    expect(system).toContain('save_memory');
+    expect(system).toContain('only when asked');
   });
 });
