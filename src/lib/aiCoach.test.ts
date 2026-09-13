@@ -215,15 +215,15 @@ describe('what the coach is sent', () => {
        rules and context on an empty database — a fraction of one library, and
        the whole reason a question costs a fraction of a cent.
 
-       The ceiling has moved four times, each time for a rule that fixed a
+       The ceiling has moved five times, each time for a rule that fixed a
        wrong answer or added a capability: which week the question is about,
        never working a weekday out from a date, what the effort ceiling means,
-       memory, and now the month of context — a coach who has only seen the
-       last fortnight is a spotter, and the rule telling it to READ the month
-       unprompted is what turns the data into coaching. It is a budget, not a
-       target — raise it when a rule earns it and not to make room for
-       prose. */
-    expect(system.length).toBeLessThan(7600);
+       memory, the month of context, and the rest-day rule — an answer called
+       Sunday gym-rest while Sunday's session sat in the very list it was
+       sent, because it reasoned from its own narrative instead of re-reading.
+       It is a budget, not a target — raise it when a rule earns it and not to
+       make room for prose. */
+    expect(system.length).toBeLessThan(8200);
   });
 
   it('licenses general training knowledge, not just a read of the data', async () => {
@@ -592,6 +592,17 @@ describe('what the coach remembers', () => {
     expect(memory.length).toBeLessThan(30);
     // Newest first: the most recent conversation is the most likely referent.
     expect(memory[0]?.note).toContain('Note number 29');
+  });
+
+  it('forbids counting rest days from the conversation instead of the list', async () => {
+    /* Seen live: same thread, ten minutes apart — one answer correctly listed
+       Sunday's Arms and Accessories, the next claimed "last session Thu" and
+       called the weekend gym-rest. The session was in the context both times;
+       the model reasoned from its own narrative instead of re-reading. */
+    const { sent } = await ask([says('ok')]);
+    const system = sent[0]?.system[0]?.text ?? '';
+    expect(system).toContain('READ recentSessions[0]');
+    expect(system).toContain('calling any day a rest day');
   });
 
   it('tells the model what memory is and when it may write to it', async () => {
