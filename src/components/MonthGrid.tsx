@@ -25,6 +25,15 @@ import { Card, Label } from './Layout';
 
 const WEEKDAYS: Weekday[] = [1, 2, 3, 4, 5, 6, 7];
 
+/** The month's dates, minus any leading or trailing week entirely outside it. */
+function weeksOf(anchor: string): string[] {
+  const month = anchor.slice(0, 7);
+  const weeks: string[][] = [];
+  const grid = monthGrid(anchor);
+  for (let i = 0; i < grid.length; i += 7) weeks.push(grid.slice(i, i + 7));
+  return weeks.filter((week) => week.some((date) => date.startsWith(month))).flat();
+}
+
 export function MonthGrid({
   anchor,
   sessionCountByDate,
@@ -90,13 +99,17 @@ export function MonthGrid({
         </span>
       }
     >
-      <div className="grid grid-cols-7 gap-1.5">
+      {/* Small on purpose — the reference is a widget, and half the point of
+          a glanceable grid is that it does not push the list off the screen.
+          28px keeps a usable thumb target; weeks with no day of this month in
+          them are not rendered at all. */}
+      <div className="grid w-fit grid-cols-7 gap-1.5">
         {WEEKDAYS.map((day) => (
-          <Label key={day} className="text-center">
+          <span key={day} className="w-7 text-center text-[9px] font-semibold text-text-faint">
             {WEEKDAY_LABEL[day]}
-          </Label>
+          </span>
         ))}
-        {monthGrid(anchor).map((date) => {
+        {weeksOf(anchor).map((date) => {
           const inMonth = date.startsWith(month);
           const sessions = sessionCountByDate.get(date) ?? 0;
           const golf = golfDates.has(date);
@@ -105,7 +118,7 @@ export function MonthGrid({
           /* Days of the neighbouring months render as gaps, not as dimmer
              days: a cell that can be read can be miscounted, and the month's
              own shape is the whole point of a month view. */
-          if (!inMonth) return <span key={date} aria-hidden="true" />;
+          if (!inMonth) return <span key={date} aria-hidden="true" className="size-7" />;
 
           return (
             <button
@@ -116,7 +129,7 @@ export function MonthGrid({
               aria-label={`${WEEKDAY_LABEL[weekdayOf(date)]} ${date}${
                 sessions > 0 ? `, ${sessions} ${sessions === 1 ? 'session' : 'sessions'}` : ''
               }${golf ? ', golf' : ''}`}
-              className={`relative aspect-square rounded-md ${
+              className={`relative size-7 rounded-md ${
                 sessions > 0 ? 'bg-cta' : date > today ? 'bg-surface-2 opacity-40' : 'bg-surface-2'
               } ${isToday ? 'outline-2 outline-cta' : ''}`}
             >
@@ -124,7 +137,7 @@ export function MonthGrid({
               {golf && (
                 <span
                   aria-hidden="true"
-                  className="absolute inset-x-0 bottom-1 mx-auto size-1.5 rounded-full"
+                  className="absolute inset-x-0 bottom-0.5 mx-auto size-1 rounded-full"
                   style={{ background: EFFORT_COLOR.golf }}
                 />
               )}
@@ -134,7 +147,7 @@ export function MonthGrid({
       </div>
 
       {/* The example's footer line, kept honest about which month is open. */}
-      <div className="mt-3 border-t border-border pt-2.5">
+      <div className="mt-2.5 border-t border-border pt-2">
         <span className="stat-sm">{currentMonth ? weekCount : monthCount}</span>
         <Label className="ml-1.5">
           {currentMonth ? 'this week' : `in ${monthTitle(anchor).split(' ')[0]?.toLowerCase()}`}
