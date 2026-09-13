@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { Exercise } from '../db/types';
 import { listSessionSummaries } from '../lib/sessions';
-import { EM_SETS, friendlyDate, kg, monthTitle, shiftMonth, todayIso } from '../lib/format';
+import { EM_SETS, friendlyDate, kg, monthTitle, shiftMonth, todayIso, weekStart } from '../lib/format';
 import { hasLoadTranslation } from '../lib/load';
 import {
   TIMEFRAMES,
@@ -128,6 +128,7 @@ export function HistoryScreen({
      oldest — and with nothing logged, the current month is the only one. */
   const earliestMonth = (summaries?.at(-1)?.session.date ?? todayIso()).slice(0, 7);
   const currentMonth = todayIso().slice(0, 7);
+  const thisWeekStart = weekStart(todayIso());
 
   const best = useMemo(() => {
     const values = (series ?? []).map((p) => p[metric] ?? 0);
@@ -212,6 +213,7 @@ export function HistoryScreen({
 
         <MonthGrid
           anchor={monthAnchor}
+          weekCount={(summaries ?? []).filter((row) => row.session.date >= thisWeekStart).length}
           sessionCountByDate={sessionCountByDate}
           golfDates={golfDates ?? new Set()}
           canGoBack={monthAnchor.slice(0, 7) > earliestMonth}

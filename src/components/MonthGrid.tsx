@@ -1,5 +1,5 @@
 import { WEEKDAY_LABEL, monthGrid, weekdayOf, type Weekday } from '../lib/golf';
-import { fromIsoDate, monthTitle, todayIso } from '../lib/format';
+import { monthTitle, todayIso } from '../lib/format';
 import { EFFORT_COLOR } from '../lib/effort';
 
 import { Card, Label } from './Layout';
@@ -16,6 +16,11 @@ import { Card, Label } from './Layout';
 /*                                                                            */
 /*  The colour language is the strip's: trained days filled with the done      */
 /*  colour, a round marked in the golf blue. Nothing new to learn.            */
+/*                                                                            */
+/*  The cells carry no day numbers, on the lifter's own call — the look is     */
+/*  their Apple-widget example, quiet squares and one accent. Position under   */
+/*  the weekday header says when; the exact date lives in each cell's          */
+/*  aria-label and in the session the tap opens.                              */
 /* -------------------------------------------------------------------------- */
 
 const WEEKDAYS: Weekday[] = [1, 2, 3, 4, 5, 6, 7];
@@ -29,11 +34,14 @@ export function MonthGrid({
   onShift,
   onToday,
   onPickDay,
+  weekCount,
 }: {
   /** Any date inside the month to show. */
   anchor: string;
   sessionCountByDate: Map<string, number>;
   golfDates: Set<string>;
+  /** Sessions in the CURRENT week, for the example's "N this week" line. */
+  weekCount: number;
   /** False past the edge of the data, so the arrows never walk into a void. */
   canGoBack: boolean;
   canGoForward: boolean;
@@ -44,6 +52,10 @@ export function MonthGrid({
 }) {
   const today = todayIso();
   const month = anchor.slice(0, 7);
+  const currentMonth = month === today.slice(0, 7);
+  const monthCount = [...sessionCountByDate.entries()]
+    .filter(([date]) => date.startsWith(month))
+    .reduce((sum, [, count]) => sum + count, 0);
 
   return (
     <Card
@@ -78,7 +90,7 @@ export function MonthGrid({
         </span>
       }
     >
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-1.5">
         {WEEKDAYS.map((day) => (
           <Label key={day} className="text-center">
             {WEEKDAY_LABEL[day]}
@@ -104,26 +116,29 @@ export function MonthGrid({
               aria-label={`${WEEKDAY_LABEL[weekdayOf(date)]} ${date}${
                 sessions > 0 ? `, ${sessions} ${sessions === 1 ? 'session' : 'sessions'}` : ''
               }${golf ? ', golf' : ''}`}
-              className={`relative flex aspect-square flex-col items-center justify-center rounded-lg text-[12px] font-semibold ${
-                sessions > 0
-                  ? 'bg-cta text-bg'
-                  : date > today
-                    ? 'text-text-faint'
-                    : 'bg-surface-2 text-text-dim'
+              className={`relative aspect-square rounded-md ${
+                sessions > 0 ? 'bg-cta' : date > today ? 'bg-surface-2 opacity-40' : 'bg-surface-2'
               } ${isToday ? 'outline-2 outline-cta' : ''}`}
             >
-              {fromIsoDate(date).getDate()}
               {/* The round is the dot, exactly as on the week strip. */}
               {golf && (
                 <span
                   aria-hidden="true"
-                  className="absolute bottom-1 size-1.5 rounded-full"
+                  className="absolute inset-x-0 bottom-1 mx-auto size-1.5 rounded-full"
                   style={{ background: EFFORT_COLOR.golf }}
                 />
               )}
             </button>
           );
         })}
+      </div>
+
+      {/* The example's footer line, kept honest about which month is open. */}
+      <div className="mt-3 border-t border-border pt-2.5">
+        <span className="stat-sm">{currentMonth ? weekCount : monthCount}</span>
+        <Label className="ml-1.5">
+          {currentMonth ? 'this week' : `in ${monthTitle(anchor).split(' ')[0]?.toLowerCase()}`}
+        </Label>
       </div>
     </Card>
   );
