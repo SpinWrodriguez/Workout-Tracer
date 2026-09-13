@@ -79,3 +79,17 @@ export function clock(totalSeconds: number): string {
   const m = Math.floor(s / 60);
   return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
+
+/** The first of the month `delta` months away from `anchor`. */
+export function shiftMonth(anchorIso: string, delta: number): string {
+  const anchor = fromIsoDate(anchorIso);
+  return toIsoDate(new Date(anchor.getFullYear(), anchor.getMonth() + delta, 1));
+}
+
+/** 'September 2026' — the name a month view goes by. */
+export function monthTitle(anchorIso: string): string {
+  return fromIsoDate(anchorIso).toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
+}

@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { Exercise } from '../db/types';
 import { listSessionSummaries } from '../lib/sessions';
-import { EM_SETS, friendlyDate, kg, todayIso } from '../lib/format';
+import { EM_SETS, friendlyDate, kg, monthTitle, shiftMonth, todayIso } from '../lib/format';
 import { hasLoadTranslation } from '../lib/load';
 import {
   TIMEFRAMES,
@@ -17,6 +17,7 @@ import type { ExerciseMetric, ExercisePoint } from '../components/Charts';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ExerciseDetail } from '../components/ExerciseDetail';
 import { slotFallback } from '../lib/dayLabel';
+import { MonthGrid } from '../components/MonthGrid';
 
 const METRICS: ExerciseMetric[] = ['topSetKg', 'oneRm', 'volumeKg'];
 const METRIC_LABEL: Record<ExerciseMetric, string> = {
@@ -43,6 +44,9 @@ export function HistoryScreen({
   const [detailId, setDetailId] = useState<string | undefined>(undefined);
   const [timeframe, setTimeframe] = useState<Timeframe>('3M');
   const [metric, setMetric] = useState<ExerciseMetric>('topSetKg');
+  /* The month the log is showing. A date inside it, not a month string, so
+     the grid and the shift arithmetic share one representation. */
+  const [monthAnchor, setMonthAnchor] = useState(todayIso());
 
   const summaries = useLiveQuery(() => listSessionSummaries(), [], undefined);
   const byId = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
@@ -100,16 +104,30 @@ export function HistoryScreen({
     return points;
   }, [activeId, timeframe]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, NonNullable<typeof summaries>>();
+  /* The month on show, and only it: the grid above is the way to the rest.
+     A flat all-time list was the thing that got messy. */
+  const monthSummaries = useMemo(() => {
+    const month = monthAnchor.slice(0, 7);
+    return (summaries ?? []).filter((summary) => summary.session.date.startsWith(month));
+  }, [summaries, monthAnchor]);
+
+  const sessionCountByDate = useMemo(() => {
+    const map = new Map<string, number>();
     for (const summary of summaries ?? []) {
-      const month = summary.session.date.slice(0, 7);
-      const list = map.get(month) ?? [];
-      list.push(summary);
-      map.set(month, list);
+      map.set(summary.session.date, (map.get(summary.session.date) ?? 0) + 1);
     }
-    return [...map.entries()];
+    return map;
   }, [summaries]);
+
+  const golfDates = useLiveQuery(
+    async () => new Set((await db.golfDay.toArray()).map((day) => day.date)),
+    [],
+  );
+
+  /* The data's own edges. summaries are newest first, so the last is the
+     oldest — and with nothing logged, the current month is the only one. */
+  const earliestMonth = (summaries?.at(-1)?.session.date ?? todayIso()).slice(0, 7);
+  const currentMonth = todayIso().slice(0, 7);
 
   const best = useMemo(() => {
     const values = (series ?? []).map((p) => p[metric] ?? 0);
@@ -192,8 +210,24 @@ export function HistoryScreen({
 
         <h2 className="label mt-5 mb-2 block">Session log</h2>
 
+        <MonthGrid
+          anchor={monthAnchor}
+          sessionCountByDate={sessionCountByDate}
+          golfDates={golfDates ?? new Set()}
+          canGoBack={monthAnchor.slice(0, 7) > earliestMonth}
+          canGoForward={monthAnchor.slice(0, 7) < currentMonth}
+          onShift={(delta) => setMonthAnchor(shiftMonth(monthAnchor, delta))}
+          onToday={() => setMonthAnchor(todayIso())}
+          /* A day holds one session almost always; when it holds two, the most
+             recent is the one being looked for. */
+          onPickDay={(date) => {
+            const hit = (summaries ?? []).find((summary) => summary.session.date === date);
+            if (hit) onOpen(hit.session.id);
+          }}
+        />
+
         {summaries !== undefined && summaries.length === 0 && (
-          <Card title="Nothing logged yet">
+          <Card title="Nothing logged yet" className="mt-3">
             <p className="text-text-dim">{EM_SETS}</p>
             <p className="mt-2 text-[13px] text-text-dim">
               Tap the + to log a session. Past dates are fine — set the date in Session details.
@@ -201,16 +235,16 @@ export function HistoryScreen({
           </Card>
         )}
 
-        {grouped.map(([month, list]) => (
-          <div key={month} className="mb-5">
-            <Label className="mb-2 block">
-              {new Date(`${month}-01T00:00:00`).toLocaleDateString(undefined, {
-                month: 'long',
-                year: 'numeric',
-              })}
-            </Label>
+        {summaries !== undefined && summaries.length > 0 && monthSummaries.length === 0 && (
+          <p className="mt-3 text-[13px] font-medium text-text-dim">
+            Nothing logged in {monthTitle(monthAnchor)}.
+          </p>
+        )}
+
+        {monthSummaries.length > 0 && (
+          <div className="mt-3 mb-5">
             <div className="overflow-hidden rounded-2xl bg-surface">
-              {list.map((summary, i) => (
+              {monthSummaries.map((summary, i) => (
                 <div
                   key={summary.session.id}
                   className={`relative ${i > 0 ? 'border-t border-border' : ''}`}
@@ -284,7 +318,7 @@ export function HistoryScreen({
               ))}
             </div>
           </div>
-        ))}
+        )}
       </Screen>
 
       {picking && (
