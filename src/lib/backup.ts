@@ -147,10 +147,24 @@ export function normaliseActivity(value: unknown, source: Activity['source']): A
     if (!isRecord(raw)) return;
     const d = str(raw.date) ?? date;
     if (!d || !ISO_DATE.test(d)) return;
-    const name = str(raw.name) ?? str(raw.label) ?? 'Activity';
-    const kcal = num(raw.kcal) ?? num(raw.calories) ?? num(raw.burn) ?? 0;
+    /* `n` and `k` are what the nutrition app actually stores — found by
+       reading its own export after a year of entries arriving here as
+       "Activity, 0 kcal": both fallback chains missed, and the flattened row
+       said nothing but the date. */
+    const name = str(raw.name) ?? str(raw.label) ?? str(raw.n);
+    const kcal = num(raw.kcal) ?? num(raw.calories) ?? num(raw.burn) ?? num(raw.k);
+    /* An entry with neither a name nor a burn carries no information a
+       fallback could add — storing "Activity, 0" is how the flattening bug
+       hid for so long, so unusable rows are dropped where they can be seen
+       missing rather than stored looking like data. */
+    if (name === undefined && kcal === undefined) return;
     const src = (str(raw.source) as Activity['source']) ?? source;
-    const row: Activity = { date: d.slice(0, 10), name, kcal, source: src };
+    const row: Activity = {
+      date: d.slice(0, 10),
+      name: name ?? 'Activity',
+      kcal: kcal ?? 0,
+      source: src,
+    };
     seen.set(`${row.date}|${row.name}|${row.source}`, row);
   };
 

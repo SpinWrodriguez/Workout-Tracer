@@ -101,6 +101,19 @@ export async function pullShared(source: WeightSource): Promise<SyncReport> {
   const shared = extractShared(data);
 
   await db.transaction('rw', [db.sharedBodyWeight, db.sharedActivity, db.sharedGoals], async () => {
+    /*
+     * Sweep the flattening artefact. The old normaliser missed the nutrition
+     * app's field names and stored every activity as "Activity, 0 kcal" —
+     * rows that said nothing but the date. The blob still holds the originals
+     * and this same sync re-imports them properly, so deleting the husks is
+     * not deleting data: their real rows land in the bulkPut below.
+     */
+    const husks = (await db.sharedActivity.where('source').equals('manual').toArray()).filter(
+      (row) => row.name === 'Activity' && row.kcal === 0,
+    );
+    if (husks.length) {
+      await db.sharedActivity.bulkDelete(husks.map((row) => [row.date, row.name, row.source]));
+    }
     if (shared.bodyWeight.length) await db.sharedBodyWeight.bulkPut(shared.bodyWeight);
     if (shared.activity.length) await db.sharedActivity.bulkPut(shared.activity);
     if (shared.goals.length) await db.sharedGoals.bulkPut(shared.goals);

@@ -134,3 +134,32 @@ describe('pullShared', () => {
     expect(nutritionData).toHaveBeenCalledWith('user-1');
   });
 });
+
+describe('the nutrition app\'s own field names', () => {
+  it('reads {n, k} — what the app actually stores — not just the long names', () => {
+    /* Found by reading a real export: a year of golf and gardening arrived
+       here as "Activity, 0 kcal" because both fallback chains missed. */
+    const shared = extractShared({
+      exercise: { '2026-09-13': [{ n: 'Gardening 3hrs', k: 300 }, { n: 'Golf', k: 900 }] },
+    });
+    expect(shared.activity).toEqual([
+      { date: '2026-09-13', name: 'Gardening 3hrs', kcal: 300, source: 'manual' },
+      { date: '2026-09-13', name: 'Golf', kcal: 900, source: 'manual' },
+    ]);
+  });
+
+  it('drops an entry that carries neither a name nor a burn', () => {
+    // "Activity, 0 kcal" looked like data and hid the flattening for a year.
+    const shared = extractShared({ exercise: { '2026-09-13': [{ minutes: 90 }] } });
+    expect(shared.activity).toEqual([]);
+  });
+
+  it('sweeps the flattened husks the old normaliser stored, on the next sync', async () => {
+    await db.sharedActivity.put({ date: '2026-09-12', name: 'Activity', kcal: 0, source: 'manual' });
+    // A real zero-kcal row someone NAMED is not a husk and stays.
+    await db.sharedActivity.put({ date: '2026-09-12', name: 'Stretching', kcal: 0, source: 'manual' });
+    await pullShared(source());
+    const rows = await db.sharedActivity.where('date').equals('2026-09-12').toArray();
+    expect(rows.map((row) => row.name)).toEqual(['Stretching']);
+  });
+});
