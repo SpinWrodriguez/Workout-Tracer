@@ -640,6 +640,35 @@ describe('the month the coach can see', () => {
     expect(rounds.find((row) => row.date === shiftIso(todayIso(), -10))?.upcoming).toBe(false);
   });
 
+  it('sees the life outside the gym, but never double-counts the gym', async () => {
+    /* The nutrition app logs gardening and walks into the shared activity
+       table; gym sessions also write an estimated row there. The first is
+       recovery load the coach must see; the second is already in
+       recentSessions and would be counted twice. */
+    await db.sharedActivity.put({
+      date: shiftIso(todayIso(), -1),
+      name: 'Gardening',
+      kcal: 540,
+      source: 'manual',
+    });
+    await db.sharedActivity.put({
+      date: shiftIso(todayIso(), -2),
+      name: 'Workout A (est.)',
+      kcal: 300,
+      source: 'workout',
+    });
+    await db.sharedActivity.put({
+      date: shiftIso(todayIso(), -40),
+      name: 'Old walk',
+      kcal: 200,
+      source: 'manual',
+    });
+    const context = await buildCoachContext(EXERCISES);
+    const rows = context.payload.otherActivity as { name: string; weekday: string }[];
+    expect(rows.map((row) => row.name)).toEqual(['Gardening']);
+    expect(rows[0]?.weekday).toMatch(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/);
+  });
+
   it('sums the month into a weekly trajectory, this week first', async () => {
     const context = await buildCoachContext(EXERCISES);
     const weeks = context.payload.weeklySetTotals as { weekStarting: string }[];
