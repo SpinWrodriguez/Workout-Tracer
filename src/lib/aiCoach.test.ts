@@ -215,13 +215,15 @@ describe('what the coach is sent', () => {
        rules and context on an empty database — a fraction of one library, and
        the whole reason a question costs a fraction of a cent.
 
-       The ceiling has moved three times, each time for a rule that fixed a
+       The ceiling has moved four times, each time for a rule that fixed a
        wrong answer or added a capability: which week the question is about,
        never working a weekday out from a date, what the effort ceiling means,
-       and now memory — what the dated notes are and when save_memory may be
-       called. It is a budget, not a target — raise it when a rule earns it
-       and not to make room for prose. */
-    expect(system.length).toBeLessThan(6600);
+       memory, and now the month of context — a coach who has only seen the
+       last fortnight is a spotter, and the rule telling it to READ the month
+       unprompted is what turns the data into coaching. It is a budget, not a
+       target — raise it when a rule earns it and not to make room for
+       prose. */
+    expect(system.length).toBeLessThan(7600);
   });
 
   it('licenses general training knowledge, not just a read of the data', async () => {
@@ -597,5 +599,52 @@ describe('what the coach remembers', () => {
     const system = sent[0]?.system[0]?.text ?? '';
     expect(system).toContain('save_memory');
     expect(system).toContain('only when asked');
+  });
+});
+
+describe('the month the coach can see', () => {
+  const session = (id: string, date: string) =>
+    db.session.put({ id, blockId: 'block_1', daySlot: 'A', daySlotName: 'Lower', date, durationMin: 40 });
+
+  it('carries every session of the last month, not just the last six headlines', async () => {
+    for (let i = 0; i < 8; i += 1) await session(`s_${i}`, shiftIso(todayIso(), -(i * 3 + 2)));
+    const context = await buildCoachContext(EXERCISES);
+    const rows = context.payload.recentSessions as { date: string }[];
+    expect(rows.length).toBe(8); // 8 sessions inside 30 days — all of them
+    expect(rows.some((row) => row.date === shiftIso(todayIso(), -23))).toBe(true);
+  });
+
+  it('leaves the archive out once the month is populated', async () => {
+    for (let i = 0; i < 6; i += 1) await session(`s_${i}`, shiftIso(todayIso(), -(i * 4 + 1)));
+    await session('s_ancient', shiftIso(todayIso(), -45));
+    const context = await buildCoachContext(EXERCISES);
+    const rows = context.payload.recentSessions as { date: string }[];
+    expect(rows.some((row) => row.date === shiftIso(todayIso(), -45))).toBe(false);
+  });
+
+  it('still shows the last six after a layoff, or the logbook reads as empty', async () => {
+    await session('s_old', shiftIso(todayIso(), -45));
+    const context = await buildCoachContext(EXERCISES);
+    const rows = context.payload.recentSessions as { date: string }[];
+    expect(rows.some((row) => row.date === shiftIso(todayIso(), -45))).toBe(true);
+  });
+
+  it('sees the actual rounds — the month behind and the fortnight booked ahead', async () => {
+    await db.golfDay.put({ date: shiftIso(todayIso(), -10), status: 'played', holes: 18 });
+    await db.golfDay.put({ date: shiftIso(todayIso(), 10), status: 'planned', holes: 18 });
+    await db.golfDay.put({ date: shiftIso(todayIso(), -40), status: 'played', holes: 18 });
+    const context = await buildCoachContext(EXERCISES);
+    const rounds = context.payload.golfRounds as { date: string; upcoming: boolean }[];
+    expect(rounds).toHaveLength(2);
+    expect(rounds.find((row) => row.date === shiftIso(todayIso(), 10))?.upcoming).toBe(true);
+    expect(rounds.find((row) => row.date === shiftIso(todayIso(), -10))?.upcoming).toBe(false);
+  });
+
+  it('sums the month into a weekly trajectory, this week first', async () => {
+    const context = await buildCoachContext(EXERCISES);
+    const weeks = context.payload.weeklySetTotals as { weekStarting: string }[];
+    expect(weeks).toHaveLength(5);
+    expect(weeks[0]?.weekStarting).toBe(weekStart(todayIso()));
+    expect(weeks[1]?.weekStarting).toBe(shiftIso(weekStart(todayIso()), -7));
   });
 });

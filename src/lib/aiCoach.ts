@@ -62,6 +62,7 @@ The app's own numbers, so you never have to guess where one came from:
 - maxRpe is the hardest a working set should be, set by the lifter in Settings: 8 leaves two reps in reserve, 9 leaves one, 10 is failure. It caps what the generator builds and what they should be doing, so a set logged at RIR 0 under a ceiling of 8 is worth naming.
 - weeklySetTarget is a whole-week total of working sets across all muscles. The lifter sets it themselves with a stepper in Settings, in steps of 3. Nothing derives it from their recovery, their history or their goals. The generator builds weeks within 20% of it, and the validator rejects a week outside that band.
 - week is the week they are LOOKING AT, not always the current one — the Program screen has arrows and planning next week from this one is normal. week.viewing says which. When it is not the current week, "this week" in their question means that week, its workouts are a plan rather than a record, setsLogged of 0 means nothing has happened in it yet rather than that they skipped everything, and you say which week you mean.
+- recentSessions is every session of the last month (never fewer than the last six), headlines only — date, workout, sets done against planned, minutes. golfRounds is the actual rounds, the month behind and the fortnight booked ahead; the standing pattern in lifter.golfDays says which days rounds usually land on. weeklySetTotals is the month as a trajectory — sessions and working sets for this week and the four before, this week first. Use these unprompted the way a coach reads a logbook before speaking: a shrinking weekly total, a round two days after a heavy pull day, a workout that keeps finishing short of plan are all yours to notice. For anything older, or set-by-set, use the tools.
 - musclesUnderTheirShare is measured against fairSharePerMuscle, which is the weekly set target spread evenly over the 18 muscles — the share the week they asked for can actually give each one. A set counts 1 for each muscle it trains directly and 0.5 for each it trains indirectly. The training floor from the literature is 8 weighted sets a week per muscle and the ceiling is 20; clearing 8 on every muscle takes far more sets than a three-day week has, so the share is what a list of shortfalls is measured against and the floor is what to aim a priority muscle at. Say which of the two you mean.
 - Never explain one of the app's numbers by inventing how it was worked out. Say what it means and where it is set. Guessing at a derivation is the same mistake as guessing at a weight.
 
@@ -84,9 +85,21 @@ export interface CoachContext {
   payload: Record<string, unknown>;
 }
 
-/** A short, dated view of one logged session. */
-async function recentSessions(limit: number) {
-  const sessions = await db.session.orderBy('date').reverse().limit(limit).toArray();
+/**
+ * A short, dated view of every session in the last `days` — a month by
+ * default, because a coach who has only seen your last fortnight is a
+ * spotter. Never fewer than `atLeast` rows even after a layoff, so coming
+ * back from two weeks off does not present an empty logbook, and capped so a
+ * hand-imported archive cannot flood the prompt.
+ */
+async function recentSessions(days: number, atLeast = 6, cap = 20) {
+  const from = shiftIso(todayIso(), -days);
+  const inWindow = await db.session.where('date').aboveOrEqual(from).reverse().sortBy('date');
+  const sessions = (
+    inWindow.length >= atLeast
+      ? inWindow
+      : await db.session.orderBy('date').reverse().limit(atLeast).toArray()
+  ).slice(0, cap);
   const rows = [];
   for (const session of sessions) {
     const sets = await db.setLog.where('sessionId').equals(session.id).toArray();
@@ -139,13 +152,20 @@ export async function buildCoachContext(
   const from = weekStart(weekOf ?? today);
   const currentWeek = from === weekStart(today);
 
-  const [training, instructions, memory, plan, sessions, weight] = await Promise.all([
+  const [training, instructions, memory, plan, sessions, weight, rounds] = await Promise.all([
     readTraining(),
     readAiInstructions(),
     readCoachMemory(),
     readWeekPlan(weekOf),
-    recentSessions(6),
+    recentSessions(30),
     db.sharedBodyWeight.orderBy('date').reverse().first(),
+    /* The rounds themselves, not just the standing pattern: the month behind
+       (did training crowd a round?) and the fortnight ahead (what the next
+       sessions must stay clear of). */
+    db.golfDay
+      .where('date')
+      .between(shiftIso(todayIso(), -30), shiftIso(todayIso(), 15), true, false)
+      .toArray(),
   ]);
 
   /* This week's sets, by way of this week's sessions. Queried by session id
@@ -219,6 +239,15 @@ export async function buildCoachContext(
         })),
       },
       recentSessions: sessions,
+      golfRounds: rounds.map((round) => ({
+        date: round.date,
+        weekday: WEEKDAY_LABEL[weekdayOf(round.date)],
+        status: round.status,
+        upcoming: round.date >= today,
+      })),
+      /* The month as a trajectory, which one week's snapshot cannot show:
+         total sessions and working sets for this week and the four before. */
+      weeklySetTotals: await weeklyTotals(5),
       /* Newest first, inside a character budget: memory is a privilege of the
          recent and the short, not a second transcript. Each note carries the
          weekday-stamped date it was saved, because "last week" is how the
@@ -237,6 +266,25 @@ export async function buildCoachContext(
       })(),
     },
   };
+}
+
+/** Sessions and set totals per week, this week first, `weeks` back. */
+async function weeklyTotals(weeks: number) {
+  const thisMonday = weekStart(todayIso());
+  const rows = [];
+  for (let back = 0; back < weeks; back += 1) {
+    const from = shiftIso(thisMonday, -7 * back);
+    const sessions = await db.session
+      .where('date')
+      .between(from, shiftIso(from, 7), true, false)
+      .toArray();
+    const sets = await db.setLog
+      .where('sessionId')
+      .anyOf(sessions.map((session) => session.id))
+      .count();
+    rows.push({ weekStarting: from, sessions: sessions.length, sets });
+  }
+  return rows;
 }
 
 /* --- the loop ------------------------------------------------------------- */
