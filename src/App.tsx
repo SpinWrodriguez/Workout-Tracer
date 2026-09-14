@@ -132,22 +132,10 @@ export default function App() {
         />
       )}
       {route.tab === 'levels' && <LevelsScreen exercises={exercises} />}
-      {route.tab === 'history' && (
-        <HistoryScreen
-          exercises={exercises}
-          onOpen={openSession}
-          /* Only where something can answer it, the same condition as the
-             floating button. */
-          onAsk={
-            isModelAvailable()
-              ? (question) => {
-                  setAskAbout(question);
-                  setAsking(true);
-                }
-              : undefined
-          }
-        />
-      )}
+      {/* The per-session Ask chip went with the session list: History is the
+          calendar now, and the coach can be asked about any session from the
+          floating button — it reads the same log. */}
+      {route.tab === 'history' && <HistoryScreen exercises={exercises} onOpen={openSession} />}
       {route.tab === 'program' && (
         <ProgramScreen
           exercises={exercises}

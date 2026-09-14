@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { Exercise } from '../db/types';
 import { listSessionSummaries } from '../lib/sessions';
-import { EM_SETS, friendlyDate, kg, monthTitle, shiftMonth, todayIso, weekStart } from '../lib/format';
+import { EM_SETS, kg, monthTitle, shiftMonth, todayIso, weekStart } from '../lib/format';
 import { hasLoadTranslation } from '../lib/load';
 import {
   TIMEFRAMES,
@@ -16,7 +16,7 @@ import { ExerciseChart } from '../components/LazyCharts';
 import type { ExerciseMetric, ExercisePoint } from '../components/Charts';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ExerciseDetail } from '../components/ExerciseDetail';
-import { slotFallback } from '../lib/dayLabel';
+import { pillLabel, slotFallback } from '../lib/dayLabel';
 import { MonthGrid } from '../components/MonthGrid';
 
 const METRICS: ExerciseMetric[] = ['topSetKg', 'oneRm', 'volumeKg'];
@@ -29,15 +29,9 @@ const METRIC_LABEL: Record<ExerciseMetric, string> = {
 export function HistoryScreen({
   exercises,
   onOpen,
-  onAsk,
 }: {
   exercises: Exercise[];
   onOpen: (sessionId: string) => void;
-  /**
-   * Hands one session to the coach as a question. Absent when there is no
-   * model to answer it, so the chip is not offered where nothing can.
-   */
-  onAsk?: (question: string) => void;
 }) {
   const [exerciseId, setExerciseId] = useState<string | undefined>(undefined);
   const [picking, setPicking] = useState(false);
@@ -115,6 +109,22 @@ export function HistoryScreen({
     const map = new Map<string, number>();
     for (const summary of summaries ?? []) {
       map.set(summary.session.date, (map.get(summary.session.date) ?? 0) + 1);
+    }
+    return map;
+  }, [summaries]);
+
+  /* What each trained cell says about itself: the workout's initials, in the
+     week strip's pill language. Summaries run newest first, so on the rare
+     day with two sessions the newest one names the cell. */
+  const labelByDate = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const summary of summaries ?? []) {
+      if (!map.has(summary.session.date)) {
+        map.set(
+          summary.session.date,
+          pillLabel(summary.session.daySlotName ?? slotFallback(summary.session.daySlot)),
+        );
+      }
     }
     return map;
   }, [summaries]);
@@ -215,6 +225,7 @@ export function HistoryScreen({
           anchor={monthAnchor}
           weekCount={(summaries ?? []).filter((row) => row.session.date >= thisWeekStart).length}
           sessionCountByDate={sessionCountByDate}
+          labelByDate={labelByDate}
           golfDates={golfDates ?? new Set()}
           canGoBack={monthAnchor.slice(0, 7) > earliestMonth}
           canGoForward={monthAnchor.slice(0, 7) < currentMonth}
@@ -241,85 +252,6 @@ export function HistoryScreen({
           <p className="mt-3 text-[13px] font-medium text-text-dim">
             Nothing logged in {monthTitle(monthAnchor)}.
           </p>
-        )}
-
-        {monthSummaries.length > 0 && (
-          <div className="mt-3 mb-5">
-            <div className="overflow-hidden rounded-2xl bg-surface">
-              {monthSummaries.map((summary, i) => (
-                <div
-                  key={summary.session.id}
-                  className={`relative ${i > 0 ? 'border-t border-border' : ''}`}
-                >
-                {/* Its own button rather than something inside the row: a
-                    button inside a button is not a thing a browser will
-                    render, and the row already means "open it". */}
-                {onAsk && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onAsk(
-                        `About my ${
-                          summary.session.daySlotName ?? slotFallback(summary.session.daySlot)
-                        } session on ${summary.session.date}: how did it go, and what should I change next time?`,
-                      )
-                    }
-                    aria-label={`Ask about ${friendlyDate(summary.session.date)}`}
-                    className="absolute right-3 bottom-2.5 z-10 rounded-full px-3 py-1 text-[11px] font-semibold"
-                    style={{ background: 'var(--color-bodyweight)', color: 'var(--color-bg)' }}
-                  >
-                    Ask
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onOpen(summary.session.id)}
-                  className="w-full px-4 py-3.5 pr-16 text-left"
-                >
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="card-title">
-                      {friendlyDate(summary.session.date)}
-                      <span className="ml-2 text-[12px] font-medium text-text-dim">
-                        {summary.session.daySlotName ?? slotFallback(summary.session.daySlot)}
-                      </span>
-                    </span>
-                    <span
-                      className="text-[15px] font-semibold"
-                      style={{ color: 'var(--color-volume)' }}
-                    >
-                      {summary.setCount}
-                      {/* Only when they differ: "12 of 12" on a finished
-                          session is noise, "8 of 12" is the whole point. */}
-                      {summary.plannedCount > summary.setCount && (
-                        <span className="text-[13px] font-medium text-text-dim">
-                          {' of '}
-                          {summary.plannedCount}
-                        </span>
-                      )}
-                      <span className="ml-1 text-[11px] font-medium text-text-dim">sets</span>
-                    </span>
-                  </div>
-                  <p className="mt-1 truncate text-[12px] font-medium text-text-dim">
-                    {summary.exerciseIds.length === 0
-                      ? '---'
-                      : summary.exerciseIds.map((id) => byId.get(id)?.name ?? id).join(' · ')}
-                  </p>
-                  {/* Planned and never started. The one thing a set log can
-                      never tell you, because there is no row for it. */}
-                  {summary.untouched.length > 0 && (
-                    <p className="mt-1 truncate text-[12px] font-medium" style={{ color: 'var(--color-warn)' }}>
-                      Not started: {summary.untouched.map((id) => byId.get(id)?.name ?? id).join(' · ')}
-                    </p>
-                  )}
-                  <p className="mt-1 text-[11px] font-medium text-text-faint">
-                    {kg(summary.volumeKg)} kg effective volume
-                    {summary.session.durationMin ? ` · ${summary.session.durationMin} min` : ''}
-                  </p>
-                </button>
-                </div>
-              ))}
-            </div>
-          </div>
         )}
       </Screen>
 

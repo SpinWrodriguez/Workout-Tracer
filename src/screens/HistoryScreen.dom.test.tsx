@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 /*
- * The month grid as the index into History. The flat all-time list was the
- * thing that got messy; what these pin is that the list shows ONE month, that
- * the grid's arrows are how the other months are reached, and that a day cell
- * opens the session that lives on it.
+ * The calendar IS History now — the lifter's own call: no session list, just
+ * the month grid with each trained cell carrying its workout's initials, and
+ * a tap opening the full session. What these pin: one month at a time, the
+ * arrows reaching the rest, the initials naming the cells, and the tap.
  */
 
 import { BLOCK_ID, draw, exercises, user } from '../test/dom';
@@ -38,21 +38,24 @@ async function logSession(id: string, date: string, name: string) {
 const lastMonth = shiftMonth(todayIso(), -1);
 
 describe('the month grid over the session log', () => {
-  it('shows only the month on screen, and the arrows reach the rest', async () => {
+  it('names each trained cell with its workout initials, one month at a time', async () => {
     await logSession('s_now', todayIso(), 'This Month Session');
     await logSession('s_old', lastMonth, 'Last Month Session');
     draw(<HistoryScreen exercises={exercises} onOpen={vi.fn()} />);
     const ui = user();
 
-    // The current month: its own session, not the archive.
-    await screen.findByText('This Month Session');
-    expect(screen.queryByText('Last Month Session')).toBeNull();
+    /* The pill language from the week strip: long names become initials. The
+       full name appears nowhere — the calendar is the index, the tap is the
+       detail. */
+    await screen.findByText('TMS');
+    expect(screen.queryByText('LMS')).toBeNull();
+    expect(screen.queryByText('This Month Session')).toBeNull();
     expect(screen.getByRole('heading', { name: monthTitle(todayIso()) })).toBeTruthy();
 
-    // One month back: the other session, and only it.
+    // One month back: the other cell, and only it.
     await ui.click(screen.getByRole('button', { name: 'Previous month' }));
-    await screen.findByText('Last Month Session');
-    expect(screen.queryByText('This Month Session')).toBeNull();
+    await screen.findByText('LMS');
+    expect(screen.queryByText('TMS')).toBeNull();
 
     // The edge of the data: nothing older exists, so back is a dead end.
     expect(screen.getByRole('button', { name: 'Previous month' })).toHaveProperty(
@@ -62,13 +65,21 @@ describe('the month grid over the session log', () => {
 
     // And Today snaps home.
     await ui.click(screen.getByRole('button', { name: 'Today' }));
-    await screen.findByText('This Month Session');
+    await screen.findByText('TMS');
+  });
+
+  it('keeps the session list gone — the calendar is the whole record', async () => {
+    await logSession('s_now', todayIso(), 'This Month Session');
+    draw(<HistoryScreen exercises={exercises} onOpen={vi.fn()} />);
+    await screen.findByText('TMS');
+    // The old list said this on every row; nothing on the screen should now.
+    expect(screen.queryByText(/effective volume/)).toBeNull();
   });
 
   it('never walks into the future — nothing can be logged there', async () => {
     await logSession('s_now', todayIso(), 'This Month Session');
     draw(<HistoryScreen exercises={exercises} onOpen={vi.fn()} />);
-    await screen.findByText('This Month Session');
+    await screen.findByText('TMS');
     expect(screen.getByRole('button', { name: 'Next month' })).toHaveProperty('disabled', true);
   });
 
@@ -77,7 +88,7 @@ describe('the month grid over the session log', () => {
     await logSession('s_now', todayIso(), 'This Month Session');
     draw(<HistoryScreen exercises={exercises} onOpen={onOpen} />);
     const ui = user();
-    await screen.findByText('This Month Session');
+    await screen.findByText('TMS');
 
     /* The cell is a button whose label carries the date and the count; a day
        with nothing on it is disabled, so this can only hit the trained one. */
@@ -90,7 +101,7 @@ describe('the month grid over the session log', () => {
     const golfDay = todayIso(); // same day: session fills the cell, golf dots it
     await db.golfDay.put({ date: golfDay, status: 'planned', holes: 18 });
     draw(<HistoryScreen exercises={exercises} onOpen={vi.fn()} />);
-    await screen.findByText('This Month Session');
+    await screen.findByText('TMS');
 
     await waitFor(() => {
       const cell = screen.getByRole('button', {

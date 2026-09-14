@@ -20,7 +20,10 @@ import { Card, Label } from './Layout';
 /*  The cells carry no day numbers, on the lifter's own call — the look is     */
 /*  their Apple-widget example, quiet squares and one accent. Position under   */
 /*  the weekday header says when; the exact date lives in each cell's          */
-/*  aria-label and in the session the tap opens.                              */
+/*  aria-label and in the session the tap opens. A trained cell shows the      */
+/*  workout's initials in the week strip's pill language — the calendar IS     */
+/*  the history now, so it has to say what happened, not just that something   */
+/*  did.                                                                       */
 /* -------------------------------------------------------------------------- */
 
 const WEEKDAYS: Weekday[] = [1, 2, 3, 4, 5, 6, 7];
@@ -37,6 +40,7 @@ function weeksOf(anchor: string): string[] {
 export function MonthGrid({
   anchor,
   sessionCountByDate,
+  labelByDate,
   golfDates,
   canGoBack,
   canGoForward,
@@ -48,6 +52,8 @@ export function MonthGrid({
   /** Any date inside the month to show. */
   anchor: string;
   sessionCountByDate: Map<string, number>;
+  /** Pill-short workout initials per date, the newest session's where two share a day. */
+  labelByDate: Map<string, string>;
   golfDates: Set<string>;
   /** Sessions in the CURRENT week, for the example's "N this week" line. */
   weekCount: number;
@@ -129,10 +135,22 @@ export function MonthGrid({
               aria-label={`${WEEKDAY_LABEL[weekdayOf(date)]} ${date}${
                 sessions > 0 ? `, ${sessions} ${sessions === 1 ? 'session' : 'sessions'}` : ''
               }${golf ? ', golf' : ''}`}
-              className={`relative size-7 rounded-md ${
-                sessions > 0 ? 'bg-cta' : date > today ? 'bg-surface-2 opacity-40' : 'bg-surface-2'
+              className={`relative flex size-7 items-center justify-center rounded-md ${
+                sessions > 0
+                  ? 'bg-cta text-bg'
+                  : date > today
+                    ? 'bg-surface-2 opacity-40'
+                    : 'bg-surface-2'
               } ${isToday ? 'outline-2 outline-cta' : ''}`}
             >
+              {/* What was trained, in the week strip's initials. 8px is small,
+                  but it is a reminder on a cell you can tap for the whole
+                  session — not the record itself. */}
+              {sessions > 0 && (
+                <span className="px-0.5 text-[8px] leading-none font-bold tracking-tight">
+                  {labelByDate.get(date)}
+                </span>
+              )}
               {/* The round is the dot, exactly as on the week strip. */}
               {golf && (
                 <span
