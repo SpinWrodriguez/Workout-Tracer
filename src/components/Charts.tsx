@@ -117,24 +117,35 @@ export interface ExercisePoint {
   topSetKg?: number;
   oneRm?: number;
   volumeKg: number;
+  /* Unloaded work (bodyweight, band) logs no kg at all, so every kg metric is
+     a flat nothing for it. Reps are its record: the top set's count and the
+     session total. Both are carried on every point so the screen can switch
+     metric sets without refetching. */
+  topReps?: number;
+  volumeReps: number;
 }
 
-export type ExerciseMetric = 'topSetKg' | 'oneRm' | 'volumeKg';
+export type ExerciseMetric = 'topSetKg' | 'oneRm' | 'volumeKg' | 'topReps' | 'volumeReps';
 
 const METRIC_COLOR: Record<ExerciseMetric, string> = {
   topSetKg: 'var(--color-strength)',
   oneRm: 'var(--color-strength)',
   volumeKg: 'var(--color-volume)',
+  topReps: 'var(--color-strength)',
+  volumeReps: 'var(--color-volume)',
 };
 
 /** Per-exercise history. One metric at a time; the toggle picks which. */
 export function ExerciseChart({
   points,
   metric,
+  unit = 'kg',
   height = 150,
 }: {
   points: ExercisePoint[];
   metric: ExerciseMetric;
+  /** What the endpoint labels say the numbers are: kg, reps, or sec. */
+  unit?: string;
   height?: number;
 }) {
   const values = points.map((p) => p[metric] ?? 0);
@@ -162,7 +173,7 @@ export function ExerciseChart({
       <Endpoints
         first={points[0]?.[metric] ?? undefined}
         last={points.at(-1)?.[metric] ?? undefined}
-        unit="kg"
+        unit={unit}
       />
     </div>
   );

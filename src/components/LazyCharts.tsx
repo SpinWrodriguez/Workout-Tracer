@@ -35,6 +35,7 @@ export function BodyWeightChart(props: {
 export function ExerciseChart(props: {
   points: ExercisePoint[];
   metric: ExerciseMetric;
+  unit?: string;
   height?: number;
 }) {
   return (

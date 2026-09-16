@@ -1167,9 +1167,13 @@ describe('what a workout card says about itself', () => {
     const trained = await workoutCard('Monday squats');
     await waitFor(() => expect(trained.textContent).toContain('done'));
 
-    // The one still to come says when, not whether.
+    /* The one still to come says when, not whether. "When" is the weekday —
+       except on the day itself, where the card says "today" instead, so this
+       suite runs green on a real Wednesday too. */
     const planned = await workoutCard('Thursday pull');
-    expect(planned.textContent).toContain(WEEKDAY_LABEL[weekdayOf(WEDNESDAY)]);
+    expect(planned.textContent).toContain(
+      WEDNESDAY === todayIso() ? 'today' : WEEKDAY_LABEL[weekdayOf(WEDNESDAY)],
+    );
     expect(planned.textContent).not.toContain('done');
   });
 

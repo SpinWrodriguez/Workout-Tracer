@@ -19,12 +19,26 @@ import { ExerciseDetail } from '../components/ExerciseDetail';
 import { pillLabel, slotFallback } from '../lib/dayLabel';
 import { MonthGrid } from '../components/MonthGrid';
 
-const METRICS: ExerciseMetric[] = ['topSetKg', 'oneRm', 'volumeKg'];
-const METRIC_LABEL: Record<ExerciseMetric, string> = {
-  topSetKg: 'Top set',
-  oneRm: 'Est. 1-RM',
-  volumeKg: 'Volume',
-};
+/*
+ * Which metrics an exercise can answer for depends on how it loads. Unloaded
+ * work (bodyweight, band) logs no kg at all, so top set, 1-RM and kg volume
+ * are flat zeros for it — the chart sat empty on exactly the exercise the
+ * default most often picks (pull-ups). Its record is reps, so it gets rep
+ * metrics instead of a dead toggle.
+ */
+const LOAD_METRICS: ExerciseMetric[] = ['topSetKg', 'oneRm', 'volumeKg'];
+const REP_METRICS: ExerciseMetric[] = ['topReps', 'volumeReps'];
+
+/** `unit` names what an unloaded exercise counts: reps, or seconds for holds. */
+function metricLabels(unit: 'reps' | 'sec'): Record<ExerciseMetric, string> {
+  return {
+    topSetKg: 'Top set',
+    oneRm: 'Est. 1-RM',
+    volumeKg: 'Volume',
+    topReps: 'Top set',
+    volumeReps: unit === 'sec' ? 'Total time' : 'Total reps',
+  };
+}
 
 export function HistoryScreen({
   exercises,
@@ -55,6 +69,15 @@ export function HistoryScreen({
 
   const activeId = exerciseId ?? defaultExerciseId;
   const activeExercise = activeId ? byId.get(activeId) : undefined;
+
+  /* The metric state survives a Change to an exercise it makes no sense for —
+     Top set kg on a pull-up — so the shown metric is derived: the kept choice
+     when the exercise can answer it, the set's first metric when it cannot. */
+  const loaded = (activeExercise?.loadMode ?? 'weight') === 'weight';
+  const repUnit: 'reps' | 'sec' = activeExercise?.repUnit === 'seconds' ? 'sec' : 'reps';
+  const metrics = loaded ? LOAD_METRICS : REP_METRICS;
+  const labels = metricLabels(repUnit);
+  const activeMetric = metrics.includes(metric) ? metric : (metrics[0] as ExerciseMetric);
 
   const series = useLiveQuery(async () => {
     if (!activeId) return [];
@@ -91,6 +114,11 @@ export function HistoryScreen({
           topSetKg: top.effectiveKg,
           oneRm: top.effectiveKg ? estimate1RM(top.effectiveKg, top.reps) : undefined,
           volumeKg: Math.round(list.reduce((sum, l) => sum + (l.effectiveKg ?? 0) * l.reps, 0)),
+          /* The rep metrics, for unloaded work. The top-set reduce above ties
+             on effectiveKg (all absent) and falls through to reps, so `top`
+             is already the biggest set. */
+          topReps: top.reps,
+          volumeReps: list.reduce((sum, l) => sum + l.reps, 0),
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
@@ -141,9 +169,9 @@ export function HistoryScreen({
   const thisWeekStart = weekStart(todayIso());
 
   const best = useMemo(() => {
-    const values = (series ?? []).map((p) => p[metric] ?? 0);
+    const values = (series ?? []).map((p) => p[activeMetric] ?? 0);
     return values.length ? Math.max(...values) : undefined;
-  }, [series, metric]);
+  }, [series, activeMetric]);
 
   return (
     <>
@@ -185,17 +213,26 @@ export function HistoryScreen({
                 <span className="stat-sm" style={{ color: 'var(--color-strength)' }}>
                   {best === undefined ? '--' : kg(best)}
                 </span>
-                <Label>best {METRIC_LABEL[metric].toLowerCase()} in range</Label>
+                {/* "Top set" alone reads as kg, so it names its unit; the
+                    total metrics already carry theirs in the label. */}
+                <Label>
+                  best {labels[activeMetric].toLowerCase()}
+                  {activeMetric === 'topReps' ? ` (${repUnit})` : ''} in range
+                </Label>
               </div>
 
-              <ExerciseChart points={series ?? []} metric={metric} />
+              <ExerciseChart
+                points={series ?? []}
+                metric={activeMetric}
+                unit={loaded ? 'kg' : repUnit}
+              />
 
               <div className="mt-3">
                 <SegmentedToggle
-                  options={METRICS}
-                  value={metric}
+                  options={metrics}
+                  value={activeMetric}
                   onChange={setMetric}
-                  labels={METRIC_LABEL}
+                  labels={labels}
                 />
               </div>
               <div className="mt-2">
@@ -208,11 +245,12 @@ export function HistoryScreen({
                   selection, so this sits on the same axis as the barbell lifts.
                 </p>
               )}
-              {activeExercise.loadMode !== 'weight' && (
+              {!loaded && (
                 <p className="mt-3 text-[12px] font-medium text-text-dim">
                   {activeExercise.loadMode === 'bodyweight'
-                    ? 'Bodyweight work carries no load, so only volume moves here.'
-                    : 'Band resistance is not quantifiable — reps and RPE only.'}
+                    ? 'Bodyweight work carries no load, so the chart tracks '
+                    : 'Band resistance is not quantifiable, so the chart tracks '}
+                  {repUnit === 'sec' ? 'seconds held' : 'reps'} — best set and session total.
                 </p>
               )}
             </>

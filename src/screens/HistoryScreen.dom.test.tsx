@@ -96,6 +96,32 @@ describe('the month grid over the session log', () => {
     expect(onOpen).toHaveBeenCalledWith('s_now');
   });
 
+  it('charts reps for an unloaded exercise instead of a dead kg toggle', async () => {
+    /* Pull-ups log no kg at all, so every kg metric is a flat zero — and the
+       chart defaults to the MOST-LOGGED exercise, which made this exact empty
+       card the first thing on the screen. The record for unloaded work is
+       reps: top set and session total. */
+    await db.session.put({
+      id: 's_pu',
+      blockId: BLOCK_ID,
+      daySlot: 'A',
+      date: todayIso(),
+      durationMin: 20,
+    });
+    await db.setLog.bulkPut([
+      { sessionId: 's_pu', exerciseId: 'bw_pull_up', setNo: 1, reps: 8 },
+      { sessionId: 's_pu', exerciseId: 'bw_pull_up', setNo: 2, reps: 6 },
+    ]);
+    draw(<HistoryScreen exercises={exercises} onOpen={vi.fn()} />);
+
+    // The rep toggle replaces the kg one; 1-RM means nothing here.
+    await screen.findByText('Total reps');
+    expect(screen.queryByText('Est. 1-RM')).toBeNull();
+    // Best top set is the 8-rep set, stated in reps, not a kg zero.
+    await screen.findByText('best top set (reps) in range');
+    expect(screen.getByText('8')).toBeTruthy();
+  });
+
   it('marks a round on the grid without making it tappable', async () => {
     await logSession('s_now', todayIso(), 'This Month Session');
     const golfDay = todayIso(); // same day: session fills the cell, golf dots it
