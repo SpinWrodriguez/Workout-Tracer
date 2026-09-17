@@ -38,10 +38,18 @@ export const ILLUSTRATED: string[] = [
  * rule is that an exercise with no upstream record gets artwork of its own, and
  * an exception that is not written down is indistinguishable from the bug the
  * rule exists to catch. Anything here shows the fallback tile until its frames
- * are made — a picture missing rather than a wrong picture shown. Empty now,
- * which is the state the list exists to reach.
+ * are made — a picture missing rather than a wrong picture shown.
  */
-export const AWAITING_ART: string[] = [];
+export const AWAITING_ART: string[] = [
+  /* The Scheffler-program six: nothing upstream draws any of them, and the
+     audit rule says name that fact rather than let it be noticed. */
+  'lm_lunge_press',
+  'kb_single_leg_chop',
+  'mb_tspine_high_knee',
+  'cb_split_squat_fly',
+  'cb_split_pull_through',
+  'cb_9090_row',
+];
 
 const set = new Set(ILLUSTRATED);
 

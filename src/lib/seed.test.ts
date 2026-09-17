@@ -180,7 +180,11 @@ describe('the rotational and explosive additions', () => {
 
   it('keeps mobility out of working sets and out of volume', () => {
     const mobility = EXERCISES.filter((e) => e.isMobility);
-    expect(mobility.map((e) => e.id)).toEqual(['mb_open_book', 'mb_90_90']);
+    expect(mobility.map((e) => e.id)).toEqual([
+      'mb_open_book',
+      'mb_90_90',
+      'mb_tspine_high_knee',
+    ]);
     for (const exercise of mobility) {
       expect(exercise.loadMode, exercise.id).toBe('rpe_only');
       expect(exercise.pattern, exercise.id).toBe('rotation');

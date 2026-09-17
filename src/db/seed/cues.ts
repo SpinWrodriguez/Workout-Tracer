@@ -96,6 +96,20 @@ export const CUES: Record<string, string> = {
     'Top-leg adductor holds your bodyweight in a lengthened position. This is the one that carries over to holding hip depth.',
   kb_cossack_squat:
     'Loads the adductor at full length through a lateral shift — the same demand as keeping the trail hip loaded in the backswing.',
+
+  /* --- The Scheffler-program six ----------------------------------------- */
+  lm_lunge_press:
+    'Reverse lunge with the sleeve at the shoulder, press as you stand. One flow, bar close.',
+  kb_single_leg_chop:
+    'On one leg, chop the gripped plate across the body — slow. The balance is the exercise.',
+  mb_tspine_high_knee:
+    'Knee high on one leg, rotate the chest over the standing hip. Warm-up only, never a working set.',
+  cb_split_squat_fly:
+    'Hold the bottom of a split squat and fly out to the side. The legs stay still; the rear delt works.',
+  cb_split_pull_through:
+    'Pull-through with one foot trailing — the front hip does the whole hinge.',
+  cb_9090_row:
+    'Sit on the floor in the 90/90 hip position and row. The trunk holds the line the bench usually would.',
 };
 
 export function cueFor(exerciseId: string): string | undefined {
@@ -261,6 +275,44 @@ export const STEPS: Record<string, string[]> = {
     'Sit tall, hands light on the floor for balance only.',
     'Turn both knees to the other side without pushing off the hands, and settle before turning back.',
     'Slow, and no rocking — the range comes from the hips, not from momentum.',
+  ],
+
+  /* --- The Scheffler-program six, none of which upstream has ------------- */
+  lm_lunge_press: [
+    'Bar end in the landmine, far sleeve at the shoulder in both hands, feet under the hips.',
+    'Step back into a reverse lunge, back knee just off the floor, chest tall.',
+    'Drive through the front heel and let the press start as the legs finish — one movement.',
+    'The bar stays close on the way up. If the press needs its own effort after standing, go lighter.',
+  ],
+  kb_single_leg_chop: [
+    'Stand on one leg holding a gripped plate at the shoulder of the standing-leg side.',
+    'Chop the plate down and across to the opposite hip, turning the ribs with it.',
+    'Return along the same line, slow both ways.',
+    'The balance is the exercise — the moment the foot starts hunting the floor, the plate is too heavy.',
+  ],
+  mb_tspine_high_knee: [
+    'Stand tall, drive one knee up to hip height and hold it there.',
+    'Hands behind the head or arms crossed at the chest.',
+    'Rotate the chest over the standing hip, pause, and come back to square.',
+    'The knee stays high the whole time — if it drops during the turn, slow the turn down.',
+  ],
+  cb_split_squat_fly: [
+    'Single handle on the low pulley, stack at your side. Split stance, drop to the bottom of a split squat.',
+    'Hold that depth. Arm long across the body toward the stack.',
+    'Fly the arm out and back like a rear-delt raise, without the torso or legs moving.',
+    'The legs are isometric scaffolding — when they start wobbling, the set is over.',
+  ],
+  cb_split_pull_through: [
+    'Rope or handle on the low pulley, facing away, one foot half a step behind the other.',
+    'Weight on the front leg. Hinge at that hip and let the cable pull you back.',
+    'Stand tall through the front heel and finish with the glute, not the lower back.',
+    'The back foot is a kickstand — if it takes real weight, the split has gone.',
+  ],
+  cb_9090_row: [
+    'Sit on the floor in the 90/90 position, side-on to the low pulley, handle in the far hand.',
+    'Sit tall — no slumping into the hip.',
+    'Row the elbow past the ribs without letting the chest turn toward the stack.',
+    'The obliques hold the line a bench normally would. If the torso twists, drop a plate on the stack.',
   ],
 };
 
