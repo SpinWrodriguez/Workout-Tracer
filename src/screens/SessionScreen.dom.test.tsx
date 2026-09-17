@@ -103,6 +103,34 @@ describe('logging a set', () => {
     expect(row?.effectiveKg).toBe(60);
   });
 
+  it('logs a band set with the rating printed on the band', async () => {
+    /* The weight cell on band work was a disabled "--" for a year, on the
+       theory that band load is not quantifiable. Every band in the drawer
+       has a kg rating on its label — that number is the load. */
+    await seedBlock();
+    await seedSchedule({ B: { weekday: 2, intensity: 'light' } });
+    await seedWorkout('B', ['bd_lateral_walk'], 2);
+    draw(<SessionScreen daySlot="B" exercises={exercises} onExit={vi.fn()} />);
+    const ui = user();
+    await screen.findByRole('heading', { name: named('bd_lateral_walk') });
+
+    await typeInto(ui, 'Set 1 weight', '17');
+    await ui.click(screen.getByRole('button', { name: 'Next' }));
+    await typeInto(ui, 'Set 1 reps', '15');
+    await ui.click(screen.getByRole('button', { name: 'Hide' }));
+    await ui.click(doneBox(1));
+    await ui.click(await screen.findByRole('button', { name: /^Save · 1 set$/ }));
+
+    await waitFor(async () => expect(await db.setLog.count()).toBe(1));
+    const [row] = await db.setLog.toArray();
+    expect(row).toMatchObject({
+      exerciseId: 'bd_lateral_walk',
+      weightKg: 17,
+      effectiveKg: 17,
+      reps: 15,
+    });
+  });
+
   it('keeps a weight typed before the thumb moves to another cell', async () => {
     const { ui } = await openProgrammedDay();
 

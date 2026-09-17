@@ -105,9 +105,11 @@ describe('ladderFor', () => {
     expect(ladderFor(find('bw_split_squat'), DEFAULT_INVENTORY)).toEqual(goblet);
   });
 
-  it('has no ladder for bodyweight or band work', () => {
+  it('has no ladder for bodyweight work, and the rated bands for band work', () => {
     expect(ladderFor(find('bw_pull_up'), DEFAULT_INVENTORY)).toEqual([]);
-    expect(ladderFor(find('bd_pull_apart'), DEFAULT_INVENTORY)).toEqual([]);
+    /* The bands themselves are the rungs — flat loops then the fabric hip
+       bands, in rating order. Which band you grab is the progression. */
+    expect(ladderFor(find('bd_pull_apart'), DEFAULT_INVENTORY)).toEqual([6.5, 7.5, 10, 11, 17, 21]);
   });
 
   it('follows a bar weight edited in Settings', () => {
@@ -170,6 +172,7 @@ describe('what a hand can hold', () => {
     barWeights: { free_bar: 20, smith: 18 },
     cableStackKg: 65,
     cableStepKg: 5,
+    bands: [6.5, 7.5, 10, 11, 17, 21],
   };
 
   it('offers the plates themselves, not a bar loaded with them', () => {

@@ -28,11 +28,18 @@ import { MonthGrid } from '../components/MonthGrid';
  */
 const LOAD_METRICS: ExerciseMetric[] = ['topSetKg', 'oneRm', 'volumeKg'];
 const REP_METRICS: ExerciseMetric[] = ['topReps', 'volumeReps'];
+/* Bands log the rating on the band, so which band trends like a top set —
+   but the kg is nominal (tension varies over the stretch), so no 1-RM, and
+   volume-as-kg would multiply a nominal number. The band and the reps. */
+const BAND_METRICS: ExerciseMetric[] = ['topSetKg', 'volumeReps'];
+
+/** The metrics whose numbers are kilograms; everything else counts reps. */
+const KG_METRICS: ExerciseMetric[] = ['topSetKg', 'oneRm', 'volumeKg'];
 
 /** `unit` names what an unloaded exercise counts: reps, or seconds for holds. */
-function metricLabels(unit: 'reps' | 'sec'): Record<ExerciseMetric, string> {
+function metricLabels(unit: 'reps' | 'sec', band: boolean): Record<ExerciseMetric, string> {
   return {
-    topSetKg: 'Top set',
+    topSetKg: band ? 'Top band' : 'Top set',
     oneRm: 'Est. 1-RM',
     volumeKg: 'Volume',
     topReps: 'Top set',
@@ -72,12 +79,12 @@ export function HistoryScreen({
 
   /* The metric state survives a Change to an exercise it makes no sense for —
      Top set kg on a pull-up — so the shown metric is derived: the kept choice
-     when the exercise can answer it, the set's first metric when it cannot. */
-  const loaded = (activeExercise?.loadMode ?? 'weight') === 'weight';
+     when the exercise can answer it, a metric of its own set when it cannot. */
+  const mode = activeExercise?.loadMode ?? 'weight';
   const repUnit: 'reps' | 'sec' = activeExercise?.repUnit === 'seconds' ? 'sec' : 'reps';
-  const metrics = loaded ? LOAD_METRICS : REP_METRICS;
-  const labels = metricLabels(repUnit);
-  const activeMetric = metrics.includes(metric) ? metric : (metrics[0] as ExerciseMetric);
+  const metrics =
+    mode === 'weight' ? LOAD_METRICS : mode === 'band' ? BAND_METRICS : REP_METRICS;
+  const labels = metricLabels(repUnit, mode === 'band');
 
   const series = useLiveQuery(async () => {
     if (!activeId) return [];
@@ -125,6 +132,14 @@ export function HistoryScreen({
 
     return points;
   }, [activeId, timeframe]);
+
+  /* Band history from before ratings were logged carries no kg, so falling
+     back blindly to the metric set's first entry would re-create the dead
+     chart this card just escaped. Prefer a metric that has data in it. */
+  const activeMetric = metrics.includes(metric)
+    ? metric
+    : (metrics.find((m) => (series ?? []).some((p) => (p[m] ?? 0) > 0)) ??
+      (metrics[0] as ExerciseMetric));
 
   /* The month on show, and only it: the grid above is the way to the rest.
      A flat all-time list was the thing that got messy. */
@@ -224,7 +239,7 @@ export function HistoryScreen({
               <ExerciseChart
                 points={series ?? []}
                 metric={activeMetric}
-                unit={loaded ? 'kg' : repUnit}
+                unit={KG_METRICS.includes(activeMetric) ? 'kg' : repUnit}
               />
 
               <div className="mt-3">
@@ -245,12 +260,17 @@ export function HistoryScreen({
                   selection, so this sits on the same axis as the barbell lifts.
                 </p>
               )}
-              {!loaded && (
+              {mode !== 'weight' && (
                 <p className="mt-3 text-[12px] font-medium text-text-dim">
-                  {activeExercise.loadMode === 'bodyweight'
-                    ? 'Bodyweight work carries no load, so the chart tracks '
-                    : 'Band resistance is not quantifiable, so the chart tracks '}
-                  {repUnit === 'sec' ? 'seconds held' : 'reps'} — best set and session total.
+                  {mode === 'band'
+                    ? 'Band kg is the rating printed on the band, so this tracks which band you used and the total reps.'
+                    : `${
+                        mode === 'bodyweight'
+                          ? 'Bodyweight work carries no load'
+                          : 'This drill carries no load'
+                      }, so the chart tracks ${
+                        repUnit === 'sec' ? 'seconds held' : 'reps'
+                      } — best set and session total.`}
                 </p>
               )}
             </>

@@ -1025,7 +1025,7 @@ export const EXERCISES: Exercise[] = [
     spinalLoad: 'low',
   },
 
-  /* --- Bands (rpe_only — load is not quantifiable) ----------------------- */
+  /* --- Bands (loadMode band — the kg is the band's rating) -------------- */
   {
     id: 'bd_pull_apart',
     freeDbId: 'Band_Pull_Apart',
@@ -1034,7 +1034,7 @@ export const EXERCISES: Exercise[] = [
     primaryMuscles: ['rear_delts'],
     secondaryMuscles: ['upper_back', 'traps'],
     loadMultiplier: 1.0,
-    loadMode: 'rpe_only',
+    loadMode: 'band',
     gripLoad: 'low',
     isHinge: false,
     isExplosive: false,
@@ -1054,7 +1054,7 @@ export const EXERCISES: Exercise[] = [
     primaryMuscles: ['rear_delts'],
     secondaryMuscles: ['side_delts'],
     loadMultiplier: 1.0,
-    loadMode: 'rpe_only',
+    loadMode: 'band',
     gripLoad: 'none',
     isHinge: false,
     isExplosive: false,
@@ -1074,7 +1074,7 @@ export const EXERCISES: Exercise[] = [
     primaryMuscles: ['glutes', 'hamstrings'],
     secondaryMuscles: ['lower_back'],
     loadMultiplier: 1.0,
-    loadMode: 'rpe_only',
+    loadMode: 'band',
     gripLoad: 'none',
     isHinge: true,
     isExplosive: false,
@@ -1094,7 +1094,7 @@ export const EXERCISES: Exercise[] = [
     primaryMuscles: ['glutes'],
     secondaryMuscles: ['adductors', 'quads'],
     loadMultiplier: 1.0,
-    loadMode: 'rpe_only',
+    loadMode: 'band',
     gripLoad: 'none',
     isHinge: false,
     isExplosive: false,

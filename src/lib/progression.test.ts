@@ -67,6 +67,55 @@ describe('Phase 2 acceptance — progression suggestion', () => {
   });
 });
 
+describe('progression along the band drawer', () => {
+  const BANDS = ladderFor(find('bd_lateral_walk'), DEFAULT_INVENTORY);
+
+  it('sends a finished band to the next band up, never to microplates', () => {
+    const history = session('s1', '2026-09-14', [{ weightKg: 11, reps: 20, rir: 3 }]);
+    const result = suggestProgression({
+      ladder: BANDS,
+      history,
+      repRangeLow: 12,
+      repRangeHigh: 20,
+      band: true,
+    });
+    expect(result.outcome).toBe('increase');
+    expect(result.suggestedKg).toBe(17);
+    expect(result.reason).toMatch(/the 17 kg band/);
+    /* 11 → 17 is a 55% jump, which on a bar would demand microplates. Between
+       bands it is just the next band; the note would be nonsense. */
+    expect(result.microplateNote).toBeUndefined();
+  });
+
+  it('names the strongest band as the ceiling, with doubling as the out', () => {
+    const history = session('s1', '2026-09-14', [{ weightKg: 21, reps: 20, rir: 3 }]);
+    const result = suggestProgression({
+      ladder: BANDS,
+      history,
+      repRangeLow: 12,
+      repRangeHigh: 20,
+      band: true,
+    });
+    expect(result.outcome).toBe('ceiling');
+    expect(result.reason).toMatch(/strongest band/);
+  });
+
+  it('nudges an old kg-less band set toward logging the rating', () => {
+    /* Every band set logged before this change carries reps only. The maths
+       cannot rung without a number, so the advice is what unlocks it. */
+    const history = session('s1', '2026-09-14', [{ weightKg: undefined, reps: 20, rir: 2 }]);
+    const result = suggestProgression({
+      ladder: BANDS,
+      history,
+      repRangeLow: 12,
+      repRangeHigh: 20,
+      band: true,
+    });
+    expect(result.outcome).toBe('increase');
+    expect(result.reason).toMatch(/next band, and log its kg/);
+  });
+});
+
 describe('progression rules (spec Phase 2)', () => {
   it('repeats the weight when the top of the range came at RIR 0–1', () => {
     const history = session('s1', '2026-08-30', [{ weightKg: 50, reps: 10, rir: 1 }]);

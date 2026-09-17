@@ -10,6 +10,7 @@ import type { Exercise, SetLog } from '../db/types';
 
 /** Rounded to 0.01 kg — 50 × 0.49 must read 24.5, not 24.500000000000004. */
 export function effectiveKg(exercise: Exercise, weightKg: number | undefined): number | undefined {
+  // Band ratings count: the multiplier is 1.0, so the rating passes through.
   if (exercise.loadMode === 'rpe_only') return undefined;
   if (weightKg === undefined || Number.isNaN(weightKg)) return undefined;
   return Math.round(weightKg * exercise.loadMultiplier * 100) / 100;
@@ -31,6 +32,8 @@ export function weightColumnLabel(exercise: Exercise): string {
     case 'free_bar':
     case 'smith':
       return 'total kg';
+    case 'band':
+      return 'band kg';
     default:
       return 'kg';
   }

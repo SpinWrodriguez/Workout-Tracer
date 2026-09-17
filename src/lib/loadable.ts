@@ -27,6 +27,11 @@ export interface Inventory {
   /** One functional-trainer stack and its selector step. */
   cableStackKg: number;
   cableStepKg: number;
+  /**
+   * Rated bands, by the kg printed on them. One band at a time — doubling up
+   * is real but the rating of a stack is not the sum, so no combination maths.
+   */
+  bands: number[];
 }
 
 /** Spec §2: one pair each of 20/10/5 plus two pairs of 1.5. */
@@ -43,6 +48,11 @@ export const DEFAULT_INVENTORY: Inventory = {
   barWeights: { free_bar: 20, smith: 18 },
   cableStackKg: 70,
   cableStepKg: 5,
+  /* This garage's rack of them: flat loops at 6.5 / 7.5 / 10, fabric hip
+     bands at 11 / 17 / 21. The big latex superband is rated as a RANGE
+     (up to ~34 kg depending on stretch), so it has no honest rung here —
+     type its kg by hand when it earns a set. */
+  bands: [6.5, 7.5, 10, 11, 17, 21],
 };
 
 /** Guards against float dust from 1.5 kg plates: 0.05 kg resolution. */
@@ -113,8 +123,9 @@ const cache = new Map<string, number[]>();
 function inventoryKey(inventory: Inventory): string {
   const plates = inventory.plates.map((p) => `${p.kg}x${p.pairs}`).join(',');
   const bells = [...inventory.kettlebells].sort((a, b) => a - b).join(',');
+  const bands = [...inventory.bands].sort((a, b) => a - b).join(',');
   const { free_bar: free, smith } = inventory.barWeights;
-  return `${plates}|${bells}|${free}|${smith}|${inventory.cableStackKg}|${inventory.cableStepKg}`;
+  return `${plates}|${bells}|${free}|${smith}|${inventory.cableStackKg}|${inventory.cableStepKg}|${bands}`;
 }
 
 /**
@@ -133,14 +144,28 @@ export function barWeightFor(exercise: Exercise, inventory: Inventory): number |
   return exercise.barWeight;
 }
 
+/** The bands themselves are the ladder: one band on, its rating logged. */
+export function bandWeights(bands: number[]): number[] {
+  return dedupeSorted(bands.filter((kg) => kg > 0));
+}
+
 /**
- * The rungs this exercise can actually be set to. Empty for bodyweight and
- * band work, which carry no quantifiable load.
+ * The rungs this exercise can actually be set to. Empty for bodyweight work
+ * and the mobility drills, which carry no quantifiable load; band work rungs
+ * along the rated bands in the drawer.
  *
  * Cached per (station, bar, inventory) — the spec asks for the ladder to be
  * computed at setup rather than per keystroke, and the inputs change rarely.
  */
 export function ladderFor(exercise: Exercise, inventory: Inventory): number[] {
+  if (exercise.loadMode === 'band') {
+    const key = `band|${inventoryKey(inventory)}`;
+    const hit = cache.get(key);
+    if (hit) return hit;
+    const ladder = bandWeights(inventory.bands);
+    cache.set(key, ladder);
+    return ladder;
+  }
   if (exercise.loadMode !== 'weight') return [];
 
   const bar = barWeightFor(exercise, inventory);

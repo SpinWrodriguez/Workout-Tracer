@@ -32,6 +32,11 @@ export function mergeInventory(value: unknown): Inventory {
   const kettlebells = Array.isArray(value.kettlebells)
     ? value.kettlebells.map(Number).filter((kg) => Number.isFinite(kg) && kg > 0)
     : DEFAULT_INVENTORY.kettlebells;
+  /* Rows saved before bands existed have no key at all, and those installs
+     should wake up with the default rack rather than an empty band drawer. */
+  const bands = Array.isArray(value.bands)
+    ? value.bands.map(Number).filter((kg) => Number.isFinite(kg) && kg > 0)
+    : DEFAULT_INVENTORY.bands;
   const bars = isRecord(value.barWeights) ? value.barWeights : {};
   return {
     plates: plates.length ? plates : DEFAULT_INVENTORY.plates,
@@ -42,6 +47,7 @@ export function mergeInventory(value: unknown): Inventory {
     },
     cableStackKg: Number(value.cableStackKg) || DEFAULT_INVENTORY.cableStackKg,
     cableStepKg: Number(value.cableStepKg) || DEFAULT_INVENTORY.cableStepKg,
+    bands,
   };
 }
 

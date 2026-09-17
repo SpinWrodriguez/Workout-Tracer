@@ -37,7 +37,14 @@ export type Station =
   | 'band'
   | 'landmine';
 
-export type LoadMode = 'weight' | 'bodyweight' | 'rpe_only';
+/*
+ * 'band' is weight-loggable: real bands carry a rating (a 17 kg hip band, a
+ * 6.5 kg loop), and which band was used IS the progression. The kg is nominal
+ * — tension varies over the stretch — so it never feeds a 1-RM estimate, but
+ * it is a number worth logging. 'rpe_only' remains for the mobility drills,
+ * which genuinely carry nothing.
+ */
+export type LoadMode = 'weight' | 'bodyweight' | 'band' | 'rpe_only';
 
 /**
  * Movement pattern, stored rather than derived. Weekly coverage is validated

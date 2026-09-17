@@ -122,6 +122,32 @@ describe('the month grid over the session log', () => {
     expect(screen.getByText('8')).toBeTruthy();
   });
 
+  it('charts which band was used, not a 1-RM the rating cannot honestly feed', async () => {
+    await db.session.put({
+      id: 's_band',
+      blockId: BLOCK_ID,
+      daySlot: 'A',
+      date: todayIso(),
+      durationMin: 20,
+    });
+    await db.setLog.put({
+      sessionId: 's_band',
+      exerciseId: 'bd_lateral_walk',
+      setNo: 1,
+      weightKg: 11,
+      effectiveKg: 11,
+      reps: 20,
+    });
+    draw(<HistoryScreen exercises={exercises} onOpen={vi.fn()} />);
+
+    // The band's own metric pair: the band used, and the reps done with it.
+    await screen.findByText('Top band');
+    await screen.findByText('Total reps');
+    expect(screen.queryByText('Est. 1-RM')).toBeNull();
+    await screen.findByText('best top band in range');
+    expect(screen.getByText('11')).toBeTruthy();
+  });
+
   it('marks a round on the grid without making it tappable', async () => {
     await logSession('s_now', todayIso(), 'This Month Session');
     const golfDay = todayIso(); // same day: session fills the cell, golf dots it

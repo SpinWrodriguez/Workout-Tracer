@@ -3,6 +3,7 @@ import { readInventory, writeInventory } from '../db/settings';
 import { kg } from '../lib/format';
 import {
   DEFAULT_INVENTORY,
+  bandWeights,
   cableStackWeights,
   loadableWeights,
   type Inventory,
@@ -56,6 +57,8 @@ function NumberField({
 export function InventoryEditor() {
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const [saved, setSaved] = useState(false);
+  /** The band about to be added — bands come in any rating, so no fixed list. */
+  const [newBand, setNewBand] = useState(0);
 
   useEffect(() => {
     void readInventory().then(setInventory);
@@ -73,6 +76,7 @@ export function InventoryEditor() {
       smith: loadableWeights(inventory.barWeights.smith, inventory.plates),
       hand: loadableWeights(0, inventory.plates),
       cable: cableStackWeights(inventory.cableStackKg, inventory.cableStepKg),
+      bands: bandWeights(inventory.bands),
     };
   }, [inventory]);
 
@@ -237,6 +241,53 @@ export function InventoryEditor() {
           ))}
         </div>
         {ladderRow('Hand-held ladder', ladders.hand)}
+      </Card>
+
+      <Card title="Bands" className="mt-3" collapsible>
+        <p className="text-[13px] text-text-dim">
+          Rated bands, by the kg printed on them. Band work logs that rating and progresses by
+          stepping up a band, so the ladder is simply the drawer. A band rated as a range has no
+          honest single number — leave it out and type its kg by hand when you use it.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {inventory.bands
+            .slice()
+            .sort((a, b) => a - b)
+            .map((band) => (
+              <button
+                key={band}
+                type="button"
+                onClick={() => patch({ bands: inventory.bands.filter((b) => b !== band) })}
+                className="rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs font-medium"
+                aria-label={`Remove the ${band} kg band`}
+              >
+                {kg(band)} kg <span className="ml-0.5 text-text-dim">×</span>
+              </button>
+            ))}
+          {inventory.bands.length === 0 && <Label>--</Label>}
+        </div>
+        <div className="mt-3 flex items-end gap-2">
+          <NumberField
+            label="Add a band"
+            value={newBand}
+            suffix="kg"
+            step={0.5}
+            onChange={setNewBand}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (newBand > 0 && !inventory.bands.includes(newBand)) {
+                patch({ bands: [...inventory.bands, newBand] });
+              }
+              setNewBand(0);
+            }}
+            className="h-11 rounded-xl bg-surface-2 px-4 text-[13px] font-medium text-text-dim"
+          >
+            Add
+          </button>
+        </div>
+        {ladderRow('Band ladder', ladders.bands)}
       </Card>
 
       <Card title="Cable stacks" className="mt-3" collapsible>

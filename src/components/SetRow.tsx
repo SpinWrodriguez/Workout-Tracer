@@ -69,7 +69,9 @@ export function SetRow({
 }) {
   const done = set.done;
   const dim = done ? 'text-text-faint' : 'text-text';
-  const weightless = exercise.loadMode !== 'weight';
+  /* Bands take a weight now — the rating printed on the band — so only true
+     no-load work keeps the cell shut. */
+  const weightless = exercise.loadMode === 'bodyweight' || exercise.loadMode === 'rpe_only';
   const eff = effectiveKg(exercise, set.weightKg);
   const showEffective = hasLoadTranslation(exercise);
 

@@ -102,10 +102,13 @@ describe('exercise seed (spec §8)', () => {
     }
   });
 
-  it('logs bands on RPE only — their load is not quantifiable', () => {
+  it('logs bands by the kg rating printed on them', () => {
+    /* They were rpe_only for a year on the theory that band load is not
+       quantifiable — then the lifter pointed at the drawer: every band in it
+       has a rating on the label, and which band you grabbed IS the number. */
     const bands = EXERCISES.filter((e) => e.station === 'band');
     expect(bands.length).toBeGreaterThan(0);
-    for (const band of bands) expect(band.loadMode).toBe('rpe_only');
+    for (const band of bands) expect(band.loadMode).toBe('band');
   });
 });
 

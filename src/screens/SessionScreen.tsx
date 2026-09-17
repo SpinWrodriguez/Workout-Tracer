@@ -482,7 +482,10 @@ export function SessionScreen({
       setCell({
         ...cell,
         setIndex: next,
-        field: exercise && exercise.loadMode === 'weight' ? 'weight' : 'reps',
+        field:
+          exercise && (exercise.loadMode === 'weight' || exercise.loadMode === 'band')
+            ? 'weight'
+            : 'reps',
       });
     } else {
       setCell(null);
@@ -643,6 +646,8 @@ export function SessionScreen({
           repRangeHigh: repHigh,
           // So a plank's advice talks about seconds, not reps it does not have.
           timed: isTimed(activeExercise),
+          // And a band's advice names the next band, never microplates.
+          band: activeExercise.loadMode === 'band',
         })
       : undefined;
 
@@ -833,7 +838,13 @@ export function SessionScreen({
               {barWeightFor(activeExercise, inventory) !== undefined && (
                 <Label>bar {barWeightFor(activeExercise, inventory)} kg</Label>
               )}
-              {activeExercise.loadMode === 'rpe_only' && <Label>band — log RPE and reps only</Label>}
+              {activeExercise.loadMode === 'rpe_only' && (
+                <Label>no load — log RPE and reps only</Label>
+              )}
+              {/* The station label already says Band, so no "band —" prefix. */}
+              {activeExercise.loadMode === 'band' && (
+                <Label>kg is the rating on the band</Label>
+              )}
               {activeExercise.isHinge && <Label>hinge — do this fresh</Label>}
             </div>
 

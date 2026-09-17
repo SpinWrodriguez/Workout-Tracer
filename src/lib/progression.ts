@@ -84,6 +84,12 @@ export interface ProgressionInput {
    * a rep" on a plank is advice about a quantity the exercise does not have.
    */
   timed?: boolean;
+  /**
+   * True when the ladder is rated bands. Same maths again, different prose:
+   * the next rung is a different band, not more plates, and a 55% jump between
+   * bands is normal — suggesting microplates for it would be nonsense.
+   */
+  band?: boolean;
 }
 
 export function suggestProgression({
@@ -92,7 +98,11 @@ export function suggestProgression({
   repRangeLow = DEFAULT_REP_RANGE.low,
   repRangeHigh = DEFAULT_REP_RANGE.high,
   timed = false,
+  band = false,
 }: ProgressionInput): Progression {
+  /** How a load reads back: "17 kg" on a bar, "the 17 kg band" in a drawer. */
+  const named = (value: number | undefined) =>
+    band ? `the ${value} kg band` : `${value} kg`;
   const sessions = sessionsFromHistory(history);
   const latest = sessions[0] ? topSet(sessions[0]) : undefined;
 
@@ -100,7 +110,9 @@ export function suggestProgression({
     return {
       outcome: 'start',
       suggestedKg: ladder[0],
-      reason: 'No history yet — pick a weight you can hold for the whole range.',
+      reason: band
+        ? 'No history yet — start on a band you can hold for the whole range, and log its kg.'
+        : 'No history yet — pick a weight you can hold for the whole range.',
     };
   }
 
@@ -108,17 +120,20 @@ export function suggestProgression({
   const loaded = latest.weightKg;
   const unit = timed ? 'seconds' : 'reps';
 
-  // Unloaded work (pull-ups, planks, bands) has no rung to move to; the rep
-  // range is the progression.
+  // Unloaded work (pull-ups, planks) has no rung to move to; the rep range is
+  // the progression. A band set logged without its kg lands here too, and the
+  // advice is to start logging it — that is what unlocks the ladder.
   if (loaded === undefined || ladder.length === 0) {
     const hitTop = latest.reps >= repRangeHigh;
     return {
       ...base,
       outcome: hitTop ? 'increase' : 'repeat',
       reason: hitTop
-        ? timed
-          ? `Held ${latest.reps} seconds — add time or slow the breathing, there is no load to add.`
-          : `Hit ${latest.reps} reps — add a rep or slow the tempo, there is no load to add.`
+        ? band && ladder.length > 0
+          ? `Hit ${latest.reps} reps — step up to the next band, and log its kg.`
+          : timed
+            ? `Held ${latest.reps} seconds — add time or slow the breathing, there is no load to add.`
+            : `Hit ${latest.reps} reps — add a rep or slow the tempo, there is no load to add.`
         : `Work up to ${repRangeHigh} ${unit} at this difficulty.`,
     };
   }
@@ -138,14 +153,14 @@ export function suggestProgression({
         ...base,
         outcome: 'hold_review',
         suggestedKg: back,
-        reason: `Missed ${repRangeLow} ${unit} twice at ${loaded} kg — hold here and review the exercise.`,
+        reason: `Missed ${repRangeLow} ${unit} twice at ${named(loaded)} — hold here and review the exercise.`,
       };
     }
     return {
       ...base,
       outcome: 'repeat',
       suggestedKg: snapToLadder(loaded, ladder),
-      reason: `Short of ${repRangeLow} ${unit} — repeat ${loaded} kg.`,
+      reason: `Short of ${repRangeLow} ${unit} — repeat ${named(loaded)}.`,
     };
   }
 
@@ -159,7 +174,9 @@ export function suggestProgression({
         ...base,
         outcome: 'ceiling',
         suggestedKg: snapToLadder(loaded, ladder),
-        reason: `${loaded} kg is the heaviest loadable weight — add reps or change the exercise.`,
+        reason: band
+          ? `${loaded} kg is the strongest band you own — add reps, slow the tempo, or double up.`
+          : `${loaded} kg is the heaviest loadable weight — add reps or change the exercise.`,
       };
     }
     const up = nextRung(loaded, ladder);
@@ -169,9 +186,10 @@ export function suggestProgression({
       suggestedKg: up,
       reason:
         rir === undefined
-          ? `Hit ${repRangeHigh} ${unit} — go to ${up} kg. No RIR logged, so this assumes it was not a grinder.`
-          : `Hit ${repRangeHigh} ${unit} at RIR ${rir} — go to ${up} kg.`,
-      microplateNote: microplateHint(loaded, ladder),
+          ? `Hit ${repRangeHigh} ${unit} — go to ${named(up)}. No RIR logged, so this assumes it was not a grinder.`
+          : `Hit ${repRangeHigh} ${unit} at RIR ${rir} — go to ${named(up)}.`,
+      // Between bands a 50% jump is the product, not a gap microplates can fill.
+      microplateNote: band ? undefined : microplateHint(loaded, ladder),
     };
   }
 
@@ -180,8 +198,8 @@ export function suggestProgression({
     outcome: 'repeat',
     suggestedKg: snapToLadder(loaded, ladder),
     reason: hitTop
-      ? `Hit ${repRangeHigh} ${unit} but at RIR ${rir} — repeat ${loaded} kg until it is not a grinder.`
-      : `In range at ${latest.reps} ${unit} — repeat ${loaded} kg and work toward ${repRangeHigh}.`,
+      ? `Hit ${repRangeHigh} ${unit} but at RIR ${rir} — repeat ${named(loaded)} until it is not a grinder.`
+      : `In range at ${latest.reps} ${unit} — repeat ${named(loaded)} and work toward ${repRangeHigh}.`,
   };
 }
 

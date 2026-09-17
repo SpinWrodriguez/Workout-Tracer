@@ -22,8 +22,10 @@ describe('effective load (spec §5 rule 2)', () => {
     expect(effectiveKg(find('bb_back_squat'), 96)).toBe(96);
   });
 
-  it('produces no load for bands, whose resistance is not quantifiable', () => {
-    expect(effectiveKg(find('bd_pull_apart'), 12)).toBeUndefined();
+  it('passes a band rating straight through — the label is the load', () => {
+    expect(effectiveKg(find('bd_pull_apart'), 17)).toBe(17);
+    // And an old band set with no rating logged simply stays unloaded.
+    expect(effectiveKg(find('bd_pull_apart'), undefined)).toBeUndefined();
   });
 
   it('only claims a translation where the loaded and effective numbers differ', () => {
