@@ -74,22 +74,18 @@ export function WeekPlanSheet({
   onBuild,
   onClose,
   asking = false,
-  progress,
   error,
   shortfall,
 }: {
   days: WeekPlanDay[];
-  onBuild: (chosen: PlannedWeekDay[], note: string) => void;
+  onBuild: (chosen: PlannedWeekDay[]) => void;
   onClose: () => void;
   asking?: boolean;
-  /** "2 of 4" while a run is in flight. One call per workout, so it is slow. */
-  progress?: string;
   error?: string;
-  /** What the last month left short, worst first — what the builder aims at. */
+  /** What the last month left short, worst first — what to aim the week at. */
   shortfall?: UndertrainedMuscle[];
 }) {
   const [chosen, setChosen] = useState<Record<string, PlannedWeekDay>>({});
-  const [note, setNote] = useState('');
 
   const picked = days
     .filter((day) => chosen[day.date] !== undefined)
@@ -134,27 +130,25 @@ export function WeekPlanSheet({
 
   return (
     <Sheet
-      title="Build the week"
+      title="Plan this week"
       onClose={onClose}
       footer={
         <button
           type="button"
           disabled={asking || picked.length === 0}
-          onClick={() => onBuild(picked, note)}
+          onClick={() => onBuild(picked)}
           className="h-cta relative w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
         >
-          {asking
-            ? `Building${progress ? ` ${progress}` : ''}…`
-            : picked.length === 0
-              ? 'Pick your training days'
-              : `Build ${picked.length} workout${picked.length === 1 ? '' : 's'}`}
+          {picked.length === 0
+            ? 'Pick your training days'
+            : `Plan ${picked.length} day${picked.length === 1 ? '' : 's'}`}
           <HapticTick />
         </button>
       }
     >
       <Label className="mt-1 block">
         Pick the days you are training this week, then say how hard each one is and what it
-        trains. One workout is built per day and lands on that day — this week only.
+        trains. Each day takes a workout you already have that matches — this week only.
       </Label>
 
       {/* The data the plan starts from, said out loud: planning should not
@@ -162,8 +156,8 @@ export function WeekPlanSheet({
       {shortfall !== undefined && shortfall.length > 0 && (
         <p className="mt-2 text-[12px] leading-snug font-medium text-text-dim">
           Short over the last month:{' '}
-          {shortfall.map((row) => `${row.name} (${row.sets}/wk)`).join(', ')}. The builder aims
-          at these unless your note says otherwise.
+          {shortfall.map((row) => `${row.name} (${row.sets}/wk)`).join(', ')} — worth a day
+          aimed at them.
         </p>
       )}
 
@@ -243,15 +237,6 @@ export function WeekPlanSheet({
         })}
       </div>
 
-      <Label className="mt-4 block">Anything to add</Label>
-      <textarea
-        rows={2}
-        value={note}
-        onChange={(event) => setNote(event.target.value)}
-        placeholder="Optional — e.g. deload week, keep the volume down"
-        className="mt-1.5 w-full resize-none rounded-xl bg-surface-2 px-3 py-2.5 text-[15px] placeholder:text-text-faint"
-      />
-
       {error && (
         <p className="mt-2 text-[12px] font-medium" style={{ color: 'var(--color-warn)' }}>
           {error}
@@ -259,10 +244,10 @@ export function WeekPlanSheet({
       )}
 
       <Label className="mt-3 block">
-        A day whose focus and effort match a workout you already have reuses that workout
-        instead of building a new one. The rest are built knowing what the other days took, and
-        every choice is checked against the rules — including grip work near a round — before it
-        lands. It takes a few seconds a day.
+        Planning places, it never invents: a day whose focus and effort match a workout on
+        your shelf takes that workout, checked against the rules — including grip work near a
+        round. A day nothing matches is named so you can build one for it, by hand or with AI,
+        and plan again.
       </Label>
     </Sheet>
   );

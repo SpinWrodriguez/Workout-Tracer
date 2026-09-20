@@ -8,16 +8,16 @@ import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import { balanceSets, generateDay, type DayPlan } from '../lib/blockBuilder';
 import {
-  gripAllowed,
-  spineAllowed,
   sessionMinutes as estimateMinutes,
   severityOf,
   validateBlock,
   type Fix,
   type ValidationContext,
+  type Violation,
 } from '../lib/blockValidation';
 import { dayLabel, describeDay, shortDayLabels } from '../lib/dayLabel';
 import {
+  WORKOUT_FOCUS_LABEL,
   focusForMuscles,
   templateDayFor,
   workoutTemplate,
@@ -42,7 +42,6 @@ import {
   updateBlockExercise,
   writePlan,
   writeSchedule,
-  type BlockSchedule,
 } from '../lib/program';
 import { DayEditor, type DayEditorSlot } from '../components/DayEditor';
 import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
@@ -59,7 +58,6 @@ import {
   templateForAiWorkout,
   type AiWorkout,
 } from '../lib/aiWorkout';
-import { WEEK_MIN_EXERCISES, generateAiWeek, type WeekSlotRequest } from '../lib/aiWeek';
 import { matchExistingWorkouts } from '../lib/weekReuse';
 import { briefPayload, buildBrief, undertrained, type DayConstraints } from '../lib/aiBrief';
 import { readAiInstructions, writeLastModelCall } from '../db/settings';
@@ -75,6 +73,13 @@ import { Silhouette } from '../components/Silhouette';
 import { fairShare, mergeVolume, plannedSetsPerMuscle, setsPerMuscle } from '../lib/volume';
 
 const DAY_SLOTS = SLOTS;
+
+/**
+ * The floor a GENERATED workout must fill — the teeth behind the prompt's
+ * fill-the-session rule, after three-exercise sessions passed every other
+ * check. Hand-built days are never held to it.
+ */
+const GEN_MIN_EXERCISES = 4;
 
 /** The seven dates of the week containing a date, Monday first. */
 const weekDatesOf = (iso: string): string[] =>
@@ -101,9 +106,7 @@ export function ProgramScreen({
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState<string | undefined>(undefined);
   const [planningWeek, setPlanningWeek] = useState(false);
-  /* One model call per workout, so a week takes real time. Saying which day is
-     being built is the difference between slow and broken. */
-  const [building, setBuilding] = useState<{ done: number; total: number } | undefined>(undefined);
+
   const [training, setTraining] = useState<TrainingPrefs>(DEFAULT_TRAINING);
   const [editingSlot, setEditingSlot] = useState<DaySlot | null>(null);
   const [addingTo, setAddingTo] = useState<DaySlot | null>(null);
@@ -686,16 +689,17 @@ export function ProgramScreen({
 
     /*
      * What the app can answer for itself. An empty goal box is the normal
-     * case: the shortfall in this week is something the lifter would otherwise
-     * have to read off the Levels screen and retype.
+     * case: the shortfall over the last month is something the lifter would
+     * otherwise have to read off the Levels screen and retype — and a month
+     * is the window that has data in it, where "this week" usually did not.
      */
-    const weekFrom = weekStart(todayIso());
-    const weekSessions = await db.session
+    const historyFrom = shiftIso(todayIso(), -28);
+    const recentSessions = await db.session
       .where('date')
-      .between(weekFrom, shiftIso(weekFrom, 7), true, false)
+      .between(historyFrom, todayIso(), true, true)
       .toArray();
-    const sessionIds = new Set(weekSessions.map((session) => session.id));
-    const weekLogs = (await db.setLog.toArray()).filter((log) => sessionIds.has(log.sessionId));
+    const sessionIds = new Set(recentSessions.map((session) => session.id));
+    const recentLogs = (await db.setLog.toArray()).filter((log) => sessionIds.has(log.sessionId));
 
     /*
      * A workout made here has no day yet, which is the whole design: placement
@@ -724,7 +728,7 @@ export function ProgramScreen({
     }
 
     const instructions = await readAiInstructions();
-    const short = undertrained(weekLogs, byId, share);
+    const short = undertrained(recentLogs, byId, share, 6, 4);
     const brief = buildBrief({ share, goal: want.goal, instructions, undertrained: short, existing, constraints });
 
     /*
@@ -767,7 +771,21 @@ export function ProgramScreen({
       validate: (workout: AiWorkout) => {
         const shaped = requiredShape(workout);
         const template = templateForAiWorkout(shaped, slot, sessionMinutes);
-        return validateBlock(
+        /* The teeth behind the fill-the-session rule: three exercises passed
+           every other check. A muscle-narrowed ask is exempt — "just abs and
+           obliques" can honestly be a three-movement session. */
+        const floor: Violation[] =
+          !constraints.muscles && workout.exercises.length < GEN_MIN_EXERCISES
+            ? [
+                {
+                  code: 'underfilled_session',
+                  message:
+                    `Only ${workout.exercises.length} exercises — a session needs at least ` +
+                    `${GEN_MIN_EXERCISES}. Trim sets to two on accessories rather than dropping movements.`,
+                },
+              ]
+            : [];
+        return floor.concat(validateBlock(
           {
             days: [
               {
@@ -792,7 +810,7 @@ export function ProgramScreen({
             template: [template],
             nameFor: () => workout.name ?? `Day ${slot}`,
           },
-        );
+        ));
       },
     });
 
@@ -861,34 +879,19 @@ export function ProgramScreen({
   };
 
   /**
-   * A week: one workout per chosen day, each landing on its own date.
+   * A week, planned without a model: each chosen day takes a workout already
+   * on the shelf whose focus and effort match it and whose exercises are legal
+   * on that date. Deterministic on the lifter's own call — the AI week builder
+   * generated near-copies of what the shelf already held, so generation now
+   * happens one workout at a time (where it works) and planning is placement.
    *
-   * Built one at a time on purpose. Each call reads the block back, so every
-   * day sees what the days before it took and picks around them — that is
-   * where the week's variety comes from, and asking for all of them in one
-   * reply would hand back five sessions that had never seen each other.
-   *
-   * A failure stops the run and keeps what already succeeded. Those workouts
-   * are each individually useful, and throwing away three good sessions
-   * because the fourth failed would be the wrong trade.
+   * A day nothing matches is reported, not papered over: the fix is to build
+   * a workout for it — by hand or with the single-workout AI — and plan again.
    */
-  /**
-   * A week, in one request.
-   *
-   * It used to be one call per day, each seeing the ones before it. That cost
-   * four prefills of the exercise library and four passes of thinking for a
-   * four-day week — about fifty seconds. One call prefills once, thinks once,
-   * and sees every day at the same time, which is better for variety than
-   * seeing only the earlier ones.
-   *
-   * The model still never sees a date. It fills the numbered slots below, and
-   * the mapping from number back to date never leaves this function.
-   */
-  const askForWeek = async (days: PlannedWeekDay[], note: string) => {
+  const planWeek = async (days: PlannedWeekDay[]) => {
     if (!block || asking || days.length === 0) return;
     setAsking(true);
     setAskError(undefined);
-    setBuilding({ done: 0, total: days.length });
     try {
       const current = await db.blockExercise.where('blockId').equals(block.id).toArray();
       const stored = (await readSchedules())[block.id] ?? {};
@@ -900,19 +903,12 @@ export function ProgramScreen({
         exerciseIds: current.filter((row) => row.daySlot === other).map((row) => row.exerciseId),
       }));
 
-      /*
-       * Reuse before generating. A workout the lifter already has — same focus,
-       * same effort, clean against the day's calendar rules — is a better
-       * answer than a freshly generated near-copy of it, and it costs nothing.
-       * Matched days are placed straight onto the plan; only the rest go to
-       * the model.
-       */
       const golfWeekdays = training.golfWeekdays as never as Weekday[];
-      const plansBefore = (await readPlans())[block.id] ?? {};
+      const plans = (await readPlans())[block.id] ?? {};
       const placedThisWeek = weekDatesOf(days[0]?.date ?? todayIso())
-        .map((date) => plansBefore[date])
+        .map((date) => plans[date])
         .filter((slot): slot is DaySlot => slot !== undefined);
-      const { reused, toGenerate } = matchExistingWorkouts(
+      const { reused, toGenerate: unmatched } = matchExistingWorkouts(
         days,
         existing,
         byId,
@@ -920,224 +916,25 @@ export function ProgramScreen({
         placedThisWeek,
       );
 
-      /* Placed before the model is asked: reuse is deterministic and free, so
-         it must survive a generation that later fails. */
-      if (reused.length > 0) {
-        let planNow = plansBefore;
-        for (const { day, slot } of reused) {
-          planNow = planDate(planNow, stored, weekDatesOf(day.date), slot, day.date);
-        }
-        await writePlan(block.id, planNow);
-      }
-      if (toGenerate.length === 0) {
-        setPlanningWeek(false);
-        return;
-      }
-
-      /* Enough ids for every day still to build, taken before any writing so
-         the generated part lands on slots that were free when asked for. */
-      const free = DAY_SLOTS.filter((candidate) => !definedSlotsOf(stored, current).includes(candidate));
-      if (free.length < toGenerate.length) {
-        setAskError(
-          `Only ${free.length} workout ${free.length === 1 ? 'slot' : 'slots'} left in this block, and you asked for ${toGenerate.length}.`,
-        );
-        return;
-      }
-
-      /* Position in the request, 1-based. The only address the model gets. */
-      const requests: WeekSlotRequest[] = toGenerate.map((day, index) => {
-        /* Every slot carries the effort ceiling, because a slot's constraints
-           bind only that slot — the prompt says so, so stating it once at the
-           top would leave the other days unbound. */
-        const constraints: string[] = [
-          `Nothing harder than RPE ${training.maxRpe}.`,
-        ];
-        /*
-         * Two reasons for the same two prohibitions, stated once each. The
-         * calendar is the one that was missing on the spine: a heavy day the
-         * day before a round needs the rule more than a flush session does,
-         * and it was the only day that never got it.
-         *
-         * The light day's own version is said here as well because the light
-         * template excludes both and the validator marks against it — leaving
-         * either unsaid buys a rejected answer and a retry to communicate a
-         * rule we already knew.
-         */
-        const light = day.intensity === 'light';
-        const weekday = weekdayOf(day.date);
-        if (light || !gripAllowed(weekday, golfWeekdays)) {
-          constraints.push('Do not use any exercise with gripLoad "high".');
-        }
-        if (light || !spineAllowed(weekday, golfWeekdays)) {
-          constraints.push('Do not use any exercise with spinalLoad "high".');
-        }
-        if (light) {
-          constraints.push('This is a light session: two working sets an exercise, higher reps.');
-        }
-        constraints.push(
-          `Fill the ${training.sessionMinutes}-minute session: at least ${WEEK_MIN_EXERCISES} exercises, ` +
-            'five or six where the set counts allow. Trim an accessory to two sets before dropping a movement.',
-        );
-        return { slot: index + 1, focus: day.focus, intensity: day.intensity, constraints };
-      });
-
-      /*
-       * A trailing MONTH of real training, averaged back to weekly sets. It
-       * used to read only the week being planned — which has not happened yet,
-       * so the shortfall list said everything and therefore nothing, and the
-       * generator was guessing at data the app has been keeping all along.
-       */
-      const historyFrom = shiftIso(todayIso(), -28);
-      const recentSessions = await db.session
-        .where('date')
-        .between(historyFrom, todayIso(), true, true)
-        .toArray();
-      const sessionIds = new Set(recentSessions.map((session) => session.id));
-      const recentLogs = (await db.setLog.toArray()).filter((log) => sessionIds.has(log.sessionId));
-      const instructions = await readAiInstructions();
-      const short = undertrained(recentLogs, byId, share, 6, 4);
-      const constraints: DayConstraints = { maxRpe: training.maxRpe };
-      const brief = buildBrief({
-        share,
-        goal: note,
-        instructions,
-        undertrained: short,
-        existing,
-        constraints,
-      });
-
-      const outcome = await generateAiWeek({
-        slots: requests,
-        exercises: libraryForFocuses(exercises, toGenerate.map((day) => day.focus)),
-        // A week is several workouts in one reply, so the single-workout
-        // ceiling would truncate it mid-JSON.
-        maxTokens: 16000,
-        user: JSON.stringify({
-          ...briefPayload(brief, {
-            goal: note,
-            instructions,
-            undertrained: short,
-            existing,
-            constraints,
-          }),
-          slots: requests,
-        }),
-        validate: (workout) => {
-          const day = toGenerate[workout.slot - 1];
-          if (!day) return [];
-          const template = templateDayFor({
-            slot: free[workout.slot - 1] as DaySlot,
-            weekday: weekdayOf(day.date),
-            intensity: workout.intensity,
-            focus: workout.focus,
-            minutesPerSession: sessionMinutes,
-            golfWeekdays,
-          });
-          const problems = validateBlock(
-            {
-              days: [
-                {
-                  slot: free[workout.slot - 1] as DaySlot,
-                  weekday: weekdayOf(day.date),
-                  exercises: workout.exercises.map((entry) => ({
-                    ...entry,
-                    blockId: block.id,
-                    daySlot: free[workout.slot - 1] as DaySlot,
-                  })),
-                },
-              ],
-            },
-            {
-              exercisesById: byId,
-              golfWeekdays: training.golfWeekdays as never,
-              weeklySetTarget: training.weeklySetTarget,
-              sessionBudgetMinutes: sessionMinutes,
-              hasHistory: hasHistory ?? false,
-              laddersFor: (exercise) => ladderFor(exercise, inventory),
-              template: [template],
-              nameFor: () => workout.name ?? `Slot ${workout.slot}`,
-            },
-          ).filter((violation) => severityOf(violation.code) === 'problem');
-          /* The teeth behind the fill-the-session rule: three exercises passed
-             every other check, so the check has to exist to be retried. */
-          if (workout.exercises.length < WEEK_MIN_EXERCISES) {
-            problems.push({
-              code: 'underfilled_session',
-              message:
-                `Only ${workout.exercises.length} exercises — a session needs at least ` +
-                `${WEEK_MIN_EXERCISES}. Trim sets to two on accessories rather than dropping movements.`,
-            });
-          }
-          return problems;
-        },
-      });
-
-      await writeLastModelCall({
-        at: new Date().toISOString(),
-        attempts: outcome.attempts,
-        ms: outcome.cost.ms,
-        inputTokens: outcome.cost.inputTokens,
-        outputTokens: outcome.cost.outputTokens,
-        cacheReadTokens: outcome.cost.cacheReadTokens,
-        cacheWriteTokens: outcome.cost.cacheWriteTokens,
-      });
-
-      if (!outcome.ok) {
-        setAskError(outcome.reason);
-        return;
-      }
-
-      /* Written together: a half-placed week is worse than none, and the whole
-         reply is already in hand by the time we get here. */
-      const schedule: BlockSchedule = { ...stored };
-      const plans = (await readPlans())[block.id] ?? {};
       let plan = plans;
-      for (const workout of outcome.workouts) {
-        const slot = free[workout.slot - 1] as DaySlot;
-        const day = toGenerate[workout.slot - 1];
-        if (!day) continue;
-        const template = templateDayFor({
-          slot,
-          weekday: weekdayOf(day.date),
-          intensity: workout.intensity,
-          focus: workout.focus,
-          minutesPerSession: sessionMinutes,
-          golfWeekdays,
-        });
-        await db.blockExercise.bulkPut(
-          workout.exercises.map((entry) => ({ ...entry, blockId: block.id, daySlot: slot })),
-        );
-        schedule[slot] = {
-          intensity: workout.intensity,
-          focus: workout.focus,
-          variant: 0,
-          effortCue: template.effortCue,
-          generated: true,
-          name:
-            workout.name ??
-            describeDay(
-              workout.exercises
-                .map((entry) => byId.get(entry.exerciseId))
-                .filter((exercise): exercise is Exercise => exercise !== undefined),
-              workout.intensity,
-            ),
-        };
-        plan = planDate(plan, schedule, weekDatesOf(day.date), slot, day.date);
-        setBuilding({ done: reused.length + workout.slot, total: days.length });
+      for (const { day, slot } of reused) {
+        plan = planDate(plan, stored, weekDatesOf(day.date), slot, day.date);
       }
-      await writeSchedule(block.id, schedule);
-      await writePlan(block.id, plan);
+      if (reused.length > 0) await writePlan(block.id, plan);
 
-      if (outcome.shortfall.length > 0) {
-        /* Some days landed and some did not. Saying so beats closing the sheet
-           on a week that is quietly short a session. */
-        const which = outcome.shortfall
-          .map((slot) => days[slot - 1]?.date)
-          .filter((date): date is string => date !== undefined)
-          .map((date) => WEEKDAY_LABEL[weekdayOf(date)])
-          .join(', ');
+      if (unmatched.length > 0) {
+        /* Named per day, with what it wanted — the message IS the to-do list. */
+        const gaps = unmatched
+          .map(
+            (day) =>
+              `${WEEKDAY_LABEL[weekdayOf(day.date)]} needs a ${day.intensity} ${
+                WORKOUT_FOCUS_LABEL[day.focus]
+              } workout`,
+          )
+          .join('; ');
         setAskError(
-          `Built ${outcome.workouts.length} of ${days.length}. ${which} did not pass the rules: ${outcome.reason ?? ''}`,
+          `${reused.length > 0 ? `Placed ${reused.length}. ` : ''}Nothing on the shelf matches: ${gaps}. ` +
+            'Build one — by hand or with AI — then plan again.',
         );
         return;
       }
@@ -1147,7 +944,6 @@ export function ProgramScreen({
       setAskError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setAsking(false);
-      setBuilding(undefined);
     }
   };
 
@@ -1295,18 +1091,18 @@ export function ProgramScreen({
                 They sit here, under the gap they are for, rather than under
                 the whole list of workouts where you had to scroll to reach
                 them. */}
-            {isModelAvailable() && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAskError(undefined);
-                  setPlanningWeek(true);
-                }}
-                className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg"
-              >
-                Build the week with AI
-              </button>
-            )}
+            {/* Deterministic, so it needs no key and no model: planning is
+                placing workouts you already have onto the days you picked. */}
+            <button
+              type="button"
+              onClick={() => {
+                setAskError(undefined);
+                setPlanningWeek(true);
+              }}
+              className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg"
+            >
+              Plan the week
+            </button>
 
             <button
               type="button"
@@ -1452,10 +1248,9 @@ export function ProgramScreen({
         <WeekPlanSheet
           days={weekPlanDays}
           asking={asking}
-          progress={building ? `${building.done + 1} of ${building.total}` : undefined}
           error={askError}
           shortfall={recentShort}
-          onBuild={(chosen: PlannedWeekDay[], note: string) => void askForWeek(chosen, note)}
+          onBuild={(chosen: PlannedWeekDay[]) => void planWeek(chosen)}
           onClose={() => {
             setPlanningWeek(false);
             setAskError(undefined);

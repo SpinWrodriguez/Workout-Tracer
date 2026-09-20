@@ -63,11 +63,12 @@ function stubModel({ intensity = 'heavy' }: { intensity?: 'heavy' | 'light' } = 
       effort: sent.effort,
     });
 
-    /* Three rows the validator will accept: no repeated id, at most one heavy
+    /* Four rows the validator will accept: no repeated id, at most one heavy
        spinal lift, nothing advanced — and on a light reply nothing high grip
        or high spinal at all, because a cooperating model obeys the light-day
        rules the effort note spells out, and since those rules became problems
-       a stub that ignored them would loop through every retry and time out. */
+       a stub that ignored them would loop through every retry and time out.
+       Four, not three: an underfilled session is a problem now too. */
     const chosen = library
       .map((row) => exercisesById.get(row.id))
       .filter((exercise) => exercise !== undefined)
@@ -82,7 +83,7 @@ function stubModel({ intensity = 'heavy' }: { intensity?: 'heavy' | 'light' } = 
           ? true
           : all.findIndex((other) => other.spinalLoad === 'high') === index,
       )
-      .slice(0, 3);
+      .slice(0, 4);
 
     return {
       ok: true,
