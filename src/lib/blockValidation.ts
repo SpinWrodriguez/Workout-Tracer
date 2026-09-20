@@ -74,7 +74,8 @@ export type ViolationCode =
   | 'unloadable_weight'
   | 'over_time_budget'
   | 'forbidden_day'
-  | 'light_day_violation';
+  | 'light_day_violation'
+  | 'underfilled_session';
 
 /* -------------------------------------------------------------------------- */
 /*  A problem you cannot act on is just bad news.                             */
@@ -134,6 +135,13 @@ const SEVERITY: Record<ViolationCode, Severity> = {
    * business.
    */
   light_day_violation: 'problem',
+  /*
+   * Same shape as light_day_violation: a problem so the generator retry loop
+   * enforces it, never emitted by validateBlock — the week path constructs it
+   * for a model reply with too few exercises — and carrying no fix, so the
+   * Program banner never nags a hand-built three-exercise day.
+   */
+  underfilled_session: 'problem',
 };
 
 export function severityOf(code: ViolationCode): Severity {

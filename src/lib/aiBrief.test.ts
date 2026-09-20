@@ -62,9 +62,22 @@ describe('an empty goal box still asks for something', () => {
     });
     expect(brief.derived).toBe(true);
     expect(brief.goal).toContain('Lats');
-    expect(brief.goal).toContain('nothing yet this week');
-    expect(brief.goal).toContain('Hamstrings (2 sets)');
+    // "Lately", not "this week": the shortfall is a trailing month now.
+    expect(brief.goal).toContain('nothing lately');
+    expect(brief.goal).toContain('Hamstrings (2 sets a week)');
     expect(brief.summary).toContain('Lats');
+  });
+
+  it('averages a trailing month back to weekly sets before judging shortfall', () => {
+    /* 12 quad sets over four weeks is 3 a week — short against a share of 5.
+       Judged raw it would read as covered, which is how the week generator
+       used to end up guessing: its one-week window was usually empty. */
+    const logs = sets('bb_back_squat', 12);
+    const short = undertrained(logs, byId, 5, 100, 4);
+    const quads = short.find((row) => row.id === 'quads');
+    expect(quads?.sets).toBe(3);
+    // The same logs over one week are 12 sets, which is not short at all.
+    expect(undertrained(logs, byId, 5, 100).find((row) => row.id === 'quads')).toBeUndefined();
   });
 
   it('says so plainly when the week is already covered', () => {
@@ -93,12 +106,18 @@ describe('the payload', () => {
     existing: [],
   };
 
-  it('carries the shortfall only when the goal was derived from it', () => {
+  it('carries the shortfall with a typed goal too — data, not an order', () => {
+    /* It used to ride only when the goal was derived, so typing one word into
+       the note box blinded the generator to every volume number the app keeps.
+       The prompt says the goal outranks it; hiding it was never the contract. */
     const derived = briefPayload(buildBrief(base), base);
     expect(derived).toHaveProperty('weeklyShortfall');
 
     const typed = { ...base, goal: 'heavy pull day' };
-    expect(briefPayload(buildBrief(typed), typed)).not.toHaveProperty('weeklyShortfall');
+    expect(briefPayload(buildBrief(typed), typed)).toHaveProperty('weeklyShortfall');
+
+    const covered = { ...base, undertrained: [] };
+    expect(briefPayload(buildBrief(covered), covered)).not.toHaveProperty('weeklyShortfall');
   });
 
   it('passes standing instructions through when set', () => {

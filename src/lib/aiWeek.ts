@@ -53,8 +53,9 @@ list of slots, each with the focus and effort the lifter chose for it, and each
 with its own constraints. Return one workout per slot, with the same \`slot\`
 number you were given.
 
-Every rule above applies to each workout on its own. Two more apply across the
-week:
+Every rule above applies to each workout on its own — the fill-the-session rule
+included: a slot with three exercises is a rejected slot unless its constraints
+forced it. Two more rules apply across the week:
 
 - Spread the week's work. Repeating a staple between two slots is fine —
   pressing twice in a week is training, not an error — but two slots that are
@@ -63,6 +64,10 @@ week:
   what lets you.
 - A slot's constraints bind only that slot. A prohibition on one is not a
   prohibition on the others.
+
+Where \`weeklyShortfall\` is present, the WEEK as a whole is what answers it:
+spread the short muscles across the slots whose focus can take them, rather
+than cramming them all into one day.
 
 The numbers are positions in a list the lifter already decided. They are not
 days, dates or an order to train in, and you are not told which is which.`;
@@ -266,6 +271,13 @@ export type AiWeekOutcome =
 
 /** Bounded exactly as the single-workout path is. */
 export const MAX_WEEK_ATTEMPTS = 3;
+
+/**
+ * The floor the week path enforces per workout, as a problem the retry loop
+ * re-asks about. Three passed every rule and wasted the day: the prompt's
+ * fill-the-session language is the ask, this is the teeth.
+ */
+export const WEEK_MIN_EXERCISES = 4;
 
 /**
  * Asks once for the whole week, then asks again about only the slots that

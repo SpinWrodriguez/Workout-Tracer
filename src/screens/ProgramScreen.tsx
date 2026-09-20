@@ -59,7 +59,8 @@ import {
   templateForAiWorkout,
   type AiWorkout,
 } from '../lib/aiWorkout';
-import { generateAiWeek, type WeekSlotRequest } from '../lib/aiWeek';
+import { WEEK_MIN_EXERCISES, generateAiWeek, type WeekSlotRequest } from '../lib/aiWeek';
+import { matchExistingWorkouts } from '../lib/weekReuse';
 import { briefPayload, buildBrief, undertrained, type DayConstraints } from '../lib/aiBrief';
 import { readAiInstructions, writeLastModelCall } from '../db/settings';
 import { DaySlotCard } from '../components/DaySlotCard';
@@ -215,6 +216,16 @@ export function ProgramScreen({
      floor of 8 is unreachable at this target, so telling the generator every
      muscle is short tells it nothing. */
   const share = fairShare(training.weeklySetTarget, byId);
+
+  /* What the last month left short, for the week sheet and the generator both:
+     planning should start from the data, not from memory of the Levels screen. */
+  const recentShort = useLiveQuery(async () => {
+    const from = shiftIso(todayIso(), -28);
+    const sessions = await db.session.where('date').between(from, todayIso(), true, true).toArray();
+    const ids = new Set(sessions.map((session) => session.id));
+    const logs = (await db.setLog.toArray()).filter((log) => ids.has(log.sessionId));
+    return undertrained(logs, byId, share, 6, 4);
+  }, [byId, share]);
   const shape = training.shape;
 
   useEffect(() => {
@@ -889,19 +900,52 @@ export function ProgramScreen({
         exerciseIds: current.filter((row) => row.daySlot === other).map((row) => row.exerciseId),
       }));
 
-      /* Enough ids for every day, taken before any writing so the whole week
-         lands on slots that were free when it was asked for. */
+      /*
+       * Reuse before generating. A workout the lifter already has — same focus,
+       * same effort, clean against the day's calendar rules — is a better
+       * answer than a freshly generated near-copy of it, and it costs nothing.
+       * Matched days are placed straight onto the plan; only the rest go to
+       * the model.
+       */
+      const golfWeekdays = training.golfWeekdays as never as Weekday[];
+      const plansBefore = (await readPlans())[block.id] ?? {};
+      const placedThisWeek = weekDatesOf(days[0]?.date ?? todayIso())
+        .map((date) => plansBefore[date])
+        .filter((slot): slot is DaySlot => slot !== undefined);
+      const { reused, toGenerate } = matchExistingWorkouts(
+        days,
+        existing,
+        byId,
+        golfWeekdays,
+        placedThisWeek,
+      );
+
+      /* Placed before the model is asked: reuse is deterministic and free, so
+         it must survive a generation that later fails. */
+      if (reused.length > 0) {
+        let planNow = plansBefore;
+        for (const { day, slot } of reused) {
+          planNow = planDate(planNow, stored, weekDatesOf(day.date), slot, day.date);
+        }
+        await writePlan(block.id, planNow);
+      }
+      if (toGenerate.length === 0) {
+        setPlanningWeek(false);
+        return;
+      }
+
+      /* Enough ids for every day still to build, taken before any writing so
+         the generated part lands on slots that were free when asked for. */
       const free = DAY_SLOTS.filter((candidate) => !definedSlotsOf(stored, current).includes(candidate));
-      if (free.length < days.length) {
+      if (free.length < toGenerate.length) {
         setAskError(
-          `Only ${free.length} workout ${free.length === 1 ? 'slot' : 'slots'} left in this block, and you asked for ${days.length}.`,
+          `Only ${free.length} workout ${free.length === 1 ? 'slot' : 'slots'} left in this block, and you asked for ${toGenerate.length}.`,
         );
         return;
       }
 
-      const golfWeekdays = training.golfWeekdays as never as Weekday[];
       /* Position in the request, 1-based. The only address the model gets. */
-      const requests: WeekSlotRequest[] = days.map((day, index) => {
+      const requests: WeekSlotRequest[] = toGenerate.map((day, index) => {
         /* Every slot carries the effort ceiling, because a slot's constraints
            bind only that slot — the prompt says so, so stating it once at the
            top would leave the other days unbound. */
@@ -930,18 +974,28 @@ export function ProgramScreen({
         if (light) {
           constraints.push('This is a light session: two working sets an exercise, higher reps.');
         }
+        constraints.push(
+          `Fill the ${training.sessionMinutes}-minute session: at least ${WEEK_MIN_EXERCISES} exercises, ` +
+            'five or six where the set counts allow. Trim an accessory to two sets before dropping a movement.',
+        );
         return { slot: index + 1, focus: day.focus, intensity: day.intensity, constraints };
       });
 
-      const weekFrom = weekStart(days[0]?.date ?? todayIso());
-      const weekSessions = await db.session
+      /*
+       * A trailing MONTH of real training, averaged back to weekly sets. It
+       * used to read only the week being planned — which has not happened yet,
+       * so the shortfall list said everything and therefore nothing, and the
+       * generator was guessing at data the app has been keeping all along.
+       */
+      const historyFrom = shiftIso(todayIso(), -28);
+      const recentSessions = await db.session
         .where('date')
-        .between(weekFrom, shiftIso(weekFrom, 7), true, false)
+        .between(historyFrom, todayIso(), true, true)
         .toArray();
-      const sessionIds = new Set(weekSessions.map((session) => session.id));
-      const weekLogs = (await db.setLog.toArray()).filter((log) => sessionIds.has(log.sessionId));
+      const sessionIds = new Set(recentSessions.map((session) => session.id));
+      const recentLogs = (await db.setLog.toArray()).filter((log) => sessionIds.has(log.sessionId));
       const instructions = await readAiInstructions();
-      const short = undertrained(weekLogs, byId, share);
+      const short = undertrained(recentLogs, byId, share, 6, 4);
       const constraints: DayConstraints = { maxRpe: training.maxRpe };
       const brief = buildBrief({
         share,
@@ -954,7 +1008,7 @@ export function ProgramScreen({
 
       const outcome = await generateAiWeek({
         slots: requests,
-        exercises: libraryForFocuses(exercises, days.map((day) => day.focus)),
+        exercises: libraryForFocuses(exercises, toGenerate.map((day) => day.focus)),
         // A week is several workouts in one reply, so the single-workout
         // ceiling would truncate it mid-JSON.
         maxTokens: 16000,
@@ -969,7 +1023,7 @@ export function ProgramScreen({
           slots: requests,
         }),
         validate: (workout) => {
-          const day = days[workout.slot - 1];
+          const day = toGenerate[workout.slot - 1];
           if (!day) return [];
           const template = templateDayFor({
             slot: free[workout.slot - 1] as DaySlot,
@@ -979,7 +1033,7 @@ export function ProgramScreen({
             minutesPerSession: sessionMinutes,
             golfWeekdays,
           });
-          return validateBlock(
+          const problems = validateBlock(
             {
               days: [
                 {
@@ -1004,6 +1058,17 @@ export function ProgramScreen({
               nameFor: () => workout.name ?? `Slot ${workout.slot}`,
             },
           ).filter((violation) => severityOf(violation.code) === 'problem');
+          /* The teeth behind the fill-the-session rule: three exercises passed
+             every other check, so the check has to exist to be retried. */
+          if (workout.exercises.length < WEEK_MIN_EXERCISES) {
+            problems.push({
+              code: 'underfilled_session',
+              message:
+                `Only ${workout.exercises.length} exercises — a session needs at least ` +
+                `${WEEK_MIN_EXERCISES}. Trim sets to two on accessories rather than dropping movements.`,
+            });
+          }
+          return problems;
         },
       });
 
@@ -1029,7 +1094,7 @@ export function ProgramScreen({
       let plan = plans;
       for (const workout of outcome.workouts) {
         const slot = free[workout.slot - 1] as DaySlot;
-        const day = days[workout.slot - 1];
+        const day = toGenerate[workout.slot - 1];
         if (!day) continue;
         const template = templateDayFor({
           slot,
@@ -1058,7 +1123,7 @@ export function ProgramScreen({
             ),
         };
         plan = planDate(plan, schedule, weekDatesOf(day.date), slot, day.date);
-        setBuilding({ done: workout.slot, total: days.length });
+        setBuilding({ done: reused.length + workout.slot, total: days.length });
       }
       await writeSchedule(block.id, schedule);
       await writePlan(block.id, plan);
@@ -1389,6 +1454,7 @@ export function ProgramScreen({
           asking={asking}
           progress={building ? `${building.done + 1} of ${building.total}` : undefined}
           error={askError}
+          shortfall={recentShort}
           onBuild={(chosen: PlannedWeekDay[], note: string) => void askForWeek(chosen, note)}
           onClose={() => {
             setPlanningWeek(false);

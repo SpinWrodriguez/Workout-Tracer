@@ -105,7 +105,9 @@ The gym is a Cortex SM-26 multi-gym, an Olympic barbell, a few kettlebells and b
 
 You will be given the exercises available for this workout, the workouts already in the current block, and a goal. Return one workout. The library you are given may already be narrowed to what was asked for — the focus's patterns, or the muscles the lifter pointed at. Treat it as the whole world of choices, not a sample.
 
-The goal may be the lifter's own words, or a summary the app derived from which muscles are short this week — treat both the same way. You may also be given \`standingInstructions\`, which is what the lifter has said they are training for in general, and \`constraints\`, which are absolute: an exercise a constraint rules out is not available, whatever the goal says.
+The goal may be the lifter's own words, or a summary the app derived from which muscles are short — treat both the same way. You may also be given \`standingInstructions\`, which is what the lifter has said they are training for in general, and \`constraints\`, which are absolute: an exercise a constraint rules out is not available, whatever the goal says.
+
+\`weeklyShortfall\`, where given, is measured from the last month of real training: the muscles furthest below their weekly fair share, worst first. It is data, not an order — the goal outranks it — but with nothing in the goal against it, bias exercise choices toward those muscles. That is what "based on my training" means here.
 
 Rules:
 
@@ -116,6 +118,10 @@ Rules:
 - \`effort.suggested\`, where given, is what the lifter last had selected on the workout sheet. It is a starting point and the goal outranks it. Start there when the goal says nothing about effort; ignore it when the goal does.
 - Obey every entry in \`constraints\` exactly. They are not preferences.
 - Where \`standingInstructions\` and the goal disagree, the goal wins — it is about today, the instructions are about the months around it.
+- Fill the session. About 40 minutes of work is four exercises at least, five or
+  six where the set counts allow — trim an accessory to two sets before dropping
+  a movement. Three exercises wastes the lifter's day unless a constraint or the
+  goal forces it.
 - Order the exercises the way they should be performed. Explosive work first, then hinges while the position still holds, then everything else. A hinge late in a fatigued session is a form risk.
 - Two exercises with \`spinalLoad: "high"\` in one workout is a mistake.
 - \`name\` is what the lifter sees on the workout card. Name it after what it

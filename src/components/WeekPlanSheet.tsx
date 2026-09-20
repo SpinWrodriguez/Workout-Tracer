@@ -11,6 +11,7 @@ import {
 import { Sheet } from './Sheet';
 import { HapticTick } from './HapticTick';
 import { Label } from './Layout';
+import type { UndertrainedMuscle } from '../lib/aiBrief';
 
 /* -------------------------------------------------------------------------- */
 /*  Planning a week, as three answers: which days, how hard, and what each     */
@@ -75,6 +76,7 @@ export function WeekPlanSheet({
   asking = false,
   progress,
   error,
+  shortfall,
 }: {
   days: WeekPlanDay[];
   onBuild: (chosen: PlannedWeekDay[], note: string) => void;
@@ -83,6 +85,8 @@ export function WeekPlanSheet({
   /** "2 of 4" while a run is in flight. One call per workout, so it is slow. */
   progress?: string;
   error?: string;
+  /** What the last month left short, worst first — what the builder aims at. */
+  shortfall?: UndertrainedMuscle[];
 }) {
   const [chosen, setChosen] = useState<Record<string, PlannedWeekDay>>({});
   const [note, setNote] = useState('');
@@ -152,6 +156,16 @@ export function WeekPlanSheet({
         Pick the days you are training this week, then say how hard each one is and what it
         trains. One workout is built per day and lands on that day — this week only.
       </Label>
+
+      {/* The data the plan starts from, said out loud: planning should not
+          depend on the lifter remembering the Levels screen. */}
+      {shortfall !== undefined && shortfall.length > 0 && (
+        <p className="mt-2 text-[12px] leading-snug font-medium text-text-dim">
+          Short over the last month:{' '}
+          {shortfall.map((row) => `${row.name} (${row.sets}/wk)`).join(', ')}. The builder aims
+          at these unless your note says otherwise.
+        </p>
+      )}
 
       <div className="mt-3 flex flex-col gap-1.5" role="group" aria-label="Training days">
         {days.map((day) => {
@@ -245,9 +259,10 @@ export function WeekPlanSheet({
       )}
 
       <Label className="mt-3 block">
-        Each day is built knowing what the earlier days took, so the week does not repeat
-        itself. Every choice is checked against the rules — including grip work near a round —
-        before it lands. It takes a few seconds a day.
+        A day whose focus and effort match a workout you already have reuses that workout
+        instead of building a new one. The rest are built knowing what the other days took, and
+        every choice is checked against the rules — including grip work near a round — before it
+        lands. It takes a few seconds a day.
       </Label>
     </Sheet>
   );

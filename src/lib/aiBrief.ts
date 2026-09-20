@@ -45,10 +45,19 @@ export function undertrained(
   exercisesById: Map<string, Exercise>,
   threshold: number,
   limit = 6,
+  /**
+   * How many weeks the logs span. The week generator hands in a trailing
+   * month — one week of logs is mostly zeros the moment the week being
+   * planned has not happened yet, which told the model everything was short,
+   * which is the same as telling it nothing. Sets are averaged back to a
+   * weekly figure so the threshold keeps meaning what it says.
+   */
+  weeks = 1,
 ): UndertrainedMuscle[] {
   const volume = setsPerMuscle(logs, exercisesById);
+  const perWeek = (sets: number) => Math.round(sets / Math.max(1, weeks));
   return (Object.keys(volume) as MuscleId[])
-    .map((id) => ({ id, name: MUSCLE_BY_ID[id]?.name ?? id, sets: volume[id] ?? 0 }))
+    .map((id) => ({ id, name: MUSCLE_BY_ID[id]?.name ?? id, sets: perWeek(volume[id] ?? 0) }))
     .filter((row) => row.sets < threshold)
     .sort((a, b) => a.sets - b.sets || a.name.localeCompare(b.name))
     .slice(0, limit);
@@ -147,12 +156,12 @@ export function buildBrief(input: BriefInput): Brief {
   const untouched = short.filter((row) => row.sets === 0).map((row) => row.name);
   const light = short.filter((row) => row.sets > 0);
   const parts: string[] = [];
-  if (untouched.length > 0) parts.push(`${untouched.join(', ')} (nothing yet this week)`);
-  for (const row of light) parts.push(`${row.name} (${row.sets} sets)`);
+  if (untouched.length > 0) parts.push(`${untouched.join(', ')} (nothing lately)`);
+  for (const row of light) parts.push(`${row.name} (${row.sets} sets a week)`);
 
   return {
     goal:
-      `Bring up what is short this week: ${parts.join('; ')}. ` +
+      `Bring up what has been short lately: ${parts.join('; ')}. ` +
       'Pick the movements that cover those best without repeating the other workouts.',
     derived: true,
     summary: `Aimed at ${short.slice(0, 3).map((row) => row.name).join(', ')}`,
@@ -214,14 +223,18 @@ export function briefPayload(brief: Brief, input: BriefInput): Record<string, un
           },
         }
       : {}),
-    ...(brief.derived && input.undertrained.length > 0
+    /* Always sent, typed goal or not. It used to ride only when the goal was
+       derived, which meant typing ONE word into the note box blinded the
+       generator to every volume number the app knows. The data is context; the
+       prompt says the goal outranks it. */
+    ...(input.undertrained.length > 0
       ? {
           weeklyShortfall: input.undertrained.map((row) => ({
             muscle: row.name,
-            setsThisWeek: row.sets,
-            /* What this week can give it, not the evidence floor: a target the
+            setsPerWeekLately: row.sets,
+            /* What a week can give it, not the evidence floor: a target the
                week cannot reach is not a shortfall the generator can fix. */
-            fairShareThisWeek: input.share ?? VOLUME_LOW,
+            fairSharePerWeek: input.share ?? VOLUME_LOW,
           })),
         }
       : {}),
