@@ -34,13 +34,14 @@ export interface Inventory {
   bands: number[];
 }
 
-/** Spec §2: one pair each of 20/10/5 plus two pairs of 1.5. */
+/* Spec §2 said two pairs of 1.5 — the owner checked the rack: they are
+   1.25s. One pair each of 20/10/5 plus two pairs of 1.25. */
 export const DEFAULT_INVENTORY: Inventory = {
   plates: [
     { kg: 20, pairs: 1 },
     { kg: 10, pairs: 1 },
     { kg: 5, pairs: 1 },
-    { kg: 1.5, pairs: 2 },
+    { kg: 1.25, pairs: 2 },
   ],
   /* None in this garage: the plates have grips, so a hand-held load is one
      plate. Add real bells here in Settings if there ever are any. */
@@ -55,7 +56,7 @@ export const DEFAULT_INVENTORY: Inventory = {
   bands: [6.5, 7.5, 10, 11, 17, 21],
 };
 
-/** Guards against float dust from 1.5 kg plates: 0.05 kg resolution. */
+/** Guards against float dust from 1.25 kg plates: 0.05 kg resolution. */
 function round(kg: number): number {
   return Math.round(kg * 20) / 20;
 }

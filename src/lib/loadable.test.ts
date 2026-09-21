@@ -25,12 +25,15 @@ const find = (id: string) => {
   return exercise;
 };
 
-/** Spec §2, verbatim. */
+/* Spec §2 rebuilt on the real plates: the "1.5s" on the rack are 1.25s, so
+   every rung the spec printed from them moves by half a kilo per pair. */
 const FREE_BAR_LADDER = [
-  20, 23, 26, 30, 33, 36, 40, 43, 46, 50, 53, 56, 60, 63, 66, 70, 73, 76, 80, 83, 86, 90, 93, 96,
+  20, 22.5, 25, 30, 32.5, 35, 40, 42.5, 45, 50, 52.5, 55, 60, 62.5, 65, 70, 72.5, 75, 80, 82.5,
+  85, 90, 92.5, 95,
 ];
 const SMITH_LADDER = [
-  18, 21, 24, 28, 31, 34, 38, 41, 44, 48, 51, 54, 58, 61, 64, 68, 71, 74, 78, 81, 84, 88, 91, 94,
+  18, 20.5, 23, 28, 30.5, 33, 38, 40.5, 43, 48, 50.5, 53, 58, 60.5, 63, 68, 70.5, 73, 78, 80.5,
+  83, 88, 90.5, 93,
 ];
 
 describe('loadableWeights (spec §2)', () => {
@@ -42,23 +45,23 @@ describe('loadableWeights (spec §2)', () => {
     expect(loadableWeights(18, DEFAULT_INVENTORY.plates)).toEqual(SMITH_LADDER);
   });
 
-  it('has 24 rungs per bar with 3 kg steps inside each cluster', () => {
+  it('has 24 rungs per bar with 2.5 kg steps inside each cluster', () => {
     expect(FREE_BAR_LADDER).toHaveLength(24);
     for (let i = 1; i < FREE_BAR_LADDER.length; i += 1) {
       const step = (FREE_BAR_LADDER[i] as number) - (FREE_BAR_LADDER[i - 1] as number);
-      expect([3, 4]).toContain(step); // 3 inside a cluster, 4 across one
+      expect([2.5, 5]).toContain(step); // 2.5 inside a cluster, 5 across one
     }
   });
 
-  it('closes the 26 → 30 gaps once a pair of 2.5 kg plates is added', () => {
+  it('closes the 25 → 30 gaps once a pair of 2.5 kg plates is added', () => {
     const withMicro = loadableWeights(20, [
       ...DEFAULT_INVENTORY.plates,
       { kg: 2.5, pairs: 1 },
     ]);
-    expect(withMicro).toContain(28);
+    expect(withMicro).toContain(27.5);
     for (let i = 1; i < withMicro.length; i += 1) {
       const step = (withMicro[i] as number) - (withMicro[i - 1] as number);
-      expect(step).toBeLessThanOrEqual(3);
+      expect(step).toBeLessThanOrEqual(2.5);
     }
   });
 
@@ -101,7 +104,7 @@ describe('ladderFor', () => {
        way up to 86 kg for a swing. The expectation encoded the bug. A hand
        holds one plate. */
     const goblet = ladderFor(find('kb_goblet_squat'), DEFAULT_INVENTORY);
-    expect(goblet).toEqual([1.5, 5, 10, 20]);
+    expect(goblet).toEqual([1.25, 5, 10, 20]);
     expect(ladderFor(find('bw_split_squat'), DEFAULT_INVENTORY)).toEqual(goblet);
   });
 
@@ -125,36 +128,36 @@ describe('snapping', () => {
   const ladder = FREE_BAR_LADDER;
 
   it('never offers 27 kg', () => {
-    expect(snapToLadder(27, ladder)).toBe(26);
+    expect(snapToLadder(27, ladder)).toBe(25);
     expect(snapToLadder(28.5, ladder)).toBe(30);
-    expect(snapToLadder(22, ladder)).toBe(23);
+    expect(snapToLadder(22, ladder)).toBe(22.5);
   });
 
   it('clamps below the bar and at the ceiling', () => {
     expect(snapToLadder(5, ladder)).toBe(20);
-    expect(snapToLadder(500, ladder)).toBe(96);
+    expect(snapToLadder(500, ladder)).toBe(95);
   });
 
   it('steps rung to rung', () => {
-    expect(nextRung(26, ladder)).toBe(30);
-    expect(prevRung(30, ladder)).toBe(26);
-    expect(nextRung(96, ladder)).toBeUndefined();
+    expect(nextRung(25, ladder)).toBe(30);
+    expect(prevRung(30, ladder)).toBe(25);
+    expect(nextRung(95, ladder)).toBeUndefined();
     expect(prevRung(20, ladder)).toBeUndefined();
   });
 
   it('treats the top of the ladder as a hard stop', () => {
-    expect(atCeiling(96, ladder)).toBe(true);
-    expect(atCeiling(93, ladder)).toBe(false);
+    expect(atCeiling(95, ladder)).toBe(true);
+    expect(atCeiling(92.5, ladder)).toBe(false);
   });
 });
 
 describe('microplate hint', () => {
   it('fires on the light-load gaps and goes quiet higher up', () => {
-    expect(jumpPercent(20, FREE_BAR_LADDER)).toBeCloseTo(15, 1);
-    expect(microplateHint(20, FREE_BAR_LADDER)).toMatch(/15% — consider microplates/);
-    expect(microplateHint(26, FREE_BAR_LADDER)).toMatch(/15%/);
-    expect(microplateHint(33, FREE_BAR_LADDER)).toBeUndefined(); // 9%
-    expect(microplateHint(96, FREE_BAR_LADDER)).toBeUndefined(); // at the ceiling
+    expect(jumpPercent(20, FREE_BAR_LADDER)).toBeCloseTo(12.5, 1);
+    expect(microplateHint(20, FREE_BAR_LADDER)).toMatch(/1[23]% — consider microplates/);
+    expect(microplateHint(25, FREE_BAR_LADDER)).toMatch(/20%/); // the 25 → 30 gap
+    expect(microplateHint(33, FREE_BAR_LADDER)).toBeUndefined(); // 35 next, 6%
+    expect(microplateHint(95, FREE_BAR_LADDER)).toBeUndefined(); // at the ceiling
   });
 });
 
@@ -166,7 +169,7 @@ describe('what a hand can hold', () => {
       { kg: 20, pairs: 1 },
       { kg: 10, pairs: 1 },
       { kg: 5, pairs: 2 },
-      { kg: 1.5, pairs: 2 },
+      { kg: 1.25, pairs: 2 },
     ],
     kettlebells: [],
     barWeights: { free_bar: 20, smith: 18 },
@@ -179,7 +182,7 @@ describe('what a hand can hold', () => {
     /* The bug: this ran the plate maths with a bar of zero, which is the
        symmetric one-per-side logic, and offered a Swing every rung up to
        86 kg. */
-    expect(handHeldWeights(gripped.plates, gripped.kettlebells)).toEqual([1.5, 5, 10, 20]);
+    expect(handHeldWeights(gripped.plates, gripped.kettlebells)).toEqual([1.25, 5, 10, 20]);
   });
 
   it('offers no sum of two plates, because one grip holds one plate', () => {
@@ -201,7 +204,7 @@ describe('what a hand can hold', () => {
     clearLadderCache();
     const swing = EXERCISES.find((e) => e.id === 'kb_swing');
     const carry = EXERCISES.find((e) => e.id === 'kb_suitcase_carry');
-    expect(ladderFor(swing as Exercise, gripped)).toEqual([1.5, 5, 10, 20]);
+    expect(ladderFor(swing as Exercise, gripped)).toEqual([1.25, 5, 10, 20]);
     /* A two-handed carry logs what is in each hand, so 10 each side is the
        10 rung — the number you can actually pick up. */
     expect(ladderFor(carry as Exercise, gripped)).toContain(10);
@@ -215,9 +218,9 @@ describe('what a hand can hold', () => {
     const zeroBar: Inventory = { ...gripped, barWeights: { free_bar: 0, smith: 0 } };
     const squat = ladderFor(EXERCISES.find((e) => e.id === 'bb_back_squat') as Exercise, zeroBar);
     const swing = ladderFor(EXERCISES.find((e) => e.id === 'kb_swing') as Exercise, zeroBar);
-    expect(swing).toEqual([1.5, 5, 10, 20]);
+    expect(swing).toEqual([1.25, 5, 10, 20]);
     expect(squat).not.toEqual(swing);
-    expect(Math.max(...squat)).toBe(86);
+    expect(Math.max(...squat)).toBe(85);
   });
 
   it('leaves a barbell lift alone — that one really is a bar and pairs', () => {
@@ -226,9 +229,9 @@ describe('what a hand can hold', () => {
     const rungs = ladderFor(squat as Exercise, gripped);
     expect(rungs[0]).toBe(20);
     expect(rungs).toContain(40);
-    /* 20 kg bar + 2x20 + 2x10 + 4x5 + 4x1.5 = 106, which is the whole rack on
-       one bar — right for a squat, absurd for a swing. */
-    expect(Math.max(...rungs)).toBe(106);
+    /* 20 kg bar + 2x20 + 2x10 + 4x5 + 4x1.25 = 105, which is the whole rack
+       on one bar — right for a squat, absurd for a swing. */
+    expect(Math.max(...rungs)).toBe(105);
   });
 });
 
@@ -260,6 +263,7 @@ describe('whose bar it is', () => {
     clearLadderCache();
     const ladder = ladderFor(find('bb_back_squat'), fifteen);
     expect(ladder[0]).toBe(15);
-    expect(ladder).not.toContain(20);
+    // A rung only the 20 kg bar can make: 20 + a 1.25 pair.
+    expect(ladder).not.toContain(22.5);
   });
 });

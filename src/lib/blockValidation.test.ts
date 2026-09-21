@@ -290,12 +290,13 @@ describe('rule h — start weights must be loadable', () => {
     p.days[0]!.exercises[0]!.startWeightKg = 27;
     const found = validateBlock(p, CONTEXT).find((v) => v.code === 'unloadable_weight');
     expect(found?.message).toMatch(/27 kg cannot be loaded/);
-    expect(found?.fix).toMatchObject({ kind: 'snap_weight', kg: 26 });
+    // Nearest real rung on the 1.25-plate ladder.
+    expect(found?.fix).toMatchObject({ kind: 'snap_weight', kg: 25 });
   });
 
   it('accepts a real rung', () => {
     const p = proposal([{ slot: 'A', weekday: 1, ids: ['bb_back_squat'] }]);
-    p.days[0]!.exercises[0]!.startWeightKg = 26;
+    p.days[0]!.exercises[0]!.startWeightKg = 22.5;
     expect(codes(p)).not.toContain('unloadable_weight');
   });
 });

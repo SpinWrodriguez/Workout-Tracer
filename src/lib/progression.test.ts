@@ -27,7 +27,7 @@ describe('Phase 2 acceptance — progression suggestion', () => {
    * These two used to expect 20 kg -> 23 kg with a microplate note, on a
    * hand-held ladder built from the symmetric pair maths. That ladder was
    * wrong: the plates in this garage have grips, so a hand holds one plate and
-   * the rungs are 1.5, 5, 10, 20. The interesting cases changed with it.
+   * the rungs are 1.25, 5, 10, 20. The interesting cases changed with it.
    */
   it('says a 20 kg goblet squat has nowhere heavier to go', () => {
     const history = session('s1', '2026-08-30', [
@@ -48,7 +48,7 @@ describe('Phase 2 acceptance — progression suggestion', () => {
     const history = session('s1', '2026-08-30', [{ weightKg: 10, reps: 10, rir: 3 }]);
     const result = suggestProgression({ ladder: GOBLET, history, repRangeLow: 8, repRangeHigh: 10 });
     /* 10 to 20 with nothing in between. The note is the honest reading of a
-       rack whose hand-held loads are 1.5, 5, 10, 20 — load progression on
+       rack whose hand-held loads are 1.25, 5, 10, 20 — load progression on
        these lifts is coarse, and reps are the lever. */
     expect(result.suggestedKg).toBe(20);
     expect(result.microplateNote).toMatch(/100%/);
@@ -61,9 +61,9 @@ describe('Phase 2 acceptance — progression suggestion', () => {
       { weightKg: 20, reps: 10, rir: 3 },
     ]);
     const result = suggestProgression({ ladder: FREE_BAR, history, repRangeLow: 8, repRangeHigh: 10 });
-    // Bar plus a pair of 1.5s. Not 22, not 24: those cannot be built.
+    // Bar plus a pair of 1.25s. Not 22, not 23: those cannot be built.
     expect(result.outcome).toBe('increase');
-    expect(result.suggestedKg).toBe(23);
+    expect(result.suggestedKg).toBe(22.5);
   });
 });
 
@@ -163,10 +163,10 @@ describe('progression rules (spec Phase 2)', () => {
   });
 
   it('stops at the ceiling instead of suggesting an unloadable weight', () => {
-    const history = session('s1', '2026-08-30', [{ weightKg: 96, reps: 10, rir: 3 }]);
+    const history = session('s1', '2026-08-30', [{ weightKg: 95, reps: 10, rir: 3 }]);
     const result = suggestProgression({ ladder: FREE_BAR, history, repRangeLow: 8, repRangeHigh: 10 });
     expect(result.outcome).toBe('ceiling');
-    expect(result.suggestedKg).toBe(96);
+    expect(result.suggestedKg).toBe(95);
   });
 
   it('always lands on a rung, never between them', () => {
@@ -188,7 +188,7 @@ describe('progression rules (spec Phase 2)', () => {
     const history = session('s1', '2026-08-30', [{ weightKg: 50, reps: 10, rpe: 7 }]);
     const result = suggestProgression({ ladder: FREE_BAR, history, repRangeLow: 8, repRangeHigh: 10 });
     expect(result.outcome).toBe('increase');
-    expect(result.suggestedKg).toBe(53);
+    expect(result.suggestedKg).toBe(52.5);
   });
 
   it('progresses reps, not load, for bodyweight work', () => {
