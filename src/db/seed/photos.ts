@@ -19,6 +19,7 @@
 /** Exercises with illustrations of their own, in the order the frames go. */
 export const ILLUSTRATED: string[] = [
   'bw_copenhagen_plank',
+  'cb_9090_row',
   'bw_neutral_pull_up',
   'bw_side_plank_reach',
   'cb_punch',
@@ -41,14 +42,14 @@ export const ILLUSTRATED: string[] = [
  * are made — a picture missing rather than a wrong picture shown.
  */
 export const AWAITING_ART: string[] = [
-  /* The Scheffler-program six: nothing upstream draws any of them, and the
-     audit rule says name that fact rather than let it be noticed. */
+  /* The Scheffler-program six, minus each one as its artwork lands: nothing
+     upstream draws any of them, and the audit rule says name that fact
+     rather than let it be noticed. */
   'lm_lunge_press',
   'kb_single_leg_chop',
   'mb_tspine_high_knee',
   'cb_split_squat_fly',
   'cb_split_pull_through',
-  'cb_9090_row',
 ];
 
 const set = new Set(ILLUSTRATED);
