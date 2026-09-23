@@ -67,14 +67,20 @@ interface LibraryRow {
   /** This exercise's own bounds. A Turkish get-up is 1-5; a plank is seconds. */
   reps: [number, number];
   unit: 'reps' | 'seconds';
+  /** Sessions in the last month that used it. Absent means none — most rows. */
+  usedLately?: number;
 }
 
-export function libraryFor(exercises: Exercise[]): LibraryRow[] {
+export function libraryFor(
+  exercises: Exercise[],
+  usage?: Map<string, number>,
+): LibraryRow[] {
   return exercises
     // Warm-up movement is never a programmed working set, so offering it only
     // invites a violation.
     .filter((exercise) => !exercise.isMobility)
     .map((exercise) => ({
+      ...(usage?.get(exercise.id) ? { usedLately: usage.get(exercise.id) } : {}),
       id: exercise.id,
       name: exercise.name,
       pattern: exercise.pattern,
@@ -114,6 +120,15 @@ Rules:
 - Use only \`id\` values from the library. Never invent an exercise, a name, or an id. An id that is not in the library fails the whole response.
 - Respect each exercise's own \`reps\` bounds and \`unit\`. A hold measured in seconds is not a number of reps.
 - The other workouts in the block are context, not a reservation list: an exercise used in one of them is still fully available here, and the staples earn their repetition — two upper-body workouts sharing a bench press is normal programming. What to avoid is a near-copy of an existing workout under a new name: make this one differ where the goal allows, in movements, angles or rep ranges. Never hand back a worse exercise only because a better one appears in another workout.
+- Program like a coach: mains repeat, accessories rotate. \`usedLately\` on a
+  library row is how many sessions used that exercise in the last month; absent
+  means none. Keep a staple that is mid-progression, but between accessories of
+  comparable quality prefer the one with lower \`usedLately\` — a library this
+  size should not return the same picks every run.
+- \`stalledExercises\`, where given, lists lifts that missed their rep range
+  twice at the same weight. A stall is the coach's cue to change the movement:
+  replace each stalled lift with a comparable one, unless the goal says to keep
+  it.
 - Read the goal for effort and emphasis and set \`focus\` and \`intensity\` from it. "Tired", "easy", "gentle" mean \`intensity: "light"\`. Trust the words: a request for an easy session is not an invitation to program a hard one differently.
 - \`effort.suggested\`, where given, is what the lifter last had selected on the workout sheet. It is a starting point and the goal outranks it. Start there when the goal says nothing about effort; ignore it when the goal does.
 - Obey every entry in \`constraints\` exactly. They are not preferences.
@@ -178,8 +193,8 @@ export function libraryForMuscles(exercises: Exercise[], muscles: string[]): Exe
   return sliced.length >= MIN_EXERCISES ? sliced : exercises;
 }
 
-export function buildSystem(exercises: Exercise[]): string {
-  return `${SYSTEM_PROMPT}\n\nLibrary:\n${JSON.stringify(libraryFor(exercises))}`;
+export function buildSystem(exercises: Exercise[], usage?: Map<string, number>): string {
+  return `${SYSTEM_PROMPT}\n\nLibrary:\n${JSON.stringify(libraryFor(exercises, usage))}`;
 }
 
 export function buildUser(goal: string, existing: ExistingWorkout[]): string {
@@ -386,6 +401,8 @@ export interface GenerateAiWorkoutInput {
    */
   user: string;
   exercises: Exercise[];
+  /** Sessions per exercise over the last month, for the library's usedLately. */
+  usage?: Map<string, number>;
   minutesPerSession?: number;
   /** Recomputes the proposal. Returns only what is still wrong with it. */
   validate: (workout: AiWorkout) => Violation[];
@@ -423,7 +440,7 @@ export type AiOutcome =
 export async function generateAiWorkout(input: GenerateAiWorkoutInput): Promise<AiOutcome> {
   const ask = input.ask ?? askModel;
   const byId = new Map(input.exercises.map((exercise) => [exercise.id, exercise]));
-  const system = buildSystem(input.exercises);
+  const system = buildSystem(input.exercises, input.usage);
   const user = input.user;
   const priorTurns: { role: 'assistant' | 'user'; content: string }[] = [];
 

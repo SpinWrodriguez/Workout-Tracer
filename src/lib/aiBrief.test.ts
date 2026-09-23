@@ -120,6 +120,17 @@ describe('the payload', () => {
     expect(briefPayload(buildBrief(covered), covered)).not.toHaveProperty('weeklyShortfall');
   });
 
+  it('names the stalled lifts, and says nothing when none are', () => {
+    const input = {
+      ...base,
+      stalled: [{ id: 'bb_bench_press', name: 'Bench press' }],
+    };
+    expect(briefPayload(buildBrief(input), input)).toMatchObject({
+      stalledExercises: [{ id: 'bb_bench_press', name: 'Bench press' }],
+    });
+    expect(briefPayload(buildBrief(base), base)).not.toHaveProperty('stalledExercises');
+  });
+
   it('passes standing instructions through when set', () => {
     const input = { ...base, instructions: 'Golf matters more than the gym.' };
     expect(briefPayload(buildBrief(input), input)).toMatchObject({

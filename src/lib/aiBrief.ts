@@ -118,6 +118,12 @@ export interface BriefInput {
   undertrained: UndertrainedMuscle[];
   existing: ExistingWorkout[];
   constraints?: DayConstraints;
+  /**
+   * Lifts the progression engine has flagged hold_review — missed the rep
+   * range twice at the same weight. The coach's cue to swap the movement,
+   * which the prompt states; the goal can still overrule it.
+   */
+  stalled?: { id: string; name: string }[];
 }
 
 export interface Brief {
@@ -237,6 +243,9 @@ export function briefPayload(brief: Brief, input: BriefInput): Record<string, un
             fairSharePerWeek: input.share ?? VOLUME_LOW,
           })),
         }
+      : {}),
+    ...(input.stalled && input.stalled.length > 0
+      ? { stalledExercises: input.stalled }
       : {}),
     existingWorkouts: input.existing.map((workout) => ({
       name: workout.name,

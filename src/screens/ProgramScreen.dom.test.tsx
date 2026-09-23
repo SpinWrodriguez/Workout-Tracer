@@ -1140,6 +1140,31 @@ describe('which week is on screen', () => {
 });
 
 describe('what a workout card says about itself', () => {
+  it('nudges when a lift has stalled — two misses at the same weight', async () => {
+    /* The coach's cue to change an exercise, said where rebuilding happens.
+       hold_review is the progression engine's own stall flag; this pins the
+       plumbing from the logs to the card. */
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Upper Push' } });
+    await seedWorkout('A', ['bb_bench_press']);
+    for (const [id, date, reps] of [
+      ['s1', shiftIso(todayIso(), -14), 6],
+      ['s2', shiftIso(todayIso(), -7), 7],
+    ] as const) {
+      await db.session.put({ id, blockId: BLOCK_ID, daySlot: 'A', date, durationMin: 30 });
+      await db.setLog.put({
+        sessionId: id,
+        exerciseId: 'bb_bench_press',
+        setNo: 1,
+        weightKg: 60,
+        effectiveKg: 60,
+        reps,
+      });
+    }
+
+    await openProgram();
+    await screen.findByText(/Stalled: Bench press/);
+  });
+
   /** A finished session for a slot, on a date. */
   async function logFor(slot: string, name: string, date: string) {
     await db.session.put({

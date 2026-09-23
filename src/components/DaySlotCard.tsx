@@ -100,6 +100,7 @@ export function DaySlotCard({
   isToday,
   doneThisWeek = false,
   timesDone = 0,
+  stalledNames = [],
   onToggleEdit,
   onStart,
   onAdd,
@@ -140,6 +141,12 @@ export function DaySlotCard({
   doneThisWeek?: boolean;
   /** How many times it has ever been done. Zero for one never trained. */
   timesDone?: number;
+  /**
+   * Lifts in this workout the progression engine has flagged hold_review —
+   * missed the rep range twice at the same weight. A coach changes an exercise
+   * for a reason; this is the reason, surfaced where rebuilding happens.
+   */
+  stalledNames?: string[];
   onToggleEdit: () => void;
   onStart: () => void;
   onAdd: () => void;
@@ -248,6 +255,20 @@ export function DaySlotCard({
           }}
         >
           {note}
+        </p>
+      )}
+
+      {/* The stall nudge. Advice, not a problem banner: holding a weight for a
+          third try is a legitimate call, so this informs the rebuild decision
+          rather than demanding one. */}
+      {stalledNames.length > 0 && (
+        <p
+          className="mb-1 rounded-xl px-3 py-2 text-[12px] leading-snug font-medium"
+          style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-dim)' }}
+        >
+          Stalled: {stalledNames.join(', ')} — missed the rep range twice at the same weight.
+          Worth swapping {stalledNames.length === 1 ? 'it' : 'them'} or asking AI to rebuild
+          this workout.
         </p>
       )}
 

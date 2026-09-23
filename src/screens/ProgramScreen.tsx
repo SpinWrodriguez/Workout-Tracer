@@ -59,6 +59,7 @@ import {
   type AiWorkout,
 } from '../lib/aiWorkout';
 import { matchExistingWorkouts } from '../lib/weekReuse';
+import { stalledExerciseIds, usageByExercise } from '../lib/coachSignals';
 import { briefPayload, buildBrief, undertrained, type DayConstraints } from '../lib/aiBrief';
 import { readAiInstructions, writeLastModelCall } from '../db/settings';
 import { DaySlotCard } from '../components/DaySlotCard';
@@ -229,6 +230,14 @@ export function ProgramScreen({
     const logs = (await db.setLog.toArray()).filter((log) => ids.has(log.sessionId));
     return undertrained(logs, byId, share, 6, 4);
   }, [byId, share]);
+
+  /* Stalled lifts across the block, for the card nudge: a coach changes an
+     exercise for a reason, and this is the reason, said where rebuilding
+     actually happens. */
+  const stalledInBlock = useLiveQuery(
+    async () => (slots && slots.length > 0 ? stalledExerciseIds(slots, byId, inventory) : []),
+    [slots, byId, inventory],
+  );
   const shape = training.shape;
 
   useEffect(() => {
@@ -701,6 +710,16 @@ export function ProgramScreen({
     const sessionIds = new Set(recentSessions.map((session) => session.id));
     const recentLogs = (await db.setLog.toArray()).filter((log) => sessionIds.has(log.sessionId));
 
+    /* The coach signals: which exercises the last month leaned on (so the
+       model can rotate accessories rather than re-serve them), and which of
+       the block's lifts have stalled (the cue to swap a movement). */
+    const usage = usageByExercise(recentLogs);
+    const stalledIds = await stalledExerciseIds(current, byId, inventory);
+    const stalled = stalledIds
+      .map((id) => byId.get(id))
+      .filter((exercise): exercise is Exercise => exercise !== undefined)
+      .map((exercise) => ({ id: exercise.id, name: exercise.name }));
+
     /*
      * A workout made here has no day yet, which is the whole design: placement
      * is a separate act on the calendar and the model never sees a date. The
@@ -730,6 +749,14 @@ export function ProgramScreen({
     const instructions = await readAiInstructions();
     const short = undertrained(recentLogs, byId, share, 6, 4);
     const brief = buildBrief({ share, goal: want.goal, instructions, undertrained: short, existing, constraints });
+    const briefInput = {
+      goal: want.goal,
+      instructions,
+      undertrained: short,
+      existing,
+      constraints,
+      stalled,
+    };
 
     /*
      * The shape the day was ASKED for, which is what it is judged against. A
@@ -764,10 +791,9 @@ export function ProgramScreen({
     const outcome = await generateAiWorkout({
       blockId: block.id,
       slot,
-      user: JSON.stringify(
-        briefPayload(brief, { goal: want.goal, instructions, undertrained: short, existing, constraints }),
-      ),
+      user: JSON.stringify(briefPayload(brief, briefInput)),
       exercises: available,
+      usage,
       validate: (workout: AiWorkout) => {
         const shaped = requiredShape(workout);
         const template = templateForAiWorkout(shaped, slot, sessionMinutes);
@@ -1189,6 +1215,10 @@ export function ProgramScreen({
             isToday={date === todayIso()}
             doneThisWeek={doneThisWeek}
             timesDone={timesDoneBySlot?.(slot, labelFor(slot)) ?? 0}
+            stalledNames={(stalledInBlock ?? [])
+              .filter((id) => list.some((entry) => entry.exerciseId === id))
+              .map((id) => byId.get(id)?.name)
+              .filter((name): name is string => name !== undefined)}
             intensity={scheduled?.intensity ?? 'heavy'}
             onToggleEdit={() => setEditingSlot(isEditing ? null : slot)}
             onStart={() => onStartDay(slot)}

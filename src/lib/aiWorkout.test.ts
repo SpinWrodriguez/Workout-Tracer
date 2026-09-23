@@ -90,6 +90,23 @@ function objectsClosed(node: unknown): boolean {
   return Object.values(record).every(objectsClosed);
 }
 
+describe('what a library row says about the last month', () => {
+  it('carries usedLately only where there is usage to report', () => {
+    const usage = new Map([['bb_bench_press', 4]]);
+    const rows = libraryFor(EXERCISES, usage);
+    const bench = rows.find((row) => row.id === 'bb_bench_press');
+    const squat = rows.find((row) => row.id === 'bb_back_squat');
+    expect(bench?.usedLately).toBe(4);
+    // Absent, not zero: most rows are untouched and zeros would be tokens.
+    expect(squat && 'usedLately' in squat).toBe(false);
+  });
+
+  it('says nothing at all when no usage map is given', () => {
+    const rows = libraryFor(EXERCISES);
+    expect(rows.every((row) => !('usedLately' in row))).toBe(true);
+  });
+});
+
 describe('how much library a workout is shown', () => {
   /*
    * The prompt forbids anything outside the focus's patterns, so sending the
