@@ -17,6 +17,7 @@ import type { ExerciseMetric, ExercisePoint } from '../components/Charts';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ExerciseDetail } from '../components/ExerciseDetail';
 import { pillLabel, slotFallback } from '../lib/dayLabel';
+import { prEvents } from '../lib/prs';
 import { MonthGrid } from '../components/MonthGrid';
 
 /*
@@ -177,6 +178,15 @@ export function HistoryScreen({
     [],
   );
 
+  /* Days whose session set a record, replayed from the whole log each time —
+     a record is a fact about the past, cheap to recompute at this size. */
+  const prDates = useLiveQuery(async () => {
+    const logs = await db.setLog.toArray();
+    const sessions = await db.session.toArray();
+    const dateBySession = new Map(sessions.map((session) => [session.id, session.date]));
+    return new Set(prEvents(logs, dateBySession, byId).keys());
+  }, [byId]);
+
   /* The data's own edges. summaries are newest first, so the last is the
      oldest — and with nothing logged, the current month is the only one. */
   const earliestMonth = (summaries?.at(-1)?.session.date ?? todayIso()).slice(0, 7);
@@ -285,6 +295,7 @@ export function HistoryScreen({
           sessionCountByDate={sessionCountByDate}
           labelByDate={labelByDate}
           golfDates={golfDates ?? new Set()}
+          prDates={prDates}
           canGoBack={monthAnchor.slice(0, 7) > earliestMonth}
           canGoForward={monthAnchor.slice(0, 7) < currentMonth}
           onShift={(delta) => setMonthAnchor(shiftMonth(monthAnchor, delta))}

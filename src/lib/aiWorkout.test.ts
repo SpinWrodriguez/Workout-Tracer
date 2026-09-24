@@ -101,6 +101,13 @@ describe('what a library row says about the last month', () => {
     expect(squat && 'usedLately' in squat).toBe(false);
   });
 
+  it("carries the lifter's own note, truncated, only where one exists", () => {
+    const rows = libraryFor(EXERCISES, undefined, { bb_bench_press: 'x'.repeat(300) });
+    const bench = rows.find((row) => row.id === 'bb_bench_press');
+    expect(bench?.note).toHaveLength(140);
+    expect(rows.find((row) => row.id === 'bb_back_squat' && 'note' in row)).toBeUndefined();
+  });
+
   it('says nothing at all when no usage map is given', () => {
     const rows = libraryFor(EXERCISES);
     expect(rows.every((row) => !('usedLately' in row))).toBe(true);

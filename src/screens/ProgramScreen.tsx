@@ -61,7 +61,7 @@ import {
 import { matchExistingWorkouts } from '../lib/weekReuse';
 import { stalledExerciseIds, usageByExercise } from '../lib/coachSignals';
 import { briefPayload, buildBrief, undertrained, type DayConstraints } from '../lib/aiBrief';
-import { readAiInstructions, writeLastModelCall } from '../db/settings';
+import { readAiInstructions, readExerciseNotes, writeLastModelCall } from '../db/settings';
 import { DaySlotCard } from '../components/DaySlotCard';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ExerciseDetail } from '../components/ExerciseDetail';
@@ -712,6 +712,7 @@ export function ProgramScreen({
        model can rotate accessories rather than re-serve them), and which of
        the block's lifts have stalled (the cue to swap a movement). */
     const usage = usageByExercise(recentLogs);
+    const notes = await readExerciseNotes();
     const stalledIds = await stalledExerciseIds(current, byId, inventory);
     const stalled = stalledIds
       .map((id) => byId.get(id))
@@ -792,6 +793,7 @@ export function ProgramScreen({
       user: JSON.stringify(briefPayload(brief, briefInput)),
       exercises: available,
       usage,
+      notes,
       validate: (workout: AiWorkout) => {
         const shaped = requiredShape(workout);
         const template = templateForAiWorkout(shaped, slot, sessionMinutes);

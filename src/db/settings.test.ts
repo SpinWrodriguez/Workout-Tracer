@@ -6,10 +6,13 @@ import {
   DEFAULT_TRAINING,
   MAX_MAX_RPE,
   MAX_MEMORY_NOTES,
+  MAX_EXERCISE_NOTE_CHARS,
   MAX_MEMORY_NOTE_CHARS,
   MIN_MAX_RPE,
   addCoachMemory,
   deleteCoachMemory,
+  readExerciseNotes,
+  writeExerciseNote,
   mergeTraining,
   readCoachMemory,
 } from './settings';
@@ -77,5 +80,22 @@ describe('coach memory', () => {
     const kept = await readCoachMemory();
     expect(kept).toHaveLength(1);
     expect(kept[0]?.note).toBe('good');
+  });
+});
+
+describe('the lifter\'s own exercise notes', () => {
+  it('round-trips a note, trims it, and deletes on empty', async () => {
+    await writeExerciseNote('bb_bench_press', '  elbows in or the shoulder clicks  ');
+    expect((await readExerciseNotes())['bb_bench_press']).toBe(
+      'elbows in or the shoulder clicks',
+    );
+
+    await writeExerciseNote('bb_bench_press', '   ');
+    expect(await readExerciseNotes()).not.toHaveProperty('bb_bench_press');
+  });
+
+  it('caps a note at the limit rather than storing an essay', async () => {
+    await writeExerciseNote('bb_back_squat', 'x'.repeat(500));
+    expect((await readExerciseNotes())['bb_back_squat']).toHaveLength(MAX_EXERCISE_NOTE_CHARS);
   });
 });

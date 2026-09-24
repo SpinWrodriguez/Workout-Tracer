@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Exercise } from '../db/types';
-import { readInventory } from '../db/settings';
+import { MAX_EXERCISE_NOTE_CHARS, readExerciseNotes, readInventory, writeExerciseNote } from '../db/settings';
 import { DEFAULT_INVENTORY, barWeightFor } from '../lib/loadable';
 import { STATION_LABEL } from '../db/seed/exercises';
 import { muscleName } from '../db/seed/muscles';
@@ -54,6 +54,8 @@ export function ExerciseDetail({
   /* Read here rather than passed in: this sheet opens from four screens and
      the bar in the garage is the same bar on all of them. */
   const inventory = useLiveQuery(() => readInventory(), [], DEFAULT_INVENTORY);
+  // undefined while loading; the textarea keys on it so the draft is not wiped.
+  const myNote = useLiveQuery(async () => (await readExerciseNotes())[exercise.id] ?? '', [exercise.id]);
   const bar = barWeightFor(exercise, inventory);
 
   // `undefined` while loading, `null` once we know there is nothing to show.
@@ -87,6 +89,22 @@ export function ExerciseDetail({
           <p className="mt-1.5 text-[15px] leading-snug">{cue}</p>
         </div>
       )}
+
+      {/* The lifter's own words, above everything seeded: "elbows in or the
+          shoulder clicks" is about THIS body. Shown mid-set in the session and
+          carried into the generator's library. Saved as it is typed left. */}
+      <div className="mt-3 rounded-2xl bg-surface p-4">
+        <Label>My note</Label>
+        <textarea
+          rows={2}
+          maxLength={MAX_EXERCISE_NOTE_CHARS}
+          defaultValue={myNote ?? ''}
+          key={myNote === undefined ? 'loading' : exercise.id}
+          onBlur={(event) => void writeExerciseNote(exercise.id, event.target.value)}
+          placeholder="Your own cue — a setup fact, a pain warning…"
+          className="mt-1.5 w-full resize-none rounded-xl bg-surface-2 px-3 py-2 text-[14px] placeholder:text-text-faint"
+        />
+      </div>
 
       <div className="mt-3 rounded-2xl bg-surface p-4">
         <Label>Setup</Label>

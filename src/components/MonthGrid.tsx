@@ -42,6 +42,7 @@ export function MonthGrid({
   sessionCountByDate,
   labelByDate,
   golfDates,
+  prDates,
   canGoBack,
   canGoForward,
   onShift,
@@ -55,6 +56,8 @@ export function MonthGrid({
   /** Pill-short workout initials per date, the newest session's where two share a day. */
   labelByDate: Map<string, string>;
   golfDates: Set<string>;
+  /** Days whose session set a personal record — see lib/prs.ts. */
+  prDates?: Set<string>;
   /** Sessions in the CURRENT week, for the example's "N this week" line. */
   weekCount: number;
   /** False past the edge of the data, so the arrows never walk into a void. */
@@ -119,6 +122,7 @@ export function MonthGrid({
           const inMonth = date.startsWith(month);
           const sessions = sessionCountByDate.get(date) ?? 0;
           const golf = golfDates.has(date);
+          const pr = prDates?.has(date) ?? false;
           const isToday = date === today;
 
           /* Days of the neighbouring months render as gaps, not as dimmer
@@ -134,7 +138,7 @@ export function MonthGrid({
               onClick={() => onPickDay(date)}
               aria-label={`${WEEKDAY_LABEL[weekdayOf(date)]} ${date}${
                 sessions > 0 ? `, ${sessions} ${sessions === 1 ? 'session' : 'sessions'}` : ''
-              }${golf ? ', golf' : ''}`}
+              }${golf ? ', golf' : ''}${pr ? ', personal best' : ''}`}
               className={`relative flex size-7 items-center justify-center rounded-md ${
                 sessions > 0
                   ? 'bg-cta text-bg'
@@ -150,6 +154,15 @@ export function MonthGrid({
                 <span className="px-0.5 text-[8px] leading-none font-bold tracking-tight">
                   {labelByDate.get(date)}
                 </span>
+              )}
+              {/* A record day gets one small mark in the strength colour —
+                  the calendar's version of the caddie line saying it. */}
+              {pr && (
+                <span
+                  aria-hidden="true"
+                  className="absolute top-0.5 right-0.5 size-1 rounded-full"
+                  style={{ background: 'var(--color-strength)' }}
+                />
               )}
               {/* The round is the dot, exactly as on the week strip. */}
               {golf && (

@@ -69,11 +69,14 @@ interface LibraryRow {
   unit: 'reps' | 'seconds';
   /** Sessions in the last month that used it. Absent means none — most rows. */
   usedLately?: number;
+  /** The lifter's own words about this movement — a pain cue, a setup fact. */
+  note?: string;
 }
 
 export function libraryFor(
   exercises: Exercise[],
   usage?: Map<string, number>,
+  notes?: Record<string, string>,
 ): LibraryRow[] {
   return exercises
     // Warm-up movement is never a programmed working set, so offering it only
@@ -81,6 +84,7 @@ export function libraryFor(
     .filter((exercise) => !exercise.isMobility)
     .map((exercise) => ({
       ...(usage?.get(exercise.id) ? { usedLately: usage.get(exercise.id) } : {}),
+      ...(notes?.[exercise.id] ? { note: notes[exercise.id]?.slice(0, 140) } : {}),
       id: exercise.id,
       name: exercise.name,
       pattern: exercise.pattern,
@@ -120,6 +124,9 @@ Rules:
 - Use only \`id\` values from the library. Never invent an exercise, a name, or an id. An id that is not in the library fails the whole response.
 - Respect each exercise's own \`reps\` bounds and \`unit\`. A hold measured in seconds is not a number of reps.
 - The other workouts in the block are context, not a reservation list: an exercise used in one of them is still fully available here, and the staples earn their repetition — two upper-body workouts sharing a bench press is normal programming. What to avoid is a near-copy of an existing workout under a new name: make this one differ where the goal allows, in movements, angles or rep ranges. Never hand back a worse exercise only because a better one appears in another workout.
+- \`note\` on a library row is the lifter's own words about that movement — a
+  pain warning or a setup fact. Respect it absolutely: never program against
+  what it says, and let it shape sets and ranges where it speaks to them.
 - Program like a coach: mains repeat, accessories rotate. \`usedLately\` on a
   library row is how many sessions used that exercise in the last month; absent
   means none. Keep a staple that is mid-progression, but between accessories of
@@ -193,8 +200,12 @@ export function libraryForMuscles(exercises: Exercise[], muscles: string[]): Exe
   return sliced.length >= MIN_EXERCISES ? sliced : exercises;
 }
 
-export function buildSystem(exercises: Exercise[], usage?: Map<string, number>): string {
-  return `${SYSTEM_PROMPT}\n\nLibrary:\n${JSON.stringify(libraryFor(exercises, usage))}`;
+export function buildSystem(
+  exercises: Exercise[],
+  usage?: Map<string, number>,
+  notes?: Record<string, string>,
+): string {
+  return `${SYSTEM_PROMPT}\n\nLibrary:\n${JSON.stringify(libraryFor(exercises, usage, notes))}`;
 }
 
 export function buildUser(goal: string, existing: ExistingWorkout[]): string {
@@ -403,6 +414,8 @@ export interface GenerateAiWorkoutInput {
   exercises: Exercise[];
   /** Sessions per exercise over the last month, for the library's usedLately. */
   usage?: Map<string, number>;
+  /** The lifter's own per-exercise notes, for the library's note field. */
+  notes?: Record<string, string>;
   minutesPerSession?: number;
   /** Recomputes the proposal. Returns only what is still wrong with it. */
   validate: (workout: AiWorkout) => Violation[];
@@ -440,7 +453,7 @@ export type AiOutcome =
 export async function generateAiWorkout(input: GenerateAiWorkoutInput): Promise<AiOutcome> {
   const ask = input.ask ?? askModel;
   const byId = new Map(input.exercises.map((exercise) => [exercise.id, exercise]));
-  const system = buildSystem(input.exercises, input.usage);
+  const system = buildSystem(input.exercises, input.usage, input.notes);
   const user = input.user;
   const priorTurns: { role: 'assistant' | 'user'; content: string }[] = [];
 

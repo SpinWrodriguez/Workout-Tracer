@@ -18,6 +18,7 @@ import {
 import {
   clearActiveSession,
   readActiveSession,
+  readExerciseNotes,
   readInventory,
   writeActiveSession,
 } from '../db/settings';
@@ -123,6 +124,7 @@ export function SessionScreen({
   const [history, setHistory] = useState<Record<string, SetLog[]>>({});
   const [allHistory, setAllHistory] = useState<Record<string, HistorySet[]>>({});
   const [inventory, setInventory] = useState<Inventory>(DEFAULT_INVENTORY);
+  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({});
   const [plan, setPlan] = useState<BlockPlan | undefined>(undefined);
   const [golfDates, setGolfDates] = useState<string[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
@@ -139,6 +141,10 @@ export function SessionScreen({
     let cancelled = false;
     void readInventory().then((next) => {
       if (!cancelled) setInventory(next);
+    });
+    /* The lifter's own per-exercise cues, shown beside the seeded labels. */
+    void readExerciseNotes().then((next) => {
+      if (!cancelled) setExerciseNotes(next);
     });
     void db.golfDay.toArray().then((rows) => {
       if (!cancelled) setGolfDates(rows.map((row) => row.date));
@@ -847,6 +853,14 @@ export function SessionScreen({
               )}
               {activeExercise.isHinge && <Label>hinge — do this fresh</Label>}
             </div>
+
+            {/* The lifter's own cue, in their own words, where it is needed:
+                mid-set. One line; edited from the exercise detail sheet. */}
+            {exerciseNotes[activeExercise.id] && (
+              <p className="-mt-1 mb-3 text-[13px] italic text-text-dim">
+                &ldquo;{exerciseNotes[activeExercise.id]}&rdquo;
+              </p>
+            )}
 
             {suggestion && (
               <button

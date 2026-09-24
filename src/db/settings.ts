@@ -381,3 +381,34 @@ export async function deleteCoachMemory(id: string): Promise<void> {
   const kept = (await readCoachMemory()).filter((note) => note.id !== id);
   await writeCoachMemory(kept);
 }
+
+/* -------------------------------------------------------------------------- */
+/*  The lifter's own words about an exercise.                                 */
+/*                                                                            */
+/*  "Elbows in or the shoulder clicks" is worth more than any seeded cue,      */
+/*  because it is about THIS body. Shown in the session next to the cues, and  */
+/*  carried into the generator's library so a movement's quirk becomes data    */
+/*  every future workout is built around. Rides in backups like any setting.   */
+/* -------------------------------------------------------------------------- */
+
+export const EXERCISE_NOTES_KEY = 'exerciseNotes';
+export const MAX_EXERCISE_NOTE_CHARS = 200;
+
+export async function readExerciseNotes(): Promise<Record<string, string>> {
+  const row = await db.settings.get(EXERCISE_NOTES_KEY);
+  if (!isRecord(row?.value)) return {};
+  const out: Record<string, string> = {};
+  for (const [id, note] of Object.entries(row.value)) {
+    if (typeof note === 'string' && note.trim()) out[id] = note.slice(0, MAX_EXERCISE_NOTE_CHARS);
+  }
+  return out;
+}
+
+/** Writes one note; an emptied note is deleted rather than stored as ''. */
+export async function writeExerciseNote(exerciseId: string, note: string): Promise<void> {
+  const notes = await readExerciseNotes();
+  const trimmed = note.trim().slice(0, MAX_EXERCISE_NOTE_CHARS);
+  if (trimmed) notes[exerciseId] = trimmed;
+  else delete notes[exerciseId];
+  await db.settings.put({ key: EXERCISE_NOTES_KEY, value: notes });
+}

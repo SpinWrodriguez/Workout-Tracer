@@ -12,7 +12,7 @@ import {
   weekStart,
 } from '../lib/format';
 import { linearTrend, rollingAverage, type DatedPoint } from '../lib/stats';
-import { WEEKDAY_LABEL } from '../lib/golf';
+import { WEEKDAY_LABEL, weekdayOf } from '../lib/golf';
 import { readWeekPlan } from '../lib/weekPlan';
 import { WEEKLY_SET_TARGET, sessionMinutes } from '../lib/blockValidation';
 import { readTimeFactor, realMinutes } from '../lib/timeModel';
@@ -24,6 +24,8 @@ import { ThemeToggleButton } from '../components/ThemePicker';
 import { Ring } from '../components/Ring';
 import { SyncWarning } from '../components/SyncWarning';
 import { dayLabel, slotFallback } from '../lib/dayLabel';
+import { caddieLine } from '../lib/caddie';
+import { describePr, prEvents, type PrEvent } from '../lib/prs';
 
 /**
  * Fallbacks for a week with nothing planned in it: a realistic two-session
@@ -170,6 +172,70 @@ export function DashboardScreen({
   const average = rollingAverage(points, 7);
   const trend = linearTrend(points);
 
+  /* The caddie line: one deterministic sentence about today, assembled from
+     the plan, the log and the golf calendar. Never a model, never more than a
+     sentence — see lib/caddie.ts. */
+  const caddie = useLiveQuery(async () => {
+    const today = todayIso();
+    const tomorrow = shiftIso(today, 1);
+    const golf = await db.golfDay.where('date').anyOf([today, tomorrow]).toArray();
+
+    const todaySessions = await db.session.where('date').equals(today).toArray();
+    const trainedSession = todaySessions.at(-1);
+    const trainedToday = trainedSession
+      ? (trainedSession.daySlotName ?? slotFallback(trainedSession.daySlot))
+      : undefined;
+
+    /* A PR only matters on the line the day it happened. Replaying the whole
+       log is cheap at this size and keeps the record a fact, not a cache. */
+    let pr: string | undefined;
+    if (trainedSession) {
+      const logs = await db.setLog.toArray();
+      const sessions = await db.session.toArray();
+      const dateBySession = new Map(sessions.map((session) => [session.id, session.date]));
+      const events = prEvents(logs, dateBySession, byId).get(today);
+      if (events && events.length > 0) {
+        const biggest = events[events.length - 1] as PrEvent;
+        pr = describePr(biggest, byId);
+      }
+    }
+
+    return { golfToday: golf.some((d) => d.date === today), golfTomorrow: golf.some((d) => d.date === tomorrow), trainedToday, pr };
+    /* Keyed on the exercises array, not the byId map: the map is rebuilt every
+       render and identity-keyed deps would re-run the query per render. */
+  }, [exercises]);
+
+  const caddieText = (() => {
+    if (!caddie || program === undefined) return undefined;
+    const today = program?.today ?? todayIso();
+    const nameOf = (day: (typeof programDays)[number]) =>
+      dayLabel({
+        slot: day.slot,
+        name: day.name,
+        exercises: day.entries
+          .map((entry) => byId.get(entry.exerciseId))
+          .filter((exercise): exercise is Exercise => exercise !== undefined),
+        intensity: day.intensity,
+      });
+    const todayPlan = programDays.find((day) => day.date === today && !day.done);
+    const upcoming = programDays
+      .filter((day) => day.date !== undefined && day.date > today && !day.done)
+      .sort((a, b) => (a.date as string).localeCompare(b.date as string))[0];
+    return caddieLine({
+      golfToday: caddie.golfToday,
+      golfTomorrow: caddie.golfTomorrow,
+      trainedToday: caddie.trainedToday,
+      pr: caddie.pr,
+      plannedToday: todayPlan
+        ? { name: nameOf(todayPlan), light: todayPlan.intensity === 'light' }
+        : undefined,
+      next: upcoming
+        ? { name: nameOf(upcoming), weekday: WEEKDAY_LABEL[weekdayOf(upcoming.date as string)] }
+        : undefined,
+      weekEmpty: programDays.every((day) => day.date === undefined),
+    });
+  })();
+
   return (
     <Screen
       title="Dashboard"
@@ -195,6 +261,11 @@ export function DashboardScreen({
       }
     >
       <SyncWarning onOpenSettings={onOpenSettings} />
+
+      {/* One sentence, then the data. It reads like a caddie, not a report. */}
+      {caddieText && (
+        <p className="mb-3 text-[14px] leading-snug font-medium">{caddieText}</p>
+      )}
 
       {programDays.length > 0 && (
         <Card title="Your week" className="mb-3">
