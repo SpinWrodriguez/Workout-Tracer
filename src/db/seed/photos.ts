@@ -28,6 +28,7 @@ export const ILLUSTRATED: string[] = [
   'kb_bulgarian_split',
   'kb_cossack_squat',
   'kb_overhead_carry',
+  'lm_lunge_press',
   'lm_rotational_press',
   'lm_scoop',
   'lm_squat_to_press',
@@ -46,7 +47,6 @@ export const AWAITING_ART: string[] = [
   /* The Scheffler-program six, minus each one as its artwork lands: nothing
      upstream draws any of them, and the audit rule says name that fact
      rather than let it be noticed. */
-  'lm_lunge_press',
   'kb_single_leg_chop',
   'mb_tspine_high_knee',
   'cb_split_squat_fly',
