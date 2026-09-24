@@ -1,7 +1,7 @@
 /* -------------------------------------------------------------------------- */
 /*  Illustrations for the movements nothing upstream has.                     */
 /*                                                                           */
-/*  Eleven exercises have no record in free-exercise-db, so no photo comes    */
+/*  These exercises have no record in free-exercise-db, so no photo comes    */
 /*  with them and none can be borrowed: an audit of all 876 upstream records  */
 /*  found either nothing or a different movement wearing a similar name, and  */
 /*  the only licensable stock for them is watermarked or share-alike.         */
@@ -12,8 +12,8 @@
 /*  changes. 361 KB for the set, against 26 MB of sources.                    */
 /*                                                                           */
 /*  Served from public/ rather than imported, so the filename is the contract */
-/*  and adding a pair for a twelfth exercise is a file drop plus one line     */
-/*  here. BASE_URL because GitHub Pages serves this from a subpath.           */
+/*  and adding a pair for a new exercise is a file drop plus one line here.   */
+/*  BASE_URL because GitHub Pages serves this from a subpath.                 */
 /* -------------------------------------------------------------------------- */
 
 /** Exercises with illustrations of their own, in the order the frames go. */
@@ -24,6 +24,7 @@ export const ILLUSTRATED: string[] = [
   'bw_side_plank_reach',
   'cb_punch',
   'cb_rotational_row',
+  'cb_split_pull_through',
   'kb_bulgarian_split',
   'kb_cossack_squat',
   'kb_overhead_carry',
@@ -49,7 +50,6 @@ export const AWAITING_ART: string[] = [
   'kb_single_leg_chop',
   'mb_tspine_high_knee',
   'cb_split_squat_fly',
-  'cb_split_pull_through',
 ];
 
 const set = new Set(ILLUSTRATED);
