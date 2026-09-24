@@ -11,7 +11,6 @@ const heavyMonday = (slot: DaySlot = 'A') =>
     slot,
     weekday: 1,
     intensity: 'heavy',
-    shape: 'mixed',
     minutesPerSession: 40,
     golfWeekdays: GOLF as never,
   });

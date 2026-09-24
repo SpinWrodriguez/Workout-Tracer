@@ -12,9 +12,6 @@ import {
 } from '../db/settings';
 import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
 import {
-  SESSION_SHAPES,
-  SESSION_SHAPE_HINT,
-  SESSION_SHAPE_LABEL,
 } from '../lib/weekTemplate';
 import { Card, Chip, Label, SegmentedToggle } from './Layout';
 
@@ -117,17 +114,6 @@ export function TrainingPrefsEditor() {
           ? 'Your sessions are timed against an estimate of 40s a set plus rest. After three logged workouts it starts using your real pace instead.'
           : `Your sessions run at ${Math.round(factor * 100)}% of the estimate, so workouts are built to ${budgetMinutes(prefs.sessionMinutes, factor)} estimate-minutes to land on ${prefs.sessionMinutes}.`}
       </Label>
-
-      <Label className="mt-4 block">Split</Label>
-      <div className="mt-1.5">
-        <SegmentedToggle
-          options={SESSION_SHAPES}
-          value={prefs.shape}
-          onChange={(next) => patch({ shape: next })}
-          labels={SESSION_SHAPE_LABEL}
-        />
-      </div>
-      <Label className="mt-1.5 block">{SESSION_SHAPE_HINT[prefs.shape]}</Label>
 
       <Label className="mt-4 block">Weekly set target</Label>
       <div className="mt-1.5 flex items-center gap-2">

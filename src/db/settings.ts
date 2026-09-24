@@ -77,12 +77,6 @@ export interface TrainingPrefs {
   weeklySetTarget: number;
   sessionMinutes: number;
   /**
-   * What the heavy days train. Stored rather than derived because, unlike the
-   * number of sessions and which are heavy, nothing in the schedule records
-   * it — two heavy days look identical whichever split produced them.
-   */
-  shape: 'mixed' | 'upper_lower';
-  /**
    * The hardest a working set should be, as RPE. 8 leaves two reps in reserve,
    * 9 leaves one, 10 is failure.
    *
@@ -102,7 +96,6 @@ export const DEFAULT_TRAINING: TrainingPrefs = {
   golfWeekdays: [6],
   weeklySetTarget: 33,
   sessionMinutes: 40,
-  shape: 'mixed',
   /* 9 — one rep in reserve on the hardest set. Not 10: training to failure
      every set is what the standing instructions already ask against, and a
      default nobody chose should be the sustainable one. */
@@ -127,7 +120,6 @@ export function mergeTraining(value: unknown): TrainingPrefs {
       Number.isFinite(minutes) && minutes > 0
         ? Math.round(minutes)
         : DEFAULT_TRAINING.sessionMinutes,
-    shape: value.shape === 'upper_lower' ? 'upper_lower' : DEFAULT_TRAINING.shape,
     /* Clamped rather than trusted: a stored 12 would reach the prompt as a
        ceiling above failure, which is no ceiling at all. */
     maxRpe: Number.isFinite(rpe)

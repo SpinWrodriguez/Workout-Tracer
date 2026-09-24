@@ -57,13 +57,8 @@ export const LIGHT_DAY_CUE = 'Leave 3-4 reps in the tank';
 /* -------------------------------------------------------------------------- */
 /*  Shape: what the two heavy days train.                                     */
 /*                                                                            */
-/*  The template still owns WHEN a session happens and HOW HARD it is. This    */
-/*  is the one thing left worth choosing — whether the heavy pair splits by    */
-/*  movement or by half of the body. Placement stays in code either way, so    */
-/*  no scheduling bug can come back through it.                               */
+/*  The template still owns WHEN a session happens and HOW HARD it is.        */
 /* -------------------------------------------------------------------------- */
-
-export type SessionShape = 'mixed' | 'upper_lower';
 
 /* -------------------------------------------------------------------------- */
 /*  What one workout trains.                                                  */
@@ -172,36 +167,18 @@ export function workoutTemplate({
   };
 }
 
-export const SESSION_SHAPES: SessionShape[] = ['mixed', 'upper_lower'];
-
-export const SESSION_SHAPE_LABEL: Record<SessionShape, string> = {
-  mixed: 'Mixed',
-  upper_lower: 'Upper / Lower',
-};
-
-export const SESSION_SHAPE_HINT: Record<SessionShape, string> = {
-  mixed: 'Legs on both heavy days, upper work spread across the week.',
-  upper_lower: 'Mon is upper body, Tue is lower body.',
-};
-
 /*
- * Mixed: session A carries the hinge and both pulls, session B the squat and
- * the presses. The grip-heavy movements sit on Monday, the furthest point in
- * the week from a weekend round.
- *
- * Upper / Lower: A is the whole upper body, B is the whole lower half. Both
- * still land on Mon and Tue, which are the two grip-safe days, so the hinge
- * moving to Tuesday costs nothing against the golf rule.
+ * The heavy pair: session A carries the hinge and both pulls, session B the
+ * squat and the presses. This was one of two "shapes" behind a Settings
+ * toggle; the toggle went — its hint described the standing-weekday world the
+ * per-week planner replaced, workouts store their own focus now (which
+ * outranks any shape), and a split nobody's data reached was not a choice
+ * worth a control. These sets only speak for a heavy day with no stored
+ * focus.
  */
-const SHAPE_PATTERNS: Record<SessionShape, { a: MovementPattern[]; b: MovementPattern[] }> = {
-  mixed: {
-    a: ['hinge', 'pull_h', 'pull_v', 'core'],
-    b: ['squat', 'push_h', 'push_v', 'core'],
-  },
-  upper_lower: {
-    a: ['pull_h', 'pull_v', 'push_h', 'push_v', 'core'],
-    b: ['squat', 'hinge', 'squat', 'core'],
-  },
+const HEAVY_PATTERNS: { a: MovementPattern[]; b: MovementPattern[] } = {
+  a: ['hinge', 'pull_h', 'pull_v', 'core'],
+  b: ['squat', 'push_h', 'push_v', 'core'],
 };
 
 /*
@@ -299,7 +276,6 @@ export function templateDayFor({
   weekday,
   intensity,
   index = 0,
-  shape = 'mixed',
   minutesPerSession = 40,
   golfWeekdays = [],
   focus,
@@ -308,7 +284,6 @@ export function templateDayFor({
   weekday: Weekday;
   intensity: Intensity;
   index?: number;
-  shape?: SessionShape;
   minutesPerSession?: number;
   golfWeekdays?: Weekday[];
   /**
@@ -331,7 +306,7 @@ export function templateDayFor({
   const set = focus
     ? FOCUS_PATTERNS[focus]
     : index % 2 === 0
-      ? SHAPE_PATTERNS[shape].a
-      : SHAPE_PATTERNS[shape].b;
+      ? HEAVY_PATTERNS.a
+      : HEAVY_PATTERNS.b;
   return heavyDay(slot, weekday, set, minutesPerSession, golfWeekdays);
 }

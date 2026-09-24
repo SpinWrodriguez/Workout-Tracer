@@ -238,7 +238,6 @@ export function ProgramScreen({
     async () => (slots && slots.length > 0 ? stalledExerciseIds(slots, byId, inventory) : []),
     [slots, byId, inventory],
   );
-  const shape = training.shape;
 
   useEffect(() => {
     onWeekChange?.(anchor);
@@ -470,7 +469,6 @@ export function ProgramScreen({
       // stored; templateDayFor falls back to inferring from the weekday there.
       focus: scheduled?.focus,
       index: Math.max(0, peers.indexOf(slot)),
-      shape,
       minutesPerSession: sessionMinutes,
       golfWeekdays: training.golfWeekdays as never,
     });
@@ -1021,7 +1019,7 @@ export function ProgramScreen({
       context,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [week, schedule, slots, byId, training, sessionMinutes, hasHistory, inventory, shape]);
+  }, [week, schedule, slots, byId, training, sessionMinutes, hasHistory, inventory]);
 
   const problems = blockViolations.filter(
     (violation) => severityOf(violation.code) === 'problem' && violation.fix !== undefined,

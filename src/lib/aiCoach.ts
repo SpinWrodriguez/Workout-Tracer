@@ -204,7 +204,6 @@ export async function buildCoachContext(
            number to be answered against rather than a guess. */
         maxRpe: training.maxRpe,
         sessionMinutes: training.sessionMinutes,
-        split: training.shape,
         /* Their own words, from Settings. Last so it cannot be mistaken for
            one of the app's own facts. */
         notes: instructions || undefined,
