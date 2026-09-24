@@ -25,6 +25,7 @@ export const ILLUSTRATED: string[] = [
   'cb_punch',
   'cb_rotational_row',
   'cb_split_pull_through',
+  'cb_split_squat_fly',
   'kb_bulgarian_split',
   'kb_cossack_squat',
   'kb_overhead_carry',
@@ -49,7 +50,6 @@ export const AWAITING_ART: string[] = [
      upstream draws any of them, and the audit rule says name that fact
      rather than let it be noticed. */
   'kb_single_leg_chop',
-  'cb_split_squat_fly',
 ];
 
 const set = new Set(ILLUSTRATED);
