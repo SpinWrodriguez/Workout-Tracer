@@ -34,6 +34,7 @@ export const ILLUSTRATED: string[] = [
   'lm_squat_to_press',
   'mb_90_90',
   'mb_open_book',
+  'mb_tspine_high_knee',
 ];
 
 /**
@@ -48,7 +49,6 @@ export const AWAITING_ART: string[] = [
      upstream draws any of them, and the audit rule says name that fact
      rather than let it be noticed. */
   'kb_single_leg_chop',
-  'mb_tspine_high_knee',
   'cb_split_squat_fly',
 ];
 
