@@ -105,8 +105,8 @@ export function DayEditor({
   onClose,
 }: {
   date: string;
-  /** Every date a round is on, so this day can say what it is close to. */
-  golfDates: string[];
+  /** Every round with whether it happened, so this day can say what it is close to. */
+  golfDates: { date: string; played?: boolean }[];
   /** Workouts the block actually defines, so we never offer an empty day. */
   slots: DayEditorSlot[];
   /** Makes the day's workout fall here every week, not just this one. */
@@ -221,10 +221,6 @@ export function DayEditor({
 
         <Label className="mt-4 mb-1.5 block">Golf</Label>
         <div className="flex flex-col gap-1.5">
-          {/* One tile, not two. "Round planned" and "Round played" were the
-              same fact on either side of the date, the app never read the
-              difference anywhere, and choosing between them was a question
-              about tense rather than about golf. */}
           <Tile
             accent={EFFORT_COLOR.golf}
             title="Round of golf"
@@ -232,6 +228,24 @@ export function DayEditor({
             active={golf !== undefined}
             onClick={() => onSetGolf(golf ? undefined : 'planned')}
           />
+          {/* The one fact the calendar cannot know: dates carry no clock, so a
+              same-day round is otherwise assumed to still be ahead of any
+              session. Marking it played frees the rest of the day for grip
+              work — a morning round, an evening pull — while tomorrow's round
+              keeps constraining today exactly as before. */}
+          {golf && (
+            <Tile
+              accent={EFFORT_COLOR.golf}
+              title="Round already played"
+              detail={
+                golf.status === 'played'
+                  ? 'Done — the rest of today is free to train'
+                  : 'Tap once you are back, and today opens up'
+              }
+              active={golf.status === 'played'}
+              onClick={() => onSetGolf(golf.status === 'played' ? 'planned' : 'played')}
+            />
+          )}
           {golf && clearRow('No round', () => onSetGolf(undefined))}
         </div>
 

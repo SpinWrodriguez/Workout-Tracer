@@ -136,9 +136,12 @@ export function ProgramScreen({
 
   const block = useLiveQuery(() => db.block.orderBy('startDate').reverse().first(), [], undefined);
   const golfDays = useLiveQuery(() => db.golfDay.toArray(), [], undefined);
-  /* Every round, in date order. `gripConflictOn` only looks forward, so a
-     round already played constrains nothing. */
-  const golfDateList = (golfDays ?? []).map((day) => day.date);
+  /* Every round, with whether it already happened: a round marked played no
+     longer bars its own day, and `gripConflictOn` only looks forward anyway. */
+  const golfDateList = (golfDays ?? []).map((day) => ({
+    date: day.date,
+    played: day.status === 'played',
+  }));
   const slots = useLiveQuery(
     async () => (block ? db.blockExercise.where('blockId').equals(block.id).toArray() : []),
     [block?.id],

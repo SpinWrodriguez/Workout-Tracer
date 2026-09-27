@@ -26,6 +26,9 @@ const THU = '2026-08-27';
 const FRI = '2026-08-28';
 const SAT = '2026-08-29';
 
+/** Rounds as the date-based rule now reads them: dates plus whether played. */
+const on = (...dates: string[]) => dates.map((date) => ({ date }));
+
 const SATURDAY_GOLF: GolfDay[] = [{ date: SAT, status: 'planned', holes: 18 }];
 
 describe('Phase 3 acceptance — the golf rule', () => {
@@ -33,7 +36,7 @@ describe('Phase 3 acceptance — the golf rule', () => {
     const warnings = sessionWarnings(
       { date: FRI, exercises: [{ exerciseId: 'bw_pull_up', loggedSets: 3 }] },
       byId,
-      [SAT],
+      on(SAT),
     );
     expect(warnings).toHaveLength(1);
     expect(warnings[0]?.level).toBe('warn');
@@ -49,7 +52,7 @@ describe('Phase 3 acceptance — the golf rule', () => {
     const warnings = sessionWarnings(
       { date: THU, exercises: [{ exerciseId: 'bw_pull_up', loggedSets: 3 }] },
       byId,
-      [SAT],
+      on(SAT),
     );
     expect(warnings).toHaveLength(1);
     expect(warnings[0]?.level).toBe('note');
@@ -61,7 +64,7 @@ describe('Phase 3 acceptance — the golf rule', () => {
     const warnings = sessionWarnings(
       { date: MON, exercises: [{ exerciseId: 'bw_pull_up', loggedSets: 3 }] },
       byId,
-      [SAT],
+      on(SAT),
     );
     expect(warnings).toEqual([]);
   });
@@ -71,10 +74,10 @@ describe('Phase 3 acceptance — the golf rule', () => {
 describe('the buffer window', () => {
   it('bars the round itself and the day before it', () => {
     expect(GRIP_BUFFER_DAYS).toBe(1);
-    expect(gripConflictOn(SAT, [SAT])).toMatchObject({ daysBefore: 0, severity: 'blocked' });
-    expect(gripConflictOn(FRI, [SAT])).toMatchObject({ daysBefore: 1, severity: 'blocked' });
-    expect(isGripSafe(SAT, [SAT])).toBe(false);
-    expect(isGripSafe(FRI, [SAT])).toBe(false);
+    expect(gripConflictOn(SAT, on(SAT))).toMatchObject({ daysBefore: 0, severity: 'blocked' });
+    expect(gripConflictOn(FRI, on(SAT))).toMatchObject({ daysBefore: 1, severity: 'blocked' });
+    expect(isGripSafe(SAT, on(SAT))).toBe(false);
+    expect(isGripSafe(FRI, on(SAT))).toBe(false);
   });
 
   it('advises rather than bars two days out', () => {
@@ -82,24 +85,49 @@ describe('the buffer window', () => {
        Thursday and Friday off a Saturday round, leaving every pull in the week
        to fit into Monday and Tuesday. */
     expect(GRIP_ADVISORY_DAYS).toBe(2);
-    expect(gripConflictOn(THU, [SAT])).toMatchObject({ daysBefore: 2, severity: 'advised' });
+    expect(gripConflictOn(THU, on(SAT))).toMatchObject({ daysBefore: 2, severity: 'advised' });
     // Advised is not barred: the session is fine to train.
-    expect(isGripSafe(THU, [SAT])).toBe(true);
+    expect(isGripSafe(THU, on(SAT))).toBe(true);
   });
 
   it('says nothing at all three days out or more', () => {
-    expect(gripConflictOn(WED, [SAT])).toBeUndefined();
-    expect(gripConflictOn(TUE, [SAT])).toBeUndefined();
-    expect(gripConflictOn(MON, [SAT])).toBeUndefined();
+    expect(gripConflictOn(WED, on(SAT))).toBeUndefined();
+    expect(gripConflictOn(TUE, on(SAT))).toBeUndefined();
+    expect(gripConflictOn(MON, on(SAT))).toBeUndefined();
   });
 
   it('does not restrict the days after a round', () => {
-    expect(isGripSafe('2026-08-30', [SAT])).toBe(true);
-    expect(gripConflictOn('2026-08-30', [SAT])).toBeUndefined();
+    expect(isGripSafe('2026-08-30', on(SAT))).toBe(true);
+    expect(gripConflictOn('2026-08-30', on(SAT))).toBeUndefined();
+  });
+
+  it('frees the rest of the day once the round is marked played', () => {
+    /* The calendar has dates, never clock times, so a same-day round is
+       otherwise assumed to still be ahead of the session — which flagged an
+       evening pull after a morning round. Played is the lifter supplying the
+       missing fact. */
+    const played = [{ date: SAT, played: true }];
+    expect(gripConflictOn(SAT, played)).toBeUndefined();
+    expect(isGripSafe(SAT, played)).toBe(true);
+    expect(gripBufferNote(SAT, played)).toBeUndefined();
+    expect(
+      sessionWarnings(
+        { date: SAT, exercises: [{ exerciseId: 'bw_pull_up', loggedSets: 3 }] },
+        byId,
+        played,
+      ),
+    ).toEqual([]);
+  });
+
+  it('keeps every forward buffer even when the round is marked played', () => {
+    // Friday before a played Saturday round: nonsense in practice (you cannot
+    // play tomorrow's round today) but the rule must not be tricked by it.
+    const played = [{ date: SAT, played: true }];
+    expect(gripConflictOn(FRI, played)).toMatchObject({ daysBefore: 1, severity: 'blocked' });
   });
 
   it('picks the soonest round when two are close together', () => {
-    expect(gripConflictOn(THU, ['2026-08-30', SAT])?.golfDate).toBe(SAT);
+    expect(gripConflictOn(THU, on('2026-08-30', SAT))?.golfDate).toBe(SAT);
   });
 
   it('leaves every day but Friday and Saturday safe for Saturday golf', () => {
@@ -143,11 +171,11 @@ describe('saying the buffer out loud', () => {
   it('states the prohibition on a day that is barred, spine included', () => {
     // Both loads are barred this close to a round, so the note names both:
     // a rule enforced by the validator but unsaid here read as arbitrary.
-    expect(gripBufferNote(FRI, [SAT])).toEqual({
+    expect(gripBufferNote(FRI, on(SAT))).toEqual({
       text: 'Golf tomorrow (Sat) — no grip, lat or forearm work, and no heavy spinal lifts.',
       severity: 'blocked',
     });
-    expect(gripBufferNote(SAT, [SAT])).toEqual({
+    expect(gripBufferNote(SAT, on(SAT))).toEqual({
       text: 'Golf today (Sat) — no grip, lat or forearm work, and no heavy spinal lifts.',
       severity: 'blocked',
     });
@@ -156,26 +184,26 @@ describe('saying the buffer out loud', () => {
   it('offers information, not an instruction, on a day that is merely close', () => {
     /* Two days out the session is fine to train. Wording it as a veto is how
        a rule stops being believed. */
-    expect(gripBufferNote(THU, [SAT])).toEqual({
+    expect(gripBufferNote(THU, on(SAT))).toEqual({
       text: 'Golf in 2 days (Sat) — may affect your swing.',
       severity: 'advised',
     });
   });
 
   it('says nothing on a day the rule does not touch', () => {
-    expect(gripBufferNote(WED, [SAT])).toBeUndefined();
-    expect(gripBufferNote(TUE, [SAT])).toBeUndefined();
-    expect(gripBufferNote(MON, [SAT])).toBeUndefined();
+    expect(gripBufferNote(WED, on(SAT))).toBeUndefined();
+    expect(gripBufferNote(TUE, on(SAT))).toBeUndefined();
+    expect(gripBufferNote(MON, on(SAT))).toBeUndefined();
     // The day after a round is free: the rule is one-directional.
-    expect(gripBufferNote('2026-08-30', [SAT])).toBeUndefined();
+    expect(gripBufferNote('2026-08-30', on(SAT))).toBeUndefined();
     expect(gripBufferNote(THU, [])).toBeUndefined();
   });
 
   it('never words an advisory day as a prohibition, across a fortnight', () => {
     for (let offset = -7; offset <= 7; offset += 1) {
       const date = shiftIso(SAT, offset);
-      const note = gripBufferNote(date, [SAT]);
-      const barred = !isGripSafe(date, [SAT]);
+      const note = gripBufferNote(date, on(SAT));
+      const barred = !isGripSafe(date, on(SAT));
       // The wording and the severity can never disagree about what is allowed.
       expect(barred, date).toBe(note?.severity === 'blocked');
       expect(note === undefined || note.text.includes('no grip') === barred, date).toBe(true);
@@ -191,7 +219,7 @@ describe('the spine warning at session time', () => {
     const warnings = sessionWarnings(
       { date: FRI, exercises: [{ exerciseId: 'bb_deadlift', loggedSets: 0 }] },
       byId,
-      [SAT],
+      on(SAT),
     );
     const spine = warnings.find((w) => w.title.includes('loads the spine heavily'));
     expect(spine?.level).toBe('warn');
@@ -203,7 +231,7 @@ describe('the spine warning at session time', () => {
     const warnings = sessionWarnings(
       { date: THU, exercises: [{ exerciseId: 'bb_deadlift', loggedSets: 0 }] },
       byId,
-      [SAT],
+      on(SAT),
     );
     expect(warnings.some((w) => w.title.includes('spine'))).toBe(false);
   });

@@ -83,14 +83,30 @@ export interface GripConflict {
 }
 
 /**
- * The soonest round close enough to `dateIso` to matter, if any — barring or
- * merely worth mentioning, per `severity`. Only rounds ahead of the date count.
+ * A round as the date-based buffer reads it: where it is, and whether it has
+ * already happened. The app has dates, never clock times, so a same-day round
+ * is otherwise assumed to still be ahead of the session — which flagged an
+ * evening session after a morning round. `played` is the lifter saying the
+ * one fact the calendar cannot: this round is behind me.
  */
-export function gripConflictOn(dateIso: string, golfDates: string[]): GripConflict | undefined {
+export interface GolfDateLite {
+  date: string;
+  played?: boolean;
+}
+
+/**
+ * The soonest round close enough to `dateIso` to matter, if any — barring or
+ * merely worth mentioning, per `severity`. Only rounds ahead of the date
+ * count, and a round marked played no longer bars its own day: the session
+ * after it cannot hurt it. Every forward buffer is untouched — tomorrow's
+ * round constrains today whatever today's says.
+ */
+export function gripConflictOn(dateIso: string, golfDays: GolfDateLite[]): GripConflict | undefined {
   let best: GripConflict | undefined;
-  for (const golfDate of golfDates) {
+  for (const { date: golfDate, played } of golfDays) {
     const daysBefore = daysBetween(dateIso, golfDate);
     if (daysBefore < 0 || daysBefore > GRIP_ADVISORY_DAYS) continue;
+    if (daysBefore === 0 && played) continue;
     const severity: GripSeverity = daysBefore <= GRIP_BUFFER_DAYS ? 'blocked' : 'advised';
     if (!best || daysBefore < best.daysBefore) best = { golfDate, daysBefore, severity };
   }
@@ -113,8 +129,8 @@ export interface GripNote {
   severity: GripSeverity;
 }
 
-export function gripBufferNote(dateIso: string, golfDates: string[]): GripNote | undefined {
-  const conflict = gripConflictOn(dateIso, golfDates);
+export function gripBufferNote(dateIso: string, golfDays: GolfDateLite[]): GripNote | undefined {
+  const conflict = gripConflictOn(dateIso, golfDays);
   if (!conflict) return undefined;
   const when =
     conflict.daysBefore === 0
@@ -129,7 +145,7 @@ export function gripBufferNote(dateIso: string, golfDates: string[]): GripNote |
   /* Computed rather than assumed from the grip verdict: the two buffers are
      equal today, but they are separate constants and this note must keep
      telling the truth if they ever part ways. */
-  const spine = spineConflictOn(dateIso, golfDates) !== undefined;
+  const spine = spineConflictOn(dateIso, golfDays) !== undefined;
   return {
     text:
       conflict.severity === 'blocked'
@@ -147,20 +163,21 @@ export function gripBufferNote(dateIso: string, golfDates: string[]): GripNote |
  */
 export function spineConflictOn(
   dateIso: string,
-  golfDates: string[],
+  golfDays: GolfDateLite[],
 ): { golfDate: string; daysBefore: number } | undefined {
   let best: { golfDate: string; daysBefore: number } | undefined;
-  for (const golfDate of golfDates) {
+  for (const { date: golfDate, played } of golfDays) {
     const daysBefore = daysBetween(dateIso, golfDate);
     if (daysBefore < 0 || daysBefore > SPINE_BUFFER_DAYS) continue;
+    if (daysBefore === 0 && played) continue;
     if (!best || daysBefore < best.daysBefore) best = { golfDate, daysBefore };
   }
   return best;
 }
 
 /** True when the rule permits high-grip work. An advisory day still does. */
-export function isGripSafe(dateIso: string, golfDates: string[]): boolean {
-  return gripConflictOn(dateIso, golfDates)?.severity !== 'blocked';
+export function isGripSafe(dateIso: string, golfDays: GolfDateLite[]): boolean {
+  return gripConflictOn(dateIso, golfDays)?.severity !== 'blocked';
 }
 
 /** Which weekdays can carry grip work, given the weekdays golf is played. */
@@ -225,10 +242,10 @@ export interface SessionShape {
 export function sessionWarnings(
   session: SessionShape,
   exercisesById: Map<string, Exercise>,
-  golfDates: string[],
+  golfDays: GolfDateLite[],
 ): RuleWarning[] {
   const warnings: RuleWarning[] = [];
-  const conflict = gripConflictOn(session.date, golfDates);
+  const conflict = gripConflictOn(session.date, golfDays);
 
   let setsBefore = 0;
   session.exercises.forEach((entry, index) => {
@@ -258,7 +275,7 @@ export function sessionWarnings(
      * the one screen where the lifter is actually holding the bar.
      */
     if (exercise.spinalLoad === 'high') {
-      const spine = spineConflictOn(session.date, golfDates);
+      const spine = spineConflictOn(session.date, golfDays);
       if (spine) {
         warnings.push({
           level: 'warn',
@@ -334,7 +351,7 @@ export function buildWeek({
 }: WeekInput): WeekDay[] {
   const start = weekStart(anchorDate);
   // Rounds beyond the week still constrain its last days, so look ahead.
-  const golfDates = golfDays.map((g) => g.date);
+  const golfDates = golfDays.map((g) => ({ date: g.date, played: g.status === 'played' }));
   const golfByDate = new Map(golfDays.map((g) => [g.date, g]));
 
   return WEEKDAYS.map((weekday) => {

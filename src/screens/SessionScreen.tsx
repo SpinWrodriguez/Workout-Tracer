@@ -126,7 +126,7 @@ export function SessionScreen({
   const [inventory, setInventory] = useState<Inventory>(DEFAULT_INVENTORY);
   const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({});
   const [plan, setPlan] = useState<BlockPlan | undefined>(undefined);
-  const [golfDates, setGolfDates] = useState<string[]>([]);
+  const [golfDates, setGolfDates] = useState<{ date: string; played?: boolean }[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [targets, setTargets] = useState<Record<string, BlockExercise>>({});
   const [saving, setSaving] = useState(false);
@@ -147,7 +147,8 @@ export function SessionScreen({
       if (!cancelled) setExerciseNotes(next);
     });
     void db.golfDay.toArray().then((rows) => {
-      if (!cancelled) setGolfDates(rows.map((row) => row.date));
+      if (!cancelled)
+        setGolfDates(rows.map((row) => ({ date: row.date, played: row.status === 'played' })));
     });
     return () => {
       cancelled = true;
