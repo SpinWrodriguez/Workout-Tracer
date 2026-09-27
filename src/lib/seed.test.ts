@@ -81,7 +81,7 @@ describe('exercise seed (spec §8)', () => {
       'bb_rdl',
       'bb_deadlift',
       'bb_bent_over_row',
-      'sm_shrug',
+      'db_shrug',
       'cb_lat_pulldown',
       'cb_seated_row',
       'lm_row',

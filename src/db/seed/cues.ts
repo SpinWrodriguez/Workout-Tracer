@@ -22,7 +22,7 @@ export const CUES: Record<string, string> = {
   sm_bench_press: 'Set the safety catch a hand-width above the chest before the first rep.',
   sm_incline_press: 'Bench around 30°. Higher and it turns into an overhead press.',
   sm_overhead_press: 'Seated keeps the lower back out of it. Bar path just in front of the forehead.',
-  sm_shrug: 'Straight up, no rolling. Pause at the top for a full second.',
+  db_shrug: 'Dumbbells at the sides, straight up, no rolling. Pause a full second at the top.',
   sm_calf_raise: 'Plate or block under the toes for a full stretch. Slow on the way down.',
 
   cb_chop: 'High pulley to low. Rotate through the ribs, not the lower back.',
