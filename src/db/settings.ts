@@ -37,6 +37,10 @@ export function mergeInventory(value: unknown): Inventory {
   const bands = Array.isArray(value.bands)
     ? value.bands.map(Number).filter((kg) => Number.isFinite(kg) && kg > 0)
     : DEFAULT_INVENTORY.bands;
+  /* Same backfill for the adjustable dumbbells, added later still. */
+  const dumbbells = Array.isArray(value.dumbbells)
+    ? value.dumbbells.map(Number).filter((kg) => Number.isFinite(kg) && kg > 0)
+    : DEFAULT_INVENTORY.dumbbells;
   const bars = isRecord(value.barWeights) ? value.barWeights : {};
   return {
     plates: plates.length ? plates : DEFAULT_INVENTORY.plates,
@@ -48,6 +52,7 @@ export function mergeInventory(value: unknown): Inventory {
     cableStackKg: Number(value.cableStackKg) || DEFAULT_INVENTORY.cableStackKg,
     cableStepKg: Number(value.cableStepKg) || DEFAULT_INVENTORY.cableStepKg,
     bands,
+    dumbbells,
   };
 }
 

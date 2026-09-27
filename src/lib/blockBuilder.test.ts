@@ -153,9 +153,10 @@ describe('variant rotation is what makes a day change', () => {
 
   it('rotates within a bounded band rather than walking downhill', () => {
     // Bounded and repeatable: it comes back round to the strongest draw
-    // instead of degrading with every press.
-    expect(day(3)).toEqual(day(0));
-    expect(day(4)).toEqual(day(1));
+    // instead of degrading with every press. The cycle is the lcm of the
+    // slots' variant pools — six since the dumbbell rows joined the library.
+    expect(day(6)).toEqual(day(0));
+    expect(day(7)).toEqual(day(1));
   });
 
   it('still respects the focus at every variant', () => {

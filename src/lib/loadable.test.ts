@@ -176,6 +176,7 @@ describe('what a hand can hold', () => {
     cableStackKg: 65,
     cableStepKg: 5,
     bands: [6.5, 7.5, 10, 11, 17, 21],
+    dumbbells: [5, 7, 11, 13, 15, 18, 20, 22, 25, 27, 29, 32, 34, 36, 38, 40],
   };
 
   it('offers the plates themselves, not a bar loaded with them', () => {

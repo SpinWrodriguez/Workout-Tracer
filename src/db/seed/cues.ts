@@ -110,6 +110,14 @@ export const CUES: Record<string, string> = {
     'Pull-through with one foot trailing — the front hip does the whole hinge.',
   cb_9090_row:
     'Sit on the floor in the 90/90 hip position and row. The trunk holds the line the bench usually would.',
+  db_shoulder_press:
+    'Seated, dumbbells at the shoulders, press without the ribs flaring. The dial number is the log.',
+  db_lateral_raise: 'Lead with the elbows, stop at shoulder height. Lighter than pride wants.',
+  db_one_arm_row: 'One hand and knee on the bench, pull to the hip. Heavy grip work — never before a round.',
+  db_pullover: 'One dumbbell in both hands, arms long over the head, ribs down. Feel the lats lengthen.',
+  db_split_squat: 'A dumbbell in each hand at the sides. Front foot does the work, back foot balances.',
+  db_stiff_leg_deadlift: 'Dumbbells down the front of the thighs, hips back, spine long. Grip-heavy: keep it clear of golf.',
+  db_hammer_curl: 'Palms facing each other, elbows pinned. The neutral grip spares the forearms for the course.',
 };
 
 export function cueFor(exerciseId: string): string | undefined {

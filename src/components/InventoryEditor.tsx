@@ -5,6 +5,7 @@ import {
   DEFAULT_INVENTORY,
   bandWeights,
   cableStackWeights,
+  dumbbellWeights,
   loadableWeights,
   type Inventory,
   type PlatePair,
@@ -59,6 +60,8 @@ export function InventoryEditor() {
   const [saved, setSaved] = useState(false);
   /** The band about to be added — bands come in any rating, so no fixed list. */
   const [newBand, setNewBand] = useState(0);
+  /** Same free-typing for a dumbbell dial stop — dials differ by brand. */
+  const [newDumbbell, setNewDumbbell] = useState(0);
 
   useEffect(() => {
     void readInventory().then(setInventory);
@@ -77,6 +80,7 @@ export function InventoryEditor() {
       hand: loadableWeights(0, inventory.plates),
       cable: cableStackWeights(inventory.cableStackKg, inventory.cableStepKg),
       bands: bandWeights(inventory.bands),
+      dumbbells: dumbbellWeights(inventory.dumbbells),
     };
   }, [inventory]);
 
@@ -241,6 +245,54 @@ export function InventoryEditor() {
           ))}
         </div>
         {ladderRow('Hand-held ladder', ladders.hand)}
+      </Card>
+
+      <Card title="Adjustable dumbbells" className="mt-3" collapsible>
+        <p className="text-[13px] text-text-dim">
+          The dial stops, kg per dumbbell. Dumbbell work snaps to these and logs the dial number —
+          in two-dumbbell moves too, since that is what you set and read.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {inventory.dumbbells
+            .slice()
+            .sort((a, b) => a - b)
+            .map((stop) => (
+              <button
+                key={stop}
+                type="button"
+                onClick={() =>
+                  patch({ dumbbells: inventory.dumbbells.filter((d) => d !== stop) })
+                }
+                className="rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs font-medium"
+                aria-label={`Remove the ${stop} kg dial stop`}
+              >
+                {kg(stop)} kg <span className="ml-0.5 text-text-dim">×</span>
+              </button>
+            ))}
+          {inventory.dumbbells.length === 0 && <Label>--</Label>}
+        </div>
+        <div className="mt-3 flex items-end gap-2">
+          <NumberField
+            label="Add a dial stop"
+            value={newDumbbell}
+            suffix="kg"
+            step={0.5}
+            onChange={setNewDumbbell}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (newDumbbell > 0 && !inventory.dumbbells.includes(newDumbbell)) {
+                patch({ dumbbells: [...inventory.dumbbells, newDumbbell] });
+              }
+              setNewDumbbell(0);
+            }}
+            className="h-11 rounded-xl bg-surface-2 px-4 text-[13px] font-medium text-text-dim"
+          >
+            Add
+          </button>
+        </div>
+        {ladderRow('Dumbbell ladder', ladders.dumbbells)}
       </Card>
 
       <Card title="Bands" className="mt-3" collapsible>

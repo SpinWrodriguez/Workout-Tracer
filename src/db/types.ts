@@ -33,6 +33,7 @@ export type Station =
   | 'smith'
   | 'cable'
   | 'kettlebell'
+  | 'dumbbell'
   | 'bodyweight'
   | 'band'
   | 'landmine';

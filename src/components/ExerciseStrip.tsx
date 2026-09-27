@@ -19,6 +19,7 @@ const STATION_GLYPH: Record<Exercise['station'], string> = {
   smith: 'SM',
   cable: 'CBL',
   kettlebell: 'KB',
+  dumbbell: 'DB',
   bodyweight: 'BW',
   band: 'BND',
   landmine: 'LM',

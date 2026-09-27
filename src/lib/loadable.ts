@@ -32,6 +32,12 @@ export interface Inventory {
    * is real but the rating of a stack is not the sum, so no combination maths.
    */
   bands: number[];
+  /**
+   * Adjustable dumbbell dial positions, kg per dumbbell. The dial is the
+   * ladder — no plate maths. Two-dumbbell moves still log the dial number,
+   * because that is what the lifter sets and reads.
+   */
+  dumbbells: number[];
 }
 
 /* Spec §2 said two pairs of 1.5 — the owner checked the rack: they are
@@ -54,6 +60,8 @@ export const DEFAULT_INVENTORY: Inventory = {
      (up to ~34 kg depending on stretch), so it has no honest rung here —
      type its kg by hand when it earns a set. */
   bands: [6.5, 7.5, 10, 11, 17, 21],
+  /* The Powertrain adjustable pair: sixteen dial stops, 5 to 40 kg each. */
+  dumbbells: [5, 7, 11, 13, 15, 18, 20, 22, 25, 27, 29, 32, 34, 36, 38, 40],
 };
 
 /** Guards against float dust from 1.25 kg plates: 0.05 kg resolution. */
@@ -125,8 +133,9 @@ function inventoryKey(inventory: Inventory): string {
   const plates = inventory.plates.map((p) => `${p.kg}x${p.pairs}`).join(',');
   const bells = [...inventory.kettlebells].sort((a, b) => a - b).join(',');
   const bands = [...inventory.bands].sort((a, b) => a - b).join(',');
+  const dumbbells = [...inventory.dumbbells].sort((a, b) => a - b).join(',');
   const { free_bar: free, smith } = inventory.barWeights;
-  return `${plates}|${bells}|${free}|${smith}|${inventory.cableStackKg}|${inventory.cableStepKg}|${bands}`;
+  return `${plates}|${bells}|${free}|${smith}|${inventory.cableStackKg}|${inventory.cableStepKg}|${bands}|${dumbbells}`;
 }
 
 /**
@@ -150,6 +159,11 @@ export function bandWeights(bands: number[]): number[] {
   return dedupeSorted(bands.filter((kg) => kg > 0));
 }
 
+/** The dial stops themselves are the ladder, same idea as the band drawer. */
+export function dumbbellWeights(dumbbells: number[]): number[] {
+  return dedupeSorted(dumbbells.filter((kg) => kg > 0));
+}
+
 /**
  * The rungs this exercise can actually be set to. Empty for bodyweight work
  * and the mobility drills, which carry no quantifiable load; band work rungs
@@ -168,6 +182,16 @@ export function ladderFor(exercise: Exercise, inventory: Inventory): number[] {
     return ladder;
   }
   if (exercise.loadMode !== 'weight') return [];
+
+  /* The dial IS the ladder: no plates, no sums, just the sixteen stops. */
+  if (exercise.station === 'dumbbell') {
+    const key = `dumbbell|${inventoryKey(inventory)}`;
+    const hit = cache.get(key);
+    if (hit) return hit;
+    const ladder = dumbbellWeights(inventory.dumbbells);
+    cache.set(key, ladder);
+    return ladder;
+  }
 
   const bar = barWeightFor(exercise, inventory);
   /*
