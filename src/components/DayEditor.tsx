@@ -138,8 +138,11 @@ export function DayEditor({
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-scrim" />
+      {/* Capped and scrollable: a dozen workouts on the shelf once grew this
+          sheet past the top of the screen, and the first tiles could not be
+          reached at all. The cap keeps a strip of scrim tappable to close. */}
       <div
-        className="relative rounded-t-3xl bg-surface px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)]"
+        className="relative max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-3xl bg-surface px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+16px)]"
         onClick={(event) => event.stopPropagation()}
       >
         <h3 className="card-title">{WEEKDAY_LABEL[weekday]}</h3>
