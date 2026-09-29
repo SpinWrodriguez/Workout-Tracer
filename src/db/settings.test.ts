@@ -13,6 +13,7 @@ import {
   deleteCoachMemory,
   readExerciseNotes,
   writeExerciseNote,
+  mergeInventory,
   mergeTraining,
   readCoachMemory,
 } from './settings';
@@ -97,5 +98,25 @@ describe('the lifter\'s own exercise notes', () => {
   it('caps a note at the limit rather than storing an essay', async () => {
     await writeExerciseNote('bb_back_squat', 'x'.repeat(500));
     expect((await readExerciseNotes())['bb_back_squat']).toHaveLength(MAX_EXERCISE_NOTE_CHARS);
+  });
+});
+
+describe('the 1.5 kg plate that never existed', () => {
+  it('reads a stored 1.5 as the 1.25 the rack actually holds', () => {
+    const merged = mergeInventory({ plates: [{ kg: 20, pairs: 1 }, { kg: 1.5, pairs: 2 }] });
+    expect(merged.plates).toEqual([
+      { kg: 20, pairs: 1 },
+      { kg: 1.25, pairs: 2 },
+    ]);
+  });
+
+  it('folds a mapped 1.5 into an existing 1.25 row instead of duplicating it', () => {
+    const merged = mergeInventory({
+      plates: [
+        { kg: 1.25, pairs: 2 },
+        { kg: 1.5, pairs: 2 },
+      ],
+    });
+    expect(merged.plates).toEqual([{ kg: 1.25, pairs: 4 }]);
   });
 });

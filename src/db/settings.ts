@@ -26,8 +26,23 @@ export function mergeInventory(value: unknown): Inventory {
   const plates = Array.isArray(value.plates)
     ? value.plates
         .filter(isRecord)
-        .map((p) => ({ kg: Number(p.kg), pairs: Math.round(Number(p.pairs)) }))
+        /* Spec §2's typo, corrected at the rack: the small plates are 1.25 kg,
+           not 1.5. Inventories saved before the correction still carry the
+           1.5 row and a saved row outlives every seed edit, so it is mapped
+           here on read — the rack has no 1.5 plate for it to be. */
+        .map((p) => ({
+          kg: Number(p.kg) === 1.5 ? 1.25 : Number(p.kg),
+          pairs: Math.round(Number(p.pairs)),
+        }))
         .filter((p) => Number.isFinite(p.kg) && p.kg > 0 && Number.isFinite(p.pairs) && p.pairs > 0)
+        /* The mapping can leave two rows of the same size (an old 1.5 next to
+           a real 1.25); one row per size, pairs summed. */
+        .reduce<{ kg: number; pairs: number }[]>((rows, p) => {
+          const row = rows.find((r) => r.kg === p.kg);
+          if (row) row.pairs += p.pairs;
+          else rows.push(p);
+          return rows;
+        }, [])
     : DEFAULT_INVENTORY.plates;
   const kettlebells = Array.isArray(value.kettlebells)
     ? value.kettlebells.map(Number).filter((kg) => Number.isFinite(kg) && kg > 0)
