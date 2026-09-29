@@ -29,29 +29,42 @@ describe('Phase 2 acceptance — progression suggestion', () => {
    * wrong: the plates in this garage have grips, so a hand holds one plate and
    * the rungs are 1.25, 5, 10, 20. The interesting cases changed with it.
    */
-  it('says a 20 kg goblet squat has nowhere heavier to go', () => {
+  it('says a 40 kg goblet squat has nowhere heavier to go', () => {
+    const history = session('s1', '2026-08-30', [
+      { weightKg: 40, reps: 10, rir: 3 },
+      { weightKg: 40, reps: 10, rir: 3 },
+      { weightKg: 40, reps: 10, rir: 3 },
+    ]);
+    const result = suggestProgression({ ladder: GOBLET, history, repRangeLow: 8, repRangeHigh: 10 });
+    /* Three sets of ten with three reps left is exactly when the app should
+       add load — and it cannot: the ceiling used to be the 20 kg plate, and
+       is now the dumbbells' top dial stop. Saying so is the useful answer;
+       inventing a heavier number was not. */
+    expect(result.outcome).toBe('ceiling');
+    expect(result.suggestedKg).toBe(40);
+    expect(result.reason).toMatch(/heaviest loadable weight/);
+  });
+
+  it('steps a 20 kg goblet to the next dial stop instead of stalling', () => {
     const history = session('s1', '2026-08-30', [
       { weightKg: 20, reps: 10, rir: 3 },
       { weightKg: 20, reps: 10, rir: 3 },
       { weightKg: 20, reps: 10, rir: 3 },
     ]);
     const result = suggestProgression({ ladder: GOBLET, history, repRangeLow: 8, repRangeHigh: 10 });
-    /* Three sets of ten with three reps left is exactly when the app should
-       add load — and it cannot, because 20 is the heaviest plate. Saying so is
-       the useful answer; inventing 23 kg was not. */
-    expect(result.outcome).toBe('ceiling');
-    expect(result.suggestedKg).toBe(20);
-    expect(result.reason).toMatch(/heaviest loadable weight/);
+    /* This used to be the ceiling case: 20 was the heaviest gripped plate.
+       The adjustable dumbbells continue the ladder, so 20 now steps to 22. */
+    expect(result.outcome).toBe('increase');
+    expect(result.suggestedKg).toBe(22);
   });
 
-  it('warns that the next hand-held rung is a doubling', () => {
+  it('no longer calls 10 kg a doubling away from the next rung', () => {
     const history = session('s1', '2026-08-30', [{ weightKg: 10, reps: 10, rir: 3 }]);
     const result = suggestProgression({ ladder: GOBLET, history, repRangeLow: 8, repRangeHigh: 10 });
-    /* 10 to 20 with nothing in between. The note is the honest reading of a
-       rack whose hand-held loads are 1.25, 5, 10, 20 — load progression on
-       these lifts is coarse, and reps are the lever. */
-    expect(result.suggestedKg).toBe(20);
-    expect(result.microplateNote).toMatch(/100%/);
+    /* 10 to 20 with nothing between earned a 100% warning. The dial stops
+       fill the gap: 10 steps to 11, an ordinary jump needing no note. */
+    expect(result.suggestedKg).toBe(11);
+    expect(result.microplateNote).toBeUndefined();
   });
 
   it('still moves a barbell lift one real rung, not to a made-up number', () => {

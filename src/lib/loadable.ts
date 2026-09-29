@@ -117,11 +117,21 @@ export function cableStackWeights(stackKg: number, stepKg: number): number[] {
  *
  * No sums: two plates on one grip is not a thing this rack does, and offering
  * 15 kg for a 10 and a 5 would be inventing a load that cannot be picked up.
+ *
+ * The adjustable dumbbells join where the caller passes them: a goblet squat
+ * or a carry does not care what shape the hand holds, and the dial goes far
+ * past the one real bell. The caller withholds them from explosive work —
+ * a dial-plate dumbbell is not to be swung.
  */
-export function handHeldWeights(plates: PlatePair[], kettlebells: number[]): number[] {
+export function handHeldWeights(
+  plates: PlatePair[],
+  kettlebells: number[],
+  dumbbells: number[] = [],
+): number[] {
   return dedupeSorted([
     ...plates.filter((plate) => plate.pairs > 0 && plate.kg > 0).map((plate) => plate.kg),
     ...kettlebells.filter((kg) => kg > 0),
+    ...dumbbells.filter((kg) => kg > 0),
   ]);
 }
 
@@ -201,10 +211,17 @@ export function ladderFor(exercise: Exercise, inventory: Inventory): number[] {
    * hand holds one plate, whichever was computed first would be served to the
    * other — a swing inheriting the 106 kg bar ladder, or a squat capped at 20.
    */
+  /* Two hand ladders, not one: ballistic work never sees the adjustable
+     dumbbells (a dial-plate dumbbell is not to be swung), so a swing and a
+     carry no longer share a cache entry. The swing is named here because
+     isExplosive is an ORDERING fact it deliberately lacks — a 10-20 rep
+     swing is conditioning — while ballistics is what the ladder cares about. */
+  const ballistic = exercise.isExplosive || exercise.id === 'kb_swing';
+  const hand = ballistic ? 'hand-ballistic' : 'hand';
   const key =
     exercise.station === 'cable'
       ? `cable|${inventoryKey(inventory)}`
-      : `${bar === undefined ? 'hand' : bar}|${inventoryKey(inventory)}`;
+      : `${bar === undefined ? hand : bar}|${inventoryKey(inventory)}`;
 
   const hit = cache.get(key);
   if (hit) return hit;
@@ -215,7 +232,11 @@ export function ladderFor(exercise: Exercise, inventory: Inventory): number[] {
   } else if (bar !== undefined) {
     ladder = loadableWeights(bar, inventory.plates);
   } else {
-    ladder = handHeldWeights(inventory.plates, inventory.kettlebells);
+    ladder = handHeldWeights(
+      inventory.plates,
+      inventory.kettlebells,
+      ballistic ? [] : inventory.dumbbells,
+    );
   }
 
   cache.set(key, ladder);

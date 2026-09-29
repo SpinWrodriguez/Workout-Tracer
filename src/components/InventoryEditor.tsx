@@ -6,6 +6,7 @@ import {
   bandWeights,
   cableStackWeights,
   dumbbellWeights,
+  handHeldWeights,
   loadableWeights,
   type Inventory,
   type PlatePair,
@@ -77,7 +78,11 @@ export function InventoryEditor() {
     return {
       free: loadableWeights(inventory.barWeights.free_bar, inventory.plates),
       smith: loadableWeights(inventory.barWeights.smith, inventory.plates),
-      hand: loadableWeights(0, inventory.plates),
+      /* The ladder hand-held work actually gets: plates, bells and the
+         dumbbell dial stops. Explosive moves drop the dumbbells, so their
+         shorter ladder is shown beside it. */
+      hand: handHeldWeights(inventory.plates, inventory.kettlebells, inventory.dumbbells),
+      handExplosive: handHeldWeights(inventory.plates, inventory.kettlebells),
       cable: cableStackWeights(inventory.cableStackKg, inventory.cableStepKg),
       bands: bandWeights(inventory.bands),
       dumbbells: dumbbellWeights(inventory.dumbbells),
@@ -210,8 +215,9 @@ export function InventoryEditor() {
 
       <Card title="Kettlebells and hand-held" className="mt-3" collapsible>
         <p className="text-[13px] text-text-dim">
-          Goblet squats, carries and loaded split squats snap to these plus your plate weights, one
-          plate at a time — a gripped 20 is a 20, not half of a 40.
+          Goblet squats, carries and loaded split squats snap to these plus your plate weights and
+          the dumbbell dial stops, one implement at a time — a gripped 20 is a 20, not half of a
+          40. Swings and cleans keep to plates and bells: a dial-plate dumbbell is not to be swung.
         </p>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {inventory.kettlebells
@@ -245,6 +251,7 @@ export function InventoryEditor() {
           ))}
         </div>
         {ladderRow('Hand-held ladder', ladders.hand)}
+        {ladderRow('Explosive (swings, cleans)', ladders.handExplosive)}
       </Card>
 
       <Card title="Adjustable dumbbells" className="mt-3" collapsible>

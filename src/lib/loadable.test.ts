@@ -102,9 +102,12 @@ describe('ladderFor', () => {
     /* This used to expect [3, 6, 10, 13, 16, 20, 23, 26...] — the symmetric
        pair maths, as though the plates were going on a bar, running all the
        way up to 86 kg for a swing. The expectation encoded the bug. A hand
-       holds one plate. */
+       holds one plate — or a bell, or an adjustable dumbbell, whose dial
+       stops now continue the ladder to 40. */
     const goblet = ladderFor(find('kb_goblet_squat'), DEFAULT_INVENTORY);
-    expect(goblet).toEqual([1.25, 5, 10, 20]);
+    expect(goblet).toEqual([
+      1.25, 5, 7, 10, 11, 13, 15, 18, 20, 22, 25, 27, 29, 32, 34, 36, 38, 40,
+    ]);
     expect(ladderFor(find('bw_split_squat'), DEFAULT_INVENTORY)).toEqual(goblet);
   });
 
@@ -201,14 +204,24 @@ describe('what a hand can hold', () => {
     expect(handHeldWeights([{ kg: 25, pairs: 0 }, { kg: 10, pairs: 1 }], [0])).toEqual([10]);
   });
 
-  it('gives a swing and a carry the same short ladder', () => {
+  it('keeps a swing to plates and bells, never the dial dumbbells', () => {
+    /* A dial-plate dumbbell is not to be swung — the manufacturer's own label
+       says do not drop — so explosive work never sees the dial stops. */
     clearLadderCache();
     const swing = EXERCISES.find((e) => e.id === 'kb_swing');
-    const carry = EXERCISES.find((e) => e.id === 'kb_suitcase_carry');
     expect(ladderFor(swing as Exercise, gripped)).toEqual([1.25, 5, 10, 20]);
+  });
+
+  it('gives a carry the dumbbell dial stops a swing is denied', () => {
+    clearLadderCache();
+    const carry = EXERCISES.find((e) => e.id === 'kb_suitcase_carry');
+    const rungs = ladderFor(carry as Exercise, gripped);
     /* A two-handed carry logs what is in each hand, so 10 each side is the
        10 rung — the number you can actually pick up. */
-    expect(ladderFor(carry as Exercise, gripped)).toContain(10);
+    expect(rungs).toContain(10);
+    // The dial stops join the grippable world: a carry at 40 is real now.
+    expect(rungs).toContain(7);
+    expect(rungs).toContain(40);
   });
 
   it('does not serve a swing the bar ladder when the bar weight is zero', () => {
