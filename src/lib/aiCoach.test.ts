@@ -22,6 +22,7 @@ import {
   buildCoachContext,
   parseTurns,
   trimTurns,
+  weekLabelOf,
   type CoachTurn,
 } from './aiCoach';
 
@@ -686,5 +687,23 @@ describe('the month the coach can see', () => {
     expect(weeks).toHaveLength(5);
     expect(weeks[0]?.weekStarting).toBe(weekStart(todayIso()));
     expect(weeks[1]?.weekStarting).toBe(shiftIso(weekStart(todayIso()), -7));
+  });
+});
+
+describe('binning dates into weeks, so the model never has to', () => {
+  /* "Two golf rounds with gardening last week" came out of a nine-day
+     stretch: the rows carried dates and weekdays but nothing said which week
+     each belonged to, and the model did its own calendar maths. Same failure
+     as deriving weekdays from dates, one size up. */
+  it('labels dates relative to the week of the given today', () => {
+    const today = '2026-09-29'; // a Tuesday; its week starts Mon 09-28
+    expect(weekLabelOf('2026-09-29', today)).toBe('this week');
+    expect(weekLabelOf('2026-09-28', today)).toBe('this week');
+    expect(weekLabelOf('2026-09-27', today)).toBe('last week'); // Sunday before
+    expect(weekLabelOf('2026-09-21', today)).toBe('last week'); // its Monday
+    expect(weekLabelOf('2026-09-20', today)).toBe('2 weeks ago');
+    expect(weekLabelOf('2026-09-19', today)).toBe('2 weeks ago'); // the golf+gardening weekend
+    expect(weekLabelOf('2026-10-05', today)).toBe('next week');
+    expect(weekLabelOf('2026-10-12', today)).toBe('in 2 weeks');
   });
 });

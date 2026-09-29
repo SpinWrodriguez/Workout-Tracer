@@ -23,7 +23,7 @@ import type { Exercise, MuscleId, SetLog } from '../db/types';
 import { readAiInstructions, readCoachMemory, readTraining } from '../db/settings';
 import { streamConversation, type AskUsage } from './askModel';
 import { COACH_TOOLS, runCoachTool } from './coachTools';
-import { shiftIso, todayIso, weekStart } from './format';
+import { daysBetween, shiftIso, todayIso, weekStart } from './format';
 import { WEEKDAY_LABEL, weekdayOf } from './golf';
 import { fairShare, setsPerMuscle } from './volume';
 import { readWeekPlan } from './weekPlan';
@@ -53,7 +53,7 @@ Then:
 
 - Rest days, soreness and golf are theirs to judge. Give them the read and a recommendation, not a lecture.
 - Weights are kilograms. Holds and carries are timed in seconds, not reps — exercise_detail says which an exercise is.
-- Every date here comes with its weekday. Never work one out from a date yourself.
+- Every date here comes with its weekday, and every dated row with its \`week\` label ("this week", "last week", "2 weeks ago"). Never work either out from a date yourself — before saying anything happened in a named week, read the rows' \`week\` labels and count only the rows that carry that label.
 - Do not write out a whole workout set by set: the app generates those with a validator behind it, and the Program screen is where that happens. Everything short of that is yours to answer — what to add, what to drop, what to change and why.
 - Never use the Program screen, or anything else in the app, as a reason not to answer. If a question has an answer you know, give it.
 
@@ -79,6 +79,21 @@ Memory: \`memory\` in the context is notes you saved in earlier conversations, e
 /** A stored weekday number as a name, without asserting it is in range. */
 const weekdayName = (day: number): string =>
   WEEKDAY_LABEL[day as keyof typeof WEEKDAY_LABEL] ?? String(day);
+
+/**
+ * Which week a date falls in, said in the words the lifter uses. Weekday names
+ * were already spelled out because a model working one out from a date is
+ * confidently a day off; binning dates into weeks is the same failure one
+ * size up — a flat month of rows got "two golf rounds last week" out of a
+ * nine-day stretch. The app owns the calendar; the model reads labels.
+ */
+export function weekLabelOf(dateIso: string, today = todayIso()): string {
+  const weeksAgo = daysBetween(weekStart(dateIso), weekStart(today)) / 7;
+  if (weeksAgo === 0) return 'this week';
+  if (weeksAgo === 1) return 'last week';
+  if (weeksAgo === -1) return 'next week';
+  return weeksAgo > 0 ? `${weeksAgo} weeks ago` : `in ${-weeksAgo} weeks`;
+}
 
 export interface CoachContext {
   /** Rendered for the prompt, and shown in the sheet so the user can see it. */
@@ -107,6 +122,7 @@ async function recentSessions(days: number, atLeast = 6, cap = 20) {
     rows.push({
       date: session.date,
       weekday: WEEKDAY_LABEL[weekdayOf(session.date)],
+      week: weekLabelOf(session.date),
       workout: session.daySlotName,
       setsDone: sets.length,
       /* Only when it was recorded. An older session has no planned count, and
@@ -254,12 +270,14 @@ export async function buildCoachContext(
         .map((row) => ({
           date: row.date,
           weekday: WEEKDAY_LABEL[weekdayOf(row.date)],
+          week: weekLabelOf(row.date),
           name: row.name,
           kcal: row.kcal,
         })),
       golfRounds: rounds.map((round) => ({
         date: round.date,
         weekday: WEEKDAY_LABEL[weekdayOf(round.date)],
+        week: weekLabelOf(round.date),
         status: round.status,
         upcoming: round.date >= today,
       })),
