@@ -33,7 +33,8 @@ export const CUES: Record<string, string> = {
   cb_bicep_curl: 'Step back so there is tension at the bottom. Cable stays in line with the forearm.',
   cb_lateral_raise: 'Lead with the elbow to just above shoulder height. Pinky slightly high.',
   cb_face_pull: 'Rope to eye level, hands finish wide of the ears. Rear delts, not traps.',
-  cb_kickback: 'Upper arm parallel to the floor and still. Straighten fully and hold a beat.',
+  cb_kickback:
+    'Hinge over, upper arm parallel to the floor and still. Straighten fully and hold a beat — the light dial stops are the right ones here.',
 
   cb_lat_pulldown: 'Both pulleys, so the stack is near true weight. Chest up, bar to the collarbone.',
   cb_seated_row: 'Both pulleys. Torso upright and quiet — no rowing with the lower back.',

@@ -519,14 +519,19 @@ export const EXERCISES: Exercise[] = [
     spinalLoad: 'none',
   },
   {
+    /* The id says cable and the exercise no longer is: this began as a cable
+       kickback wearing the dumbbell kickback's borrowed photo, which read as
+       a contradiction on the card. Once real dumbbells arrived it became the
+       dumbbell movement the photo always showed. The id stays — a workout in
+       the owner's block references it, and bulkPut updates in place, so
+       renaming would strand real data to fix a prefix. */
     id: 'cb_kickback',
     freeDbId: 'Tricep_Dumbbell_Kickback',
-    name: 'Cable kickback',
-    station: 'cable',
-    attachment: 'single_arm',
+    name: 'Dumbbell kickback',
+    station: 'dumbbell',
     primaryMuscles: ['triceps'],
     secondaryMuscles: [],
-    loadMultiplier: CABLE_SINGLE_PULLEY,
+    loadMultiplier: 1.0,
     loadMode: 'weight',
     gripLoad: 'none',
     isHinge: false,
