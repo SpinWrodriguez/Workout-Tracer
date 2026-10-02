@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react';
 import type { DatedPoint, Trend } from '../lib/stats';
-import type { ExerciseMetric, ExercisePoint } from './Charts';
+import type { ExerciseMetric, ExercisePoint, WeekBar } from './Charts';
 
 /* -------------------------------------------------------------------------- */
 /*  Recharts is the spec's chart library (§3) but it roughly doubles the        */
@@ -14,6 +14,7 @@ const BodyWeight = lazy(() =>
   import('./Charts').then((m) => ({ default: m.BodyWeightChart })),
 );
 const Exercise = lazy(() => import('./Charts').then((m) => ({ default: m.ExerciseChart })));
+const Weekly = lazy(() => import('./Charts').then((m) => ({ default: m.WeeklyBarChart })));
 
 function Placeholder({ height }: { height: number }) {
   return <div style={{ height }} className="rounded-xl bg-surface-2" />;
@@ -41,6 +42,20 @@ export function ExerciseChart(props: {
   return (
     <Suspense fallback={<Placeholder height={props.height ?? 150} />}>
       <Exercise {...props} />
+    </Suspense>
+  );
+}
+
+export function WeeklyBarChart(props: {
+  bars: WeekBar[];
+  average?: number;
+  color?: string;
+  unit: string;
+  height?: number;
+}) {
+  return (
+    <Suspense fallback={<Placeholder height={props.height ?? 130} />}>
+      <Weekly {...props} />
     </Suspense>
   );
 }

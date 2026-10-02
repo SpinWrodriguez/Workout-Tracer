@@ -12,7 +12,7 @@ import { BLOCK_ID, draw, exercises, user } from '../test/dom';
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
-import { monthTitle, shiftMonth, todayIso } from '../lib/format';
+import { monthTitle, shiftIso, shiftMonth, todayIso, weekStart } from '../lib/format';
 import { HistoryScreen } from './HistoryScreen';
 
 /** A finished session on a date, named so the list rows can be told apart. */
@@ -118,8 +118,8 @@ describe('the month grid over the session log', () => {
     await screen.findByText('Total reps');
     expect(screen.queryByText('Est. 1-RM')).toBeNull();
     // Best top set is the 8-rep set, stated in reps, not a kg zero.
-    await screen.findByText('best top set (reps) in range');
-    expect(screen.getByText('8')).toBeTruthy();
+    const label = await screen.findByText('best top set (reps) in range');
+    expect(within(label.parentElement as HTMLElement).getByText('8')).toBeTruthy();
   });
 
   it('charts which band was used, not a 1-RM the rating cannot honestly feed', async () => {
@@ -144,8 +144,8 @@ describe('the month grid over the session log', () => {
     await screen.findByText('Top band');
     await screen.findByText('Total reps');
     expect(screen.queryByText('Est. 1-RM')).toBeNull();
-    await screen.findByText('best top band in range');
-    expect(screen.getByText('11')).toBeTruthy();
+    const label = await screen.findByText('best top band in range');
+    expect(within(label.parentElement as HTMLElement).getByText('11')).toBeTruthy();
   });
 
   it('marks a round on the grid without making it tappable', async () => {
@@ -161,5 +161,51 @@ describe('the month grid over the session log', () => {
       });
       expect(within(cell).queryByText('GOLF')).toBeNull(); // a dot, not a chip
     });
+  });
+});
+
+describe('progress over weeks', () => {
+  /** A dated session with `count` sets of one exercise. */
+  async function logSets(id: string, date: string, exerciseId: string, count: number, kgs?: number) {
+    await db.session.put({ id, blockId: BLOCK_ID, daySlot: 'A', date, durationMin: 40 });
+    await db.setLog.bulkPut(
+      Array.from({ length: count }, (_, i) => ({
+        sessionId: id,
+        exerciseId,
+        setNo: i + 1,
+        weightKg: kgs,
+        effectiveKg: kgs,
+        reps: 10,
+      })),
+    );
+  }
+
+  it('opens the most recently trained lift, not the most logged one', async () => {
+    /* Twelve sets of calf raises five weeks ago used to own the chart for
+       good. A single bench session on Monday is what the lifter is after. */
+    await logSets('s_calf', shiftIso(todayIso(), -35), 'sm_calf_raise', 12, 40);
+    await logSets('s_bench', todayIso(), 'bb_bench_press', 3, 60);
+    draw(<HistoryScreen exercises={exercises} onOpen={vi.fn()} />);
+
+    const bench = await screen.findByRole('button', { name: /Bench press/i });
+    expect(bench.getAttribute('aria-expanded')).toBe('true');
+    const calf = screen.getByRole('button', { name: /calf raise/i });
+    expect(calf.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('calls a muscle trained more lately rising, and one dropped dropped', async () => {
+    // Chest: 2 sets a week four weeks back, 6 a week the last four weeks.
+    for (let week = 1; week <= 8; week += 1) {
+      const date = shiftIso(weekStart(todayIso()), -7 * week + 1);
+      await logSets(`s_chest_${week}`, date, 'bb_bench_press', week <= 4 ? 6 : 2, 60);
+    }
+    // Calves trained only in the older four weeks.
+    await logSets('s_calf_old', shiftIso(weekStart(todayIso()), -7 * 6 + 2), 'sm_calf_raise', 4, 40);
+    draw(<HistoryScreen exercises={exercises} onOpen={vi.fn()} />);
+
+    const chest = await screen.findByRole('button', { name: /^Chest/ });
+    expect(within(chest).getByText('Rising')).toBeTruthy();
+    const calves = screen.getByRole('button', { name: /^Calves/ });
+    expect(within(calves).getByText('Dropped')).toBeTruthy();
   });
 });
