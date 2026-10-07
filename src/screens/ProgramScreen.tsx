@@ -3,7 +3,14 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { DaySlot, Exercise, GolfDay, MuscleId } from '../db/types';
 import { longDate, todayIso } from '../lib/format';
-import { WEEKDAY_LABEL, buildWeek, gripBufferNote, weekdayOf, type Weekday } from '../lib/golf';
+import {
+  WEEKDAY_LABEL,
+  buildWeek,
+  gripBufferNote,
+  gripConflictOn,
+  weekdayOf,
+  type Weekday,
+} from '../lib/golf';
 import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
 import { balanceSets, generateDay, type DayPlan } from '../lib/blockBuilder';
@@ -435,10 +442,15 @@ export function ProgramScreen({
    * third session goes. A workout dragged to Thursday has Thursday's grip
    * clearance, and next week it may be somewhere else entirely.
    */
-  const templateFor = (slot: DaySlot): TemplateDay => {
+  const templateFor = (
+    slot: DaySlot,
+    /* A week that is not the one on screen — the day editor asking what a
+       workout WOULD run into if it were put on the tapped date. */
+    at?: { dateFor: (slot: DaySlot) => string | undefined; placed: DaySlot[] },
+  ): TemplateDay => {
     const scheduled = schedule?.[slot];
     const intensity = scheduled?.intensity ?? 'heavy';
-    const date = dateFor(slot);
+    const date = (at?.dateFor ?? dateFor)(slot);
     const weekday = date !== undefined ? weekdayOf(date) : scheduled?.weekday;
 
     /*
@@ -460,7 +472,7 @@ export function ProgramScreen({
 
     // Position among the workouts of the same effort picks the pattern set, so
     // a second heavy day complements the first rather than repeating it.
-    const peers = placedSlots.filter(
+    const peers = (at?.placed ?? placedSlots).filter(
       (other) => (schedule?.[other]?.intensity ?? 'heavy') === intensity,
     );
 
@@ -987,22 +999,12 @@ export function ProgramScreen({
     setAddingTo(slot);
   };
 
-  /*
-   * The rules, run against what is actually on the calendar rather than against
-   * a proposal. The old preview was the only thing that ever validated, so a
-   * day built or edited by hand was never checked at all.
-   *
-   * Judged over the WEEK ON SCREEN, by date. That is what keeps the golf rule
-   * honest now that placement is per week: a session sitting on Thursday this
-   * week is checked against Thursday, and a workout with no day is not checked
-   * for placement at all because it has no placement to be wrong about.
-   */
-  const blockViolations = useMemo(() => {
-    const placed = week
-      .filter((day) => day.plannedSlot !== undefined)
-      .map((day) => ({ slot: day.plannedSlot as DaySlot, date: day.date }));
+  /** The rules over a set of placements: the week on screen, or one imagined. */
+  const validatePlacement = (placed: { slot: DaySlot; date: string }[]) => {
     if (placed.length === 0 || (slots ?? []).length === 0) return [];
-    const template = placed.map((entry) => templateFor(entry.slot));
+    const dateOf = new Map(placed.map((entry) => [entry.slot, entry.date]));
+    const at = { dateFor: (slot: DaySlot) => dateOf.get(slot), placed: placed.map((e) => e.slot) };
+    const template = placed.map((entry) => templateFor(entry.slot, at));
     const context: ValidationContext = {
       exercisesById: byId,
       golfWeekdays: training.golfWeekdays as never,
@@ -1023,12 +1025,80 @@ export function ProgramScreen({
       },
       context,
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [week, schedule, slots, byId, training, sessionMinutes, hasHistory, inventory]);
+  };
 
-  const problems = blockViolations.filter(
-    (violation) => severityOf(violation.code) === 'problem' && violation.fix !== undefined,
+  /** What the week on screen actually places, day by day. */
+  const placedThisWeek = week
+    .filter((day) => day.plannedSlot !== undefined)
+    .map((day) => ({ slot: day.plannedSlot as DaySlot, date: day.date }));
+
+  /*
+   * The rules, run against what is actually on the calendar rather than against
+   * a proposal. The old preview was the only thing that ever validated, so a
+   * day built or edited by hand was never checked at all.
+   *
+   * Judged over the WEEK ON SCREEN, by date. That is what keeps the golf rule
+   * honest now that placement is per week: a session sitting on Thursday this
+   * week is checked against Thursday, and a workout with no day is not checked
+   * for placement at all because it has no placement to be wrong about.
+   */
+  const blockViolations = useMemo(
+    () => validatePlacement(placedThisWeek),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [week, schedule, slots, byId, training, sessionMinutes, hasHistory, inventory],
   );
+
+  const isShown = (violation: Violation) =>
+    severityOf(violation.code) === 'problem' && violation.fix !== undefined;
+  const problems = blockViolations.filter(isShown);
+
+  /*
+   * What each workout WOULD raise on the tapped date, so the list can say it
+   * before one is picked. The same two checks the screen runs after a pick:
+   * the golf banner (high-grip work in a round's buffer, by calendar date) and
+   * the "Worth fixing" problems — each workout's own, plus any it would cause
+   * elsewhere in the week that are not there already.
+   */
+  const editorWarnings = useMemo(() => {
+    const out = new Map<DaySlot, string[]>();
+    if (!editingDate) return out;
+    const keyOf = (v: Violation) => `${v.code}|${v.slot ?? ''}|${v.exerciseId ?? ''}`;
+    const before = new Set(problems.map(keyOf));
+    const conflict = gripConflictOn(editingDate, golfDateList);
+    for (const slot of definedSlots) {
+      const messages: string[] = [];
+      const highGrip =
+        conflict?.severity === 'blocked'
+          ? entriesForSlot(slots ?? [], slot)
+              .map((entry) => byId.get(entry.exerciseId))
+              .filter((exercise) => exercise?.gripLoad === 'high')
+          : [];
+      if (highGrip.length > 0 && conflict) {
+        messages.push(
+          `${highGrip.length} grip-heavy exercise${highGrip.length === 1 ? '' : 's'} ${
+            conflict.daysBefore === 0
+              ? 'on a golf day'
+              : `${conflict.daysBefore} day${conflict.daysBefore === 1 ? '' : 's'} before golf`
+          }`,
+        );
+      }
+      /* The week with this workout on this date: off wherever else it sat,
+         and in place of whatever this date held. */
+      const imagined = placedThisWeek
+        .filter((entry) => entry.slot !== slot && entry.date !== editingDate)
+        .concat({ slot, date: editingDate });
+      for (const violation of validatePlacement(imagined).filter(isShown)) {
+        // The calendar check above already says this one, in its own words.
+        if (violation.code === 'grip_conflict' && highGrip.length > 0) continue;
+        if (violation.slot === slot || !before.has(keyOf(violation))) {
+          messages.push(violation.message);
+        }
+      }
+      if (messages.length > 0) out.set(slot, messages);
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingDate, problems, definedSlots, slots, byId, golfDays, week]);
 
   return (
     <Screen title="Program">
@@ -1346,6 +1416,7 @@ export function ProgramScreen({
           date={editingDate}
           golfDates={golfDateList}
           slots={editorSlots}
+          warnings={editorWarnings}
           currentSlot={week.find((day) => day.date === editingDate)?.plannedSlot}
           golf={golfDays?.find((day) => day.date === editingDate)}
           onSetSlot={(slot) => {

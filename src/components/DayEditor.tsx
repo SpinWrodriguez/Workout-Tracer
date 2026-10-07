@@ -45,6 +45,7 @@ function Tile({
   title,
   detail,
   tag,
+  warnings,
   active,
   onClick,
   ariaLabel,
@@ -52,6 +53,8 @@ function Tile({
   accent: string;
   title: string;
   detail: string;
+  /** What this choice would trip, said on the tile rather than after the pick. */
+  warnings?: string[];
   /** A short fact worth seeing at a glance — the day this already sits on. */
   tag?: string;
   active: boolean;
@@ -70,7 +73,16 @@ function Tile({
     >
       <span className="w-1 shrink-0 self-stretch" style={{ background: accent }} aria-hidden="true" />
       <span className="min-w-0 flex-1 py-2.5 pr-3.5">
-        <span className="block truncate text-[15px] font-medium">{title}</span>
+        <span className="flex items-center gap-1.5">
+          {warnings && warnings.length > 0 && (
+            <span
+              className="size-2 shrink-0 rounded-full"
+              style={{ background: 'var(--color-warn)' }}
+              aria-hidden="true"
+            />
+          )}
+          <span className="truncate text-[15px] font-medium">{title}</span>
+        </span>
         <span
           className={`mt-0.5 block truncate text-[12px] font-medium ${
             active ? 'text-bg/70' : 'text-text-dim'
@@ -78,6 +90,15 @@ function Tile({
         >
           {detail}
         </span>
+        {warnings && warnings.length > 0 && (
+          <span
+            className="mt-0.5 block truncate text-[12px] font-semibold"
+            style={{ color: active ? undefined : 'var(--color-warn)' }}
+          >
+            {warnings.length > 1 ? `${warnings.length} warnings · ` : ''}
+            {warnings[0]}
+          </span>
+        )}
       </span>
       {tag && (
         <span
@@ -96,6 +117,7 @@ export function DayEditor({
   date,
   golfDates,
   slots,
+  warnings,
   onSetUsual,
   usualLabel,
   currentSlot,
@@ -109,6 +131,12 @@ export function DayEditor({
   golfDates: { date: string; played?: boolean }[];
   /** Workouts the block actually defines, so we never offer an empty day. */
   slots: DayEditorSlot[];
+  /**
+   * What each workout would raise if it were put on this date — the golf rule
+   * and the Program screen's "Worth fixing" problems, worked out in advance so
+   * the list can be read without trying each one.
+   */
+  warnings?: Map<DaySlot, string[]>;
   /** Makes the day's workout fall here every week, not just this one. */
   onSetUsual?: () => void;
   usualLabel?: string;
@@ -201,7 +229,12 @@ export function DayEditor({
                 row.onWeekday !== undefined && row.onWeekday !== weekday
                   ? `, on ${WEEKDAY_LABEL[row.onWeekday]} this week`
                   : ''
+              }${
+                warnings?.get(row.slot)?.length
+                  ? `, warning: ${warnings.get(row.slot)?.join('; ')}`
+                  : ''
               }`}
+              warnings={warnings?.get(row.slot)}
               active={currentSlot === row.slot}
               onClick={() => onSetSlot(row.slot)}
             />

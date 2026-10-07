@@ -246,6 +246,40 @@ describe('placement is one week, not every week', () => {
     expect((problems.closest('section') as HTMLElement).textContent).toMatch(/round/i);
   });
 
+  it('flags a workout in the day list before it is picked, for the date tapped', async () => {
+    /* The warnings used to appear only after a workout was put on the day,
+       so finding a clean one meant trying each. The tile says it up front. */
+    const saturday = dayOfThisWeek(5);
+    await db.golfDay.put({ date: saturday, status: 'planned', holes: 18 });
+    await seedSchedule({
+      A: { intensity: 'heavy', name: 'Deadlift day' },
+      B: { intensity: 'light', name: 'Plank day' },
+    });
+    await seedWorkout('A', ['bb_deadlift']);
+    await seedWorkout('B', ['bw_plank']);
+    const { ui } = await openProgram();
+
+    const tile = async (date: string, name: RegExp) => {
+      await ui.click(dayButton(date));
+      const sheet = await screen.findByRole('heading', { name: WEEKDAY_LABEL[weekdayOf(date)] });
+      return within(sheet.parentElement as HTMLElement).findByRole('button', { name });
+    };
+
+    // The Friday before the round: the deadlift day is flagged, the plank day is not.
+    expect((await tile(FRIDAY, /^Deadlift day,/)).getAttribute('aria-label')).toMatch(
+      /warning: .*grip-heavy exercise 1 day before golf/,
+    );
+    expect(
+      (await tile(FRIDAY, /^Plank day,/)).getAttribute('aria-label'),
+    ).not.toMatch(/warning/);
+    await ui.click(screen.getByRole('button', { name: 'Done' }));
+
+    // Monday is clear of the round, so the same workout carries no flag there.
+    expect((await tile(MONDAY, /^Deadlift day,/)).getAttribute('aria-label')).not.toMatch(
+      /warning/,
+    );
+  });
+
   it('builds a workout clear of grip work when its date sits before a round', async () => {
     /* Not merely flagged afterwards — excluded up front. The generator is told
        what the day allows, and the day is known from the DATE it is planned on
