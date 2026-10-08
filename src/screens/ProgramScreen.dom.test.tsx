@@ -100,6 +100,20 @@ async function editWorkout(ui: ReturnType<typeof user>, card: HTMLElement) {
 }
 
 describe('making a workout', () => {
+  it('still offers New workout with twelve already on the shelf', async () => {
+    /* Twelve letters were once the whole pool, and a real shelf filled it:
+       the button went grey with no way past it but deleting a workout. */
+    const twelve = ['A', 'B', 'C', 'X', 'Y', 'D', 'E', 'F', 'G', 'H', 'I', 'J'] as const;
+    await seedSchedule(
+      Object.fromEntries(twelve.map((slot) => [slot, { intensity: 'heavy', name: `Day ${slot}` }])),
+    );
+    for (const slot of twelve) await seedWorkout(slot, ['bb_back_squat']);
+    await openProgram();
+
+    const button = await screen.findByRole('button', { name: 'New workout' });
+    expect(button).toHaveProperty('disabled', false);
+  });
+
   /** Taps a muscle on the body picker, which is how a workout says what it is. */
   const pickMuscle = async (ui: ReturnType<typeof user>, name: string) => {
     const group = screen.getByRole('group', { name: 'Muscles this workout trains' });

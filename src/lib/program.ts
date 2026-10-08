@@ -99,9 +99,14 @@ export type PlanByBlock = Record<string, DatePlan>;
 /*
  * Every workout id. Generated weeks still take A, B, C, X, Y in that order, so
  * a week built by an older version lands on exactly the slots it always did;
- * D-J are what "Add a day" reaches for once those are used.
+ * the rest of the alphabet is what "New workout" reaches for once those are
+ * used. Twelve was once the whole pool, and a shelf of golf, mobility and
+ * strength days filled it — after which the button simply went grey.
  */
-export const SLOTS: DaySlot[] = ['A', 'B', 'C', 'X', 'Y', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+export const SLOTS: DaySlot[] = [
+  'A', 'B', 'C', 'X', 'Y', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
+  'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'Z',
+];
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);

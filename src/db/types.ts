@@ -69,7 +69,7 @@ export type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
 export type SpinalLoad = 'none' | 'low' | 'high';
 export type GripLoad = 'none' | 'low' | 'high';
 /*
- * A workout's identity, and only its identity. Ten of them: five was not a
+ * A workout's identity, and only its identity. The whole alphabet: five was not a
  * design decision, it was the number of letters the first version happened to
  * pick. X and Y stay valid because generated weeks have always used them for
  * the fourth and fifth session — renaming them would strand real data for
@@ -86,8 +86,22 @@ export type DaySlot =
   | 'H'
   | 'I'
   | 'J'
+  | 'K'
+  | 'L'
+  | 'M'
+  | 'N'
+  | 'O'
+  | 'P'
+  | 'Q'
+  | 'R'
+  | 'S'
+  | 'T'
+  | 'U'
+  | 'V'
+  | 'W'
   | 'X'
-  | 'Y';
+  | 'Y'
+  | 'Z';
 
 // Seeded once, hand-curated from the garage equipment. ~50 rows.
 // freeDbId links to yuhonas/free-exercise-db for description + photos (see §9).
