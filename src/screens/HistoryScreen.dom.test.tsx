@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
 import { monthTitle, shiftIso, shiftMonth, todayIso, weekStart } from '../lib/format';
 import { HistoryScreen } from './HistoryScreen';
+import { setExerciseRetired } from '../db/settings';
 
 /** A finished session on a date, named so the list rows can be told apart. */
 async function logSession(id: string, date: string, name: string) {
@@ -207,5 +208,22 @@ describe('progress over weeks', () => {
     expect(within(chest).getByText('Rising')).toBeTruthy();
     const calves = screen.getByRole('button', { name: /^Calves/ });
     expect(within(calves).getByText('Dropped')).toBeTruthy();
+  });
+});
+
+describe('retired exercises in the History list', () => {
+  it('lists a retired exercise in its place, tagged so its sheet need not be opened', async () => {
+    await setExerciseRetired('bb_deadlift', true);
+    draw(<HistoryScreen exercises={exercises} onOpen={vi.fn()} />);
+    const ui = user();
+
+    await ui.click(await screen.findByRole('button', { name: 'Other' }));
+    const row = (await screen.findByText('Conventional deadlift')).closest('button') as HTMLElement;
+    expect(within(row).getByText('Retired')).toBeTruthy();
+    // Not folded away here: there is no "Retired (n)" section in History.
+    expect(screen.queryByRole('button', { name: /Retired \(/ })).toBeNull();
+    // And a lift still in rotation carries no tag.
+    const squat = screen.getByText('Back squat').closest('button') as HTMLElement;
+    expect(within(squat).queryByText('Retired')).toBeNull();
   });
 });

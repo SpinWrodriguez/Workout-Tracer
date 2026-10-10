@@ -46,11 +46,11 @@ export function ExercisePicker({
   const [station, setStation] = useState<Station | 'all'>('all');
   const [muscle, setMuscle] = useState<MuscleId | 'all'>('all');
   const [showRetired, setShowRetired] = useState(false);
-  const retired = useLiveQuery(
-    async () => (foldRetired ? new Set(await readRetiredExercises()) : undefined),
-    [foldRetired],
-  );
-  const retiredIds = retired as ReadonlySet<string> | undefined;
+  /* Read everywhere, folded only where asked: History lists a retired lift
+     in its place, but still says it is retired, so nobody has to open its
+     sheet to find out. */
+  const allRetired = useLiveQuery(async () => new Set(await readRetiredExercises()), []);
+  const retiredIds = foldRetired ? allRetired : undefined;
 
   const filtered = useMemo(() => {
     const list = exercises.filter((e) => {
@@ -111,12 +111,19 @@ export function ExercisePicker({
           className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 text-left"
         >
           <span className="min-w-0 flex-1">
-            <span
-              className={`block truncate text-[15px] font-medium ${
-                already ? 'text-text-faint' : 'text-text'
-              }`}
-            >
-              {exercise.name}
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span
+                className={`truncate text-[15px] font-medium ${
+                  already ? 'text-text-faint' : 'text-text'
+                }`}
+              >
+                {exercise.name}
+              </span>
+              {allRetired?.has(exercise.id) && (
+                <span className="shrink-0 rounded-full bg-surface-2 px-1.5 py-px text-[10px] font-semibold tracking-wide text-text-dim uppercase">
+                  Retired
+                </span>
+              )}
             </span>
             <span className="mt-0.5 block truncate text-[11px] font-medium text-text-dim">
               {exercise.primaryMuscles.map(muscleName).join(' · ')}
