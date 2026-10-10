@@ -132,7 +132,7 @@ describe('asking a model for one workout', () => {
   it('sends the muscles that were pointed at, and only their exercises', async () => {
     const { seen } = stubModel();
     draw(<ProgramScreen exercises={exercises} onStartDay={vi.fn()} />);
-    await screen.findByRole('heading', { name: 'Plan the week' });
+    await screen.findByRole('heading', { name: 'What this week trains' });
     const ui = user();
 
     await ui.click(screen.getByRole('button', { name: 'New workout' }));
@@ -177,7 +177,7 @@ describe('asking a model for one workout', () => {
   it('sends the effort button as a default, not as a constraint', async () => {
     const { seen } = stubModel();
     draw(<ProgramScreen exercises={exercises} onStartDay={vi.fn()} />);
-    await screen.findByRole('heading', { name: 'Plan the week' });
+    await screen.findByRole('heading', { name: 'What this week trains' });
     const ui = user();
 
     await ui.click(screen.getByRole('button', { name: 'New workout' }));
@@ -213,7 +213,7 @@ describe('asking a model for one workout', () => {
      */
     stubModel({ intensity: 'light' });
     draw(<ProgramScreen exercises={exercises} onStartDay={vi.fn()} />);
-    await screen.findByRole('heading', { name: 'Plan the week' });
+    await screen.findByRole('heading', { name: 'What this week trains' });
     const ui = user();
 
     await ui.click(screen.getByRole('button', { name: 'New workout' }));
@@ -243,7 +243,7 @@ describe('asking a model for one workout', () => {
   it('leaves the library whole when nothing is picked', async () => {
     const { seen } = stubModel();
     draw(<ProgramScreen exercises={exercises} onStartDay={vi.fn()} />);
-    await screen.findByRole('heading', { name: 'Plan the week' });
+    await screen.findByRole('heading', { name: 'What this week trains' });
     const ui = user();
 
     await ui.click(screen.getByRole('button', { name: 'New workout' }));

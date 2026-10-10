@@ -9,7 +9,6 @@ import {
   gripBufferNote,
   gripConflictOn,
   weekdayOf,
-  type Weekday,
 } from '../lib/golf';
 import { readInventory } from '../db/settings';
 import { DEFAULT_INVENTORY, ladderFor, type Inventory } from '../lib/loadable';
@@ -24,7 +23,6 @@ import {
 } from '../lib/blockValidation';
 import { dayLabel, describeDay, shortDayLabels } from '../lib/dayLabel';
 import {
-  WORKOUT_FOCUS_LABEL,
   focusForMuscles,
   templateDayFor,
   workoutTemplate,
@@ -52,11 +50,6 @@ import {
 } from '../lib/program';
 import { DayEditor, type DayEditorSlot } from '../components/DayEditor';
 import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
-import {
-  WeekPlanSheet,
-  type PlannedWeekDay,
-  type WeekPlanDay,
-} from '../components/WeekPlanSheet';
 import { isModelAvailable } from '../lib/askModel';
 import {
   generateAiWorkout,
@@ -65,7 +58,6 @@ import {
   templateForAiWorkout,
   type AiWorkout,
 } from '../lib/aiWorkout';
-import { matchExistingWorkouts } from '../lib/weekReuse';
 import { stalledExerciseIds, usageByExercise } from '../lib/coachSignals';
 import { briefPayload, buildBrief, undertrained, type DayConstraints } from '../lib/aiBrief';
 import {
@@ -119,7 +111,6 @@ export function ProgramScreen({
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState<string | undefined>(undefined);
-  const [planningWeek, setPlanningWeek] = useState(false);
 
   const [training, setTraining] = useState<TrainingPrefs>(DEFAULT_TRAINING);
   const [editingSlot, setEditingSlot] = useState<DaySlot | null>(null);
@@ -242,16 +233,6 @@ export function ProgramScreen({
      floor of 8 is unreachable at this target, so telling the generator every
      muscle is short tells it nothing. */
   const share = fairShare(training.weeklySetTarget, byId);
-
-  /* What the last month left short, for the week sheet and the generator both:
-     planning should start from the data, not from memory of the Levels screen. */
-  const recentShort = useLiveQuery(async () => {
-    const from = shiftIso(todayIso(), -28);
-    const sessions = await db.session.where('date').between(from, todayIso(), true, true).toArray();
-    const ids = new Set(sessions.map((session) => session.id));
-    const logs = (await db.setLog.toArray()).filter((log) => ids.has(log.sessionId));
-    return undertrained(logs, byId, share, 6, 4);
-  }, [byId, share]);
 
   /* Stalled lifts across the block, for the card nudge: a coach changes an
      exercise for a reason, and this is the reason, said where rebuilding
@@ -392,21 +373,6 @@ export function ProgramScreen({
       onWeekday: onDate !== undefined ? weekdayOf(onDate) : undefined,
     };
   });
-
-  /** The week as the planner sees it: which dates are free, taken, or a round. */
-  const weekPlanDays: WeekPlanDay[] = useMemo(
-    () =>
-      week.map((day) => ({
-        date: day.date,
-        golf: day.golf !== undefined,
-        taken: day.plannedSlot !== undefined ? labelFor(day.plannedSlot) : undefined,
-        /* What the rule will do to a workout built for this date, said before
-           it happens rather than never. */
-        note: gripBufferNote(day.date, golfDateList)?.text,
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [week, schedule, slots, golfDays],
-  );
 
   /**
    * What the week on screen intends to train, from the workouts placed on it.
@@ -933,76 +899,7 @@ export function ProgramScreen({
     }
   };
 
-  /**
-   * A week, planned without a model: each chosen day takes a workout already
-   * on the shelf whose focus and effort match it and whose exercises are legal
-   * on that date. Deterministic on the lifter's own call — the AI week builder
-   * generated near-copies of what the shelf already held, so generation now
-   * happens one workout at a time (where it works) and planning is placement.
-   *
-   * A day nothing matches is reported, not papered over: the fix is to build
-   * a workout for it — by hand or with the single-workout AI — and plan again.
-   */
-  const planWeek = async (days: PlannedWeekDay[]) => {
-    if (!block || asking || days.length === 0) return;
-    setAsking(true);
-    setAskError(undefined);
-    try {
-      const current = await db.blockExercise.where('blockId').equals(block.id).toArray();
-      const stored = (await readSchedules())[block.id] ?? {};
-      const existing = definedSlotsOf(stored, current).map((other) => ({
-        slot: other,
-        name: labelFor(other),
-        focus: stored[other]?.focus,
-        intensity: (stored[other]?.intensity ?? 'heavy') as Intensity,
-        exerciseIds: current.filter((row) => row.daySlot === other).map((row) => row.exerciseId),
-      }));
 
-      const golfWeekdays = training.golfWeekdays as never as Weekday[];
-      const plans = (await readPlans())[block.id] ?? {};
-      const placedThisWeek = weekDatesOf(days[0]?.date ?? todayIso())
-        .map((date) => plans[date])
-        .filter((slot): slot is DaySlot => slot !== undefined);
-      const { reused, toGenerate: unmatched } = matchExistingWorkouts(
-        days,
-        existing,
-        byId,
-        golfWeekdays,
-        placedThisWeek,
-      );
-
-      let plan = plans;
-      for (const { day, slot } of reused) {
-        plan = planDate(plan, stored, weekDatesOf(day.date), slot, day.date);
-      }
-      if (reused.length > 0) await writePlan(block.id, plan);
-
-      if (unmatched.length > 0) {
-        /* Named per day, with what it wanted — the message IS the to-do list. */
-        const gaps = unmatched
-          .map(
-            (day) =>
-              `${WEEKDAY_LABEL[weekdayOf(day.date)]} needs a ${day.intensity} ${
-                WORKOUT_FOCUS_LABEL[day.focus]
-              } workout`,
-          )
-          .join('; ');
-        setAskError(
-          `${reused.length > 0 ? `Placed ${reused.length}. ` : ''}Nothing on the shelf matches: ${gaps}. ` +
-            'Build one — by hand or with AI — then plan again.',
-        );
-        return;
-      }
-
-      setPlanningWeek(false);
-    } catch (cause) {
-      setAskError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setAsking(false);
-    }
-  };
-
-  /** An empty workout to fill by hand. */
   const createBlankWorkout = async () => {
     if (!block) return;
     const slot = freeSlot();
@@ -1173,7 +1070,7 @@ export function ProgramScreen({
         )}
       </Card>
 
-      <Card title={block ? 'Plan the week' : 'No block'} className="mt-3">
+      <Card title={block ? 'What this week trains' : 'No block'} className="mt-3">
         {block ? (
           <>
             {/* This card was once the block's dates and a shortcut that made
@@ -1198,30 +1095,15 @@ export function ProgramScreen({
               </p>
             </div>
 
-            {/* Two ways in, and only two: describe a week and let the model
-                build it, or make one workout at a time. Both leave the
-                calendar to you except where you named the day yourself.
-                They sit here, under the gap they are for, rather than under
-                the whole list of workouts where you had to scroll to reach
-                them. */}
-            {/* Deterministic, so it needs no key and no model: planning is
-                placing workouts you already have onto the days you picked. */}
-            <button
-              type="button"
-              onClick={() => {
-                setAskError(undefined);
-                setPlanningWeek(true);
-              }}
-              className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg"
-            >
-              Plan the week
-            </button>
-
+            {/* Making a workout sits under the gap it is for. Placing one is
+                the week strip's job: tap a day. The week planner that used to
+                sit here only matched shelf workouts to days, which the day
+                sheet already does one tap at a time. */}
             <button
               type="button"
               onClick={() => setCreating(true)}
               disabled={freeSlot() === undefined}
-              className="mt-2 h-11 w-full rounded-full bg-surface-2 text-sm font-medium text-text-dim disabled:text-text-faint"
+              className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
             >
               {freeSlot() === undefined ? `All ${DAY_SLOTS.length} workouts used` : 'New workout'}
             </button>
@@ -1360,20 +1242,6 @@ export function ProgramScreen({
         );
       })}
 
-
-      {planningWeek && (
-        <WeekPlanSheet
-          days={weekPlanDays}
-          asking={asking}
-          error={askError}
-          shortfall={recentShort}
-          onBuild={(chosen: PlannedWeekDay[]) => void planWeek(chosen)}
-          onClose={() => {
-            setPlanningWeek(false);
-            setAskError(undefined);
-          }}
-        />
-      )}
 
       {creating && (
         <NewWorkoutSheet

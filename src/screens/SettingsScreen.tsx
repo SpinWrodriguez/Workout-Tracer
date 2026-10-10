@@ -78,19 +78,16 @@ export function SettingsScreen() {
       </div>
 
       <div className="mt-3">
-        <NutritionSync />
+        <TrainingPrefsEditor />
       </div>
 
-      <Card title="Build" className="mt-3" collapsible summary={__BUILD_ID__}>
-        <div className="flex items-baseline justify-between gap-3">
-          <Label>This version</Label>
-          <span className="text-[13px] font-medium tabular-nums">{__BUILD_ID__}</span>
-        </div>
-        <p className="mt-2 text-[12px] leading-snug font-medium text-text-dim">
-          Cached for offline use, so updates land on the next open. Not the build you expect?
-          Close the app fully and reopen.
-        </p>
-      </Card>
+      <div className="mt-3">
+        <InventoryEditor />
+      </div>
+
+      <div className="mt-3">
+        <NutritionSync />
+      </div>
 
       <div className="mt-3">
         <ModelKeyEditor />
@@ -172,14 +169,40 @@ export function SettingsScreen() {
         )}
       </Card>
 
+      {/* The machine room: which build is running, what is stored, and the
+          reference photos. Three cards once, all of them looked at rarely. */}
       <Card
-        title="Descriptions and photos"
+        title="About & data"
         className="mt-3"
         collapsible
-        summary={
-          counts === undefined ? '--' : `${counts.freeDb} of ${mappedIds().length} cached`
-        }
+        summary={`${__BUILD_ID__} · ${
+          counts === undefined ? '--' : `${counts.session} sessions`
+        }`}
       >
+        <div className="flex items-baseline justify-between gap-3">
+          <Label>This version</Label>
+          <span className="text-[13px] font-medium tabular-nums">{__BUILD_ID__}</span>
+        </div>
+        <p className="mt-2 text-[12px] leading-snug font-medium text-text-dim">
+          Cached for offline use, so updates land on the next open. Not the build you expect?
+          Close the app fully and reopen.
+        </p>
+
+        <h3 className="label mt-4 mb-1 block">Stored data</h3>
+        {counts === undefined ? (
+          <Label>--</Label>
+        ) : (
+          <>
+            {row('Exercises', String(counts.exercise))}
+            {row('Sessions', String(counts.session))}
+            {row('Set logs', String(counts.setLog))}
+            {row('Body weight entries', String(counts.bodyWeight))}
+            {row('Activity entries', String(counts.activity))}
+            {row('Reference records', String(counts.freeDb))}
+          </>
+        )}
+
+        <h3 className="label mt-4 mb-1 block">Descriptions and photos</h3>
         <p className="text-[13px] text-text-dim">
           Descriptions and photos for the {mappedIds().length} exercises mapped to
           free-exercise-db. Fetched once, stored locally, never needed at runtime.
@@ -235,38 +258,6 @@ export function SettingsScreen() {
           </div>
         )}
       </Card>
-
-      <Card
-        title="Stored data"
-        className="mt-3"
-        collapsible
-        summary={
-          counts === undefined
-            ? '--'
-            : `${counts.session} sessions · ${counts.setLog} set logs`
-        }
-      >
-        {counts === undefined ? (
-          <Label>--</Label>
-        ) : (
-          <>
-            {row('Exercises', String(counts.exercise))}
-            {row('Sessions', String(counts.session))}
-            {row('Set logs', String(counts.setLog))}
-            {row('Body weight entries', String(counts.bodyWeight))}
-            {row('Activity entries', String(counts.activity))}
-            {row('Reference records', String(counts.freeDb))}
-          </>
-        )}
-      </Card>
-
-      <div className="mt-3">
-        <TrainingPrefsEditor />
-      </div>
-
-      <div className="mt-3">
-        <InventoryEditor />
-      </div>
     </Screen>
   );
 }

@@ -44,12 +44,10 @@ const RING_ROW = 112;
 
 export function DashboardScreen({
   exercises,
-  onOpenSession,
   onStartDay,
   onOpenSettings,
 }: {
   exercises: Exercise[];
-  onOpenSession: (sessionId: string) => void;
   onStartDay: (slot?: DaySlot) => void;
   onOpenSettings: () => void;
 }) {
@@ -123,12 +121,6 @@ export function DashboardScreen({
 
   const bodyWeight = useLiveQuery(
     () => db.sharedBodyWeight.orderBy('date').toArray(),
-    [],
-    undefined,
-  );
-
-  const recent = useLiveQuery(
-    () => db.session.orderBy('date').reverse().limit(4).toArray(),
     [],
     undefined,
   );
@@ -427,29 +419,6 @@ export function DashboardScreen({
           <>
             <Empty>{EM_WEIGHT}</Empty>
           </>
-        )}
-      </Card>
-
-      <Card title="Recent sessions" className="mt-3">
-        {recent === undefined || recent.length === 0 ? (
-          <Empty>--- sets</Empty>
-        ) : (
-          <div className="-mx-1">
-            {recent.map((session) => (
-              <button
-                key={session.id}
-                type="button"
-                onClick={() => onOpenSession(session.id)}
-                className="flex w-full items-center justify-between gap-3 rounded-xl px-1 py-2.5 text-left"
-              >
-                <span className="text-[15px] font-medium">{friendlyDate(session.date)}</span>
-                <Label>
-                  {session.daySlotName ?? slotFallback(session.daySlot)}
-                  {session.durationMin ? ` · ${session.durationMin} min` : ''}
-                </Label>
-              </button>
-            ))}
-          </div>
         )}
       </Card>
     </Screen>

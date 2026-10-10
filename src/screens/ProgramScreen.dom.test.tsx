@@ -51,9 +51,9 @@ const dayButton = (date: string) =>
 async function openProgram() {
   const onStartDay = vi.fn();
   const view = draw(<ProgramScreen exercises={exercises} onStartDay={onStartDay} />);
-  // The card only titles itself "Plan the week" once the live query has
+  // The card only titles itself "What this week trains" once the live query has
   // actually produced one, so this is the screen saying it is ready.
-  await screen.findByRole('heading', { name: 'Plan the week' });
+  await screen.findByRole('heading', { name: 'What this week trains' });
   return { onStartDay, view, ui: user() };
 }
 
@@ -664,7 +664,7 @@ describe('picking and unpicking an exercise', () => {
 describe('what the week on screen will train', () => {
   /** The block card's own body map, by the muscle labels it carries. */
   async function plannedMap(): Promise<Record<string, string>> {
-    const heading = await screen.findByRole('heading', { name: 'Plan the week' });
+    const heading = await screen.findByRole('heading', { name: 'What this week trains' });
     const card = heading.closest('section') as HTMLElement;
     const titles = [...card.querySelectorAll('title')].map((node) => node.textContent ?? '');
     return Object.fromEntries(
@@ -673,7 +673,7 @@ describe('what the week on screen will train', () => {
   }
 
   const blockCardText = async () =>
-    ((await screen.findByRole('heading', { name: 'Plan the week' }))
+    ((await screen.findByRole('heading', { name: 'What this week trains' }))
       .closest('section') as HTMLElement).textContent ?? '';
 
   it('counts programmed sets, not logged ones', async () => {
@@ -781,7 +781,7 @@ describe('a week whose workouts were deleted after it was trained', () => {
   }
 
   const blockCardText = async () =>
-    ((await screen.findByRole('heading', { name: 'Plan the week' }))
+    ((await screen.findByRole('heading', { name: 'What this week trains' }))
       .closest('section') as HTMLElement).textContent ?? '';
 
   it('still colours the map from what was actually logged', async () => {
@@ -793,7 +793,7 @@ describe('a week whose workouts were deleted after it was trained', () => {
     await openProgram();
 
     await waitFor(async () => {
-      const heading = await screen.findByRole('heading', { name: 'Plan the week' });
+      const heading = await screen.findByRole('heading', { name: 'What this week trains' });
       const card = heading.closest('section') as HTMLElement;
       const titles = [...card.querySelectorAll('title')].map((node) => node.textContent);
       // Three logged sets of back squat, and not one blockExercise row to read.
@@ -823,7 +823,7 @@ describe('a week whose workouts were deleted after it was trained', () => {
     await openProgram();
 
     await waitFor(async () => {
-      const heading = await screen.findByRole('heading', { name: 'Plan the week' });
+      const heading = await screen.findByRole('heading', { name: 'What this week trains' });
       const card = heading.closest('section') as HTMLElement;
       const titles = [...card.querySelectorAll('title')].map((node) => node.textContent);
       // Three logged, five planned: three, not eight and not five.
@@ -1225,7 +1225,7 @@ describe('which week is on screen', () => {
         onWeekChange={(date) => seen.push(date)}
       />,
     );
-    await screen.findByRole('heading', { name: 'Plan the week' });
+    await screen.findByRole('heading', { name: 'What this week trains' });
     const ui = user();
 
     expect(seen.at(-1)).toBe(todayIso());

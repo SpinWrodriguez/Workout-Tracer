@@ -33,7 +33,6 @@ function openDashboard() {
   return draw(
     <DashboardScreen
       exercises={exercises}
-      onOpenSession={vi.fn()}
       onStartDay={vi.fn()}
       onOpenSettings={vi.fn()}
     />,

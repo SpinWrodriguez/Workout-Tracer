@@ -126,7 +126,6 @@ export default function App() {
       {route.tab === 'dashboard' && (
         <DashboardScreen
           exercises={exercises}
-          onOpenSession={openSession}
           onStartDay={startSession}
           onOpenSettings={() => setRoute({ kind: 'tab', tab: 'settings' })}
         />
