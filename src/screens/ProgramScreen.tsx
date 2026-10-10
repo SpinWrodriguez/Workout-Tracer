@@ -6,6 +6,7 @@ import { longDate, todayIso } from '../lib/format';
 import {
   WEEKDAY_LABEL,
   buildWeek,
+  golfDatesOf,
   gripBufferNote,
   gripConflictOn,
   weekdayOf,
@@ -141,12 +142,10 @@ export function ProgramScreen({
 
   const block = useLiveQuery(() => readLatestBlock(), [], undefined);
   const golfDays = useLiveQuery(() => db.golfDay.toArray(), [], undefined);
-  /* Every round, with whether it already happened: a round marked played no
-     longer bars its own day, and `gripConflictOn` only looks forward anyway. */
-  const golfDateList = (golfDays ?? []).map((day) => ({
-    date: day.date,
-    played: day.status === 'played',
-  }));
+  /* Every round, with whether it is behind the day's session: a morning
+     round is, as is one marked played; `gripConflictOn` only looks forward
+     anyway. */
+  const golfDateList = golfDatesOf(golfDays ?? [], training.golfTime);
   const slots = useLiveQuery(
     async () => (block ? db.blockExercise.where('blockId').equals(block.id).toArray() : []),
     [block?.id],
@@ -253,6 +252,7 @@ export function ProgramScreen({
       golfDays: golfDays ?? [],
       sessions: weekHistory?.sessions ?? [],
       exercisesById: byId,
+      golfTime: training.golfTime,
     }).map((day) => {
       // Resolved per date, so a session moved in one week shows as moved in
       // that week and nowhere else.
@@ -264,7 +264,7 @@ export function ProgramScreen({
         intensity: plannedSlot ? (schedule?.[plannedSlot]?.intensity ?? 'heavy') : undefined,
       };
     });
-  }, [anchor, golfDays, weekHistory, byId, schedule, datePlan]);
+  }, [anchor, golfDays, weekHistory, byId, schedule, datePlan, training.golfTime]);
 
   /**
    * Every workout this block defines, placed or not. Read from the schedule as
@@ -934,6 +934,7 @@ export function ProgramScreen({
     const context: ValidationContext = {
       exercisesById: byId,
       golfWeekdays: training.golfWeekdays as never,
+      golfTime: training.golfTime,
       weeklySetTarget: training.weeklySetTarget,
       sessionBudgetMinutes: sessionMinutes,
       hasHistory: hasHistory ?? false,

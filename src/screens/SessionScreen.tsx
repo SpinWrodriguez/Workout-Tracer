@@ -20,11 +20,12 @@ import {
   readActiveSession,
   readExerciseNotes,
   readInventory,
+  readTraining,
   writeActiveSession,
 } from '../db/settings';
 import { hasLoadTranslation } from '../lib/load';
 import { DEFAULT_INVENTORY, barWeightFor, ladderFor, type Inventory } from '../lib/loadable';
-import { sessionWarnings, type RuleWarning } from '../lib/golf';
+import { golfDatesOf, sessionWarnings, type RuleWarning } from '../lib/golf';
 import {
   DEFAULT_REP_RANGE,
   OUTCOME_LABEL,
@@ -148,9 +149,8 @@ export function SessionScreen({
     void readExerciseNotes().then((next) => {
       if (!cancelled) setExerciseNotes(next);
     });
-    void db.golfDay.toArray().then((rows) => {
-      if (!cancelled)
-        setGolfDates(rows.map((row) => ({ date: row.date, played: row.status === 'played' })));
+    void Promise.all([db.golfDay.toArray(), readTraining()]).then(([rows, training]) => {
+      if (!cancelled) setGolfDates(golfDatesOf(rows, training.golfTime));
     });
     return () => {
       cancelled = true;

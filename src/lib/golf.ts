@@ -95,6 +95,21 @@ export interface GolfDateLite {
 }
 
 /**
+ * Every round as the buffer reads it. A morning round is behind any session
+ * on its day, so it counts as played for the day's own sake — the forward
+ * buffers are untouched either way.
+ */
+export function golfDatesOf(
+  golfDays: { date: string; status: GolfDay['status'] }[],
+  golfTime: 'morning' | 'afternoon' = 'morning',
+): GolfDateLite[] {
+  return golfDays.map((day) => ({
+    date: day.date,
+    played: day.status === 'played' || golfTime === 'morning',
+  }));
+}
+
+/**
  * The soonest round close enough to `dateIso` to matter, if any — barring or
  * merely worth mentioning, per `severity`. Only rounds ahead of the date
  * count, and a round marked played no longer bars its own day: the session
@@ -341,6 +356,8 @@ export interface WeekInput {
   golfDays: GolfDay[];
   sessions: { id: string; date: string; exerciseIds: string[]; name?: string }[];
   exercisesById: Map<string, Exercise>;
+  /** Morning rounds leave their own evening free. The default. */
+  golfTime?: 'morning' | 'afternoon';
 }
 
 export function buildWeek({
@@ -348,10 +365,11 @@ export function buildWeek({
   golfDays,
   sessions,
   exercisesById,
+  golfTime = 'morning',
 }: WeekInput): WeekDay[] {
   const start = weekStart(anchorDate);
   // Rounds beyond the week still constrain its last days, so look ahead.
-  const golfDates = golfDays.map((g) => ({ date: g.date, played: g.status === 'played' }));
+  const golfDates = golfDatesOf(golfDays, golfTime);
   const golfByDate = new Map(golfDays.map((g) => [g.date, g]));
 
   return WEEKDAYS.map((weekday) => {

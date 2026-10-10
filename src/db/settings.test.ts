@@ -35,6 +35,17 @@ beforeEach(async () => {
  * that reason, and the effort ceiling has a clamp as well: unlike a set target,
  * a nonsense value here does not look wrong on screen.
  */
+describe('when the round is', () => {
+  it('is the morning unless the lifter said afternoon', () => {
+    /* Golf in the morning and training that evening is the usual shape of a
+       Saturday here, so the day's own evening is free by default. */
+    expect(DEFAULT_TRAINING.golfTime).toBe('morning');
+    expect(mergeTraining({}).golfTime).toBe('morning');
+    expect(mergeTraining({ golfTime: 'afternoon' }).golfTime).toBe('afternoon');
+    expect(mergeTraining({ golfTime: 'noon' }).golfTime).toBe('morning');
+  });
+});
+
 describe('the effort ceiling', () => {
   it('defaults to one rep in reserve rather than to failure', () => {
     // A default nobody chose should be the sustainable one.

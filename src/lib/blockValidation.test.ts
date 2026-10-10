@@ -126,6 +126,12 @@ describe('rule c — grip clearance computed from the calendar (defect 1)', () =
     expect(daysClearOfGolf(6, [6])).toBe(0); // the round itself
   });
 
+  it('lets a session sit on the golf day itself when the round is in the morning', () => {
+    const p = proposal([{ slot: 'A', weekday: 6, ids: ['bb_bench_press'] }]);
+    expect(codes(p, CONTEXT)).not.toContain('forbidden_day');
+    expect(codes(p, { ...CONTEXT, golfTime: 'afternoon' })).toContain('forbidden_day');
+  });
+
   it('rejects high-grip work on a Friday with golf on Saturday', () => {
     const p = proposal([{ slot: 'A', weekday: 5, ids: ['bb_bent_over_row'] }]);
     const found = validateBlock(p, CONTEXT).find((v) => v.code === 'grip_conflict');

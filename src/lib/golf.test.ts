@@ -7,6 +7,7 @@ import {
   GRIP_BUFFER_DAYS,
   buildWeek,
   gripBufferNote,
+  golfDatesOf,
   gripConflictOn,
   gripSafeWeekdays,
   spineSafeWeekdays,
@@ -117,6 +118,16 @@ describe('the buffer window', () => {
         played,
       ),
     ).toEqual([]);
+  });
+
+  it('treats a morning round as behind the day, and an afternoon one as ahead of it', () => {
+    const planned = [{ date: SAT, status: 'planned' as const }];
+    expect(gripConflictOn(SAT, golfDatesOf(planned, 'morning'))).toBeUndefined();
+    expect(gripConflictOn(SAT, golfDatesOf(planned, 'afternoon'))).toMatchObject({ daysBefore: 0 });
+    // The day before is barred whichever it is.
+    expect(gripConflictOn(FRI, golfDatesOf(planned, 'morning'))).toMatchObject({ daysBefore: 1 });
+    // Played settles it either way.
+    expect(gripConflictOn(SAT, golfDatesOf([{ date: SAT, status: 'played' }], 'afternoon'))).toBeUndefined();
   });
 
   it('keeps every forward buffer even when the round is marked played', () => {
@@ -365,8 +376,9 @@ describe('weekly view', () => {
   });
 
   it('marks which days can carry grip work', () => {
-    // Everything but Friday and the round itself: advised is not barred.
-    expect(week.filter((d) => d.gripSafe).map((d) => d.weekday)).toEqual([1, 2, 3, 4, 7]);
+    // Everything but Friday: advised is not barred, and a morning round
+    // (the default) leaves its own evening free.
+    expect(week.filter((d) => d.gripSafe).map((d) => d.weekday)).toEqual([1, 2, 3, 4, 6, 7]);
   });
 
   it('reads the golf weekdays back off the calendar', () => {

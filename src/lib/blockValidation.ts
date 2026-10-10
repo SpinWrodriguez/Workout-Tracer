@@ -46,6 +46,11 @@ export interface ValidationContext {
   exercisesById: Map<string, Exercise>;
   /** Weekdays a round is played. Days-clear is derived from this, never given. */
   golfWeekdays: Weekday[];
+  /**
+   * Morning rounds leave the evening free, so a golf weekday is a training
+   * day; an afternoon round bars its whole day. Defaults to morning.
+   */
+  golfTime?: 'morning' | 'afternoon';
   weeklySetTarget: number;
   sessionBudgetMinutes: number;
   /** Block 1 has no history, so advanced movements are off the table. */
@@ -269,6 +274,9 @@ export function validateBlock(
 ): Violation[] {
   const violations: Violation[] = [];
   const { exercisesById, golfWeekdays } = context;
+  /* Which days no session may sit on at all: none when the round is in the
+     morning, the golf days when it is in the afternoon. */
+  const barred: Weekday[] = context.golfTime === 'afternoon' ? golfWeekdays : [];
 
   let weeklySets = 0;
   const covered = new Set<CoverageGroup>();
@@ -293,7 +301,7 @@ export function validateBlock(
           ? spineSafeWeekdays(golfWeekdays)
           : undefined;
     const usable = ([1, 2, 3, 4, 5, 6, 7] as Weekday[]).filter(
-      (weekday) => weekdayAllowed(weekday, golfWeekdays) && (!safe || safe.includes(weekday)),
+      (weekday) => weekdayAllowed(weekday, barred) && (!safe || safe.includes(weekday)),
     );
     return usable.find((weekday) => !taken.has(weekday)) ?? usable[0];
   };
@@ -304,7 +312,7 @@ export function validateBlock(
 
     // Placement is owned by the template, so a day that has drifted off it is a
     // bug in whatever produced the proposal, not a judgement call.
-    if (!weekdayAllowed(day.weekday, golfWeekdays)) {
+    if (!weekdayAllowed(day.weekday, barred)) {
       violations.push({
         code: 'forbidden_day',
         slot: day.slot,
