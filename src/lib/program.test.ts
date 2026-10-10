@@ -512,3 +512,18 @@ describe('a goal plan saved by a later version of the app', () => {
     expect(await db.block.get('plan_2026-10-12')).toBeTruthy();
   });
 });
+
+describe('the usual weekday stops where the block does', () => {
+  it('resolves inside the block, not before or after, unless a date was placed by hand', () => {
+    const schedule = day(1);
+    const within = { startDate: '2026-10-12', endDate: '2026-12-06' };
+    expect(slotForDate(schedule, '2026-10-12', {}, within)).toBe('A'); // first Monday
+    expect(slotForDate(schedule, '2026-11-30', {}, within)).toBe('A'); // last Monday
+    expect(slotForDate(schedule, '2026-10-05', {}, within)).toBeUndefined(); // the week before
+    expect(slotForDate(schedule, '2026-12-07', {}, within)).toBeUndefined(); // the Monday after
+    // A one-off put on a date after the block still counts.
+    expect(slotForDate(schedule, '2026-12-09', { '2026-12-09': 'A' }, within)).toBe('A');
+    // Without a range, the pattern runs on as it always did.
+    expect(slotForDate(schedule, '2026-12-07')).toBe('A');
+  });
+});

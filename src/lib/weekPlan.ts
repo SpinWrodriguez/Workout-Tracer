@@ -87,7 +87,7 @@ export async function readWeekPlan(anchorDate?: string): Promise<WeekPlan | unde
   const weekDates = Array.from({ length: 7 }, (_, i) => shiftIso(from, i));
   const dateOf = new Map<DaySlot, string>();
   for (const date of weekDates) {
-    const slot = slotForDate(plan.schedule, date, plan.dates);
+    const slot = slotForDate(plan.schedule, date, plan.dates, plan.block);
     if (slot !== undefined && !dateOf.has(slot)) dateOf.set(slot, date);
   }
 
@@ -131,7 +131,7 @@ export async function readWeekPlan(anchorDate?: string): Promise<WeekPlan | unde
     all,
     next: (upcoming[0] ?? pending[0])?.slot,
     today,
-    todaySlot: slotForDate(plan.schedule, today, plan.dates),
+    todaySlot: slotForDate(plan.schedule, today, plan.dates, plan.block),
     scheduled: Object.keys(plan.schedule).length > 0,
   };
 }

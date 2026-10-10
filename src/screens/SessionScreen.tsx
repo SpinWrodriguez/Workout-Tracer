@@ -207,7 +207,8 @@ export function SessionScreen({
       // today's programmed session just because one exists.
       const slot = freestyle
         ? undefined
-        : (daySlot ?? (blockPlan ? slotForDate(blockPlan.schedule, date, blockPlan.dates) : undefined));
+        : (daySlot ??
+          (blockPlan ? slotForDate(blockPlan.schedule, date, blockPlan.dates, blockPlan.block) : undefined));
       const programmed =
         blockPlan && slot ? entriesForSlot(blockPlan.entries, slot).length > 0 : false;
 

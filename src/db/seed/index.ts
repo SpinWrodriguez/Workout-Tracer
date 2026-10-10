@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { withSyncSuspended } from '../../lib/workoutSync';
 import type { Block } from '../types';
+import { fromIsoDate, toIsoDate, weekStart } from '../../lib/format';
 import { EXERCISES } from './exercises';
 
 export * from './exercises';
@@ -18,9 +19,11 @@ function isoDate(d: Date): string {
 }
 
 function defaultBlock(): Block {
-  const start = new Date();
+  // From the Monday of this week, so the week on screen is inside the block
+  // from its first day: usual weekdays only apply within the block's dates.
+  const start = fromIsoDate(weekStart(toIsoDate(new Date())));
   const end = new Date(start);
-  end.setDate(end.getDate() + 7 * 8); // 6–8 weeks; take the long end
+  end.setDate(end.getDate() + 7 * 8 - 1); // eight weeks, ending on a Sunday
   return {
     id: DEFAULT_BLOCK_ID,
     startDate: isoDate(start),

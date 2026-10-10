@@ -20,7 +20,7 @@ import {
   draw,
 } from '../test/dom';
 
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
 import type { BlockExercise } from '../db/types';
@@ -439,6 +439,31 @@ describe('a usual day set after weeks were cleared', () => {
     const plan = (await readPlans())[BLOCK_ID] ?? {};
     expect(plan[nextMonday]).toBeUndefined();
     expect(plan[MONDAY]).toBeUndefined();
+  });
+});
+
+describe('the calendar after the block', () => {
+  it('is empty once the block ends, and fills again when the end date is moved', async () => {
+    await seedSchedule({ A: { weekday: 1, intensity: 'heavy', name: 'Monday squats' } });
+    await seedWorkout('A', ['bb_back_squat']);
+    const block = await db.block.get(BLOCK_ID);
+    const endThisSunday = dayOfThisWeek(6);
+    await db.block.put({ ...(block as NonNullable<typeof block>), endDate: endThisSunday });
+    const { ui } = await openProgram();
+
+    await waitFor(() => expect(dayButton(MONDAY).getAttribute('aria-label')).toMatch(/Monday squats/));
+    await ui.click(screen.getByRole('button', { name: 'Next week' }));
+    const nextMonday = shiftIso(MONDAY, 7);
+    await waitFor(() =>
+      expect(dayButton(nextMonday).getAttribute('aria-label')).not.toMatch(/Monday squats/),
+    );
+
+    // Move the end out a week from the footnote and the Monday comes back.
+    const end = screen.getByLabelText('Block ends') as HTMLInputElement;
+    fireEvent.change(end, { target: { value: shiftIso(endThisSunday, 7) } });
+    await waitFor(() =>
+      expect(dayButton(nextMonday).getAttribute('aria-label')).toMatch(/Monday squats/),
+    );
   });
 });
 

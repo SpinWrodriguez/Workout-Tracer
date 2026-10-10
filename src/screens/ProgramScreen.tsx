@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { DaySlot, Exercise, GolfDay, MuscleId } from '../db/types';
-import { longDate, todayIso } from '../lib/format';
+import { todayIso } from '../lib/format';
 import {
   WEEKDAY_LABEL,
   buildWeek,
@@ -256,7 +256,7 @@ export function ProgramScreen({
     }).map((day) => {
       // Resolved per date, so a session moved in one week shows as moved in
       // that week and nowhere else.
-      const plannedSlot = slotForDate(schedule ?? {}, day.date, datePlan ?? {});
+      const plannedSlot = slotForDate(schedule ?? {}, day.date, datePlan ?? {}, block);
       return {
         ...day,
         plannedSlot,
@@ -264,7 +264,7 @@ export function ProgramScreen({
         intensity: plannedSlot ? (schedule?.[plannedSlot]?.intensity ?? 'heavy') : undefined,
       };
     });
-  }, [anchor, golfDays, weekHistory, byId, schedule, datePlan, training.golfTime]);
+  }, [anchor, golfDays, weekHistory, byId, schedule, datePlan, training.golfTime, block]);
 
   /**
    * Every workout this block defines, placed or not. Read from the schedule as
@@ -319,7 +319,7 @@ export function ProgramScreen({
   const movePlanned = async (slot: DaySlot | undefined, date: string) => {
     if (!block) return;
     const current = (await readPlans())[block.id] ?? {};
-    await writePlan(block.id, planDate(current, schedule ?? {}, weekDates, slot, date));
+    await writePlan(block.id, planDate(current, schedule ?? {}, weekDates, slot, date, block));
   };
 
   /**
@@ -1138,8 +1138,35 @@ export function ProgramScreen({
               {freeSlot() === undefined ? `All ${DAY_SLOTS.length} workouts used` : 'New workout'}
             </button>
 
-            <Label className="mt-3 block text-center">
-              Block: {longDate(block.startDate)} — {longDate(block.endDate)}
+            {/* The block's dates, editable: the usual weekdays run from the
+                first to the last, and the calendar after that is empty. An
+                eight-week plan ends when it ends. */}
+            <div className="mt-3 flex items-center justify-center gap-2 text-[12px] font-medium text-text-dim">
+              <span>Block</span>
+              <input
+                type="date"
+                value={block.startDate}
+                max={block.endDate}
+                aria-label="Block starts"
+                onChange={(event) => {
+                  if (event.target.value) void db.block.put({ ...block, startDate: event.target.value });
+                }}
+                className="rounded-lg bg-surface-2 px-2 py-1 text-[12px] font-medium text-text"
+              />
+              <span>to</span>
+              <input
+                type="date"
+                value={block.endDate}
+                min={block.startDate}
+                aria-label="Block ends"
+                onChange={(event) => {
+                  if (event.target.value) void db.block.put({ ...block, endDate: event.target.value });
+                }}
+                className="rounded-lg bg-surface-2 px-2 py-1 text-[12px] font-medium text-text"
+              />
+            </div>
+            <Label className="mt-1.5 block text-center">
+              Usual days run to the last date; after it the calendar is empty.
             </Label>
           </>
         ) : (

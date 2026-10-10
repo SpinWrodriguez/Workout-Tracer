@@ -172,19 +172,31 @@ export async function writeSchedule(blockId: string, schedule: BlockSchedule): P
   });
 }
 
+/** The dates a block's usual weekdays apply to. */
+export interface DateRange {
+  startDate: string;
+  endDate: string;
+}
+
 /**
  * What is programmed for one date: whatever was planned for that date, and
  * otherwise whichever workout usually falls on that weekday. A null entry
  * means the date was deliberately cleared, so the usual day does not creep
  * back in.
+ *
+ * The usual weekday only reaches as far as the block does: a plan is eight
+ * weeks, and the calendar after it is empty until the next one is made. A
+ * date entry still counts anywhere, since it was put there on purpose.
  */
 export function slotForDate(
   schedule: BlockSchedule,
   dateIso: string,
   plan: DatePlan = {},
+  within?: DateRange,
 ): DaySlot | undefined {
   const planned = plan[dateIso];
   if (planned !== undefined) return planned ?? undefined;
+  if (within && (dateIso < within.startDate || dateIso > within.endDate)) return undefined;
   const weekday = weekdayOf(dateIso);
   return SLOTS.find((slot) => schedule[slot]?.weekday === weekday);
 }
@@ -200,6 +212,7 @@ export function planDate(
   weekDates: string[],
   slot: DaySlot | undefined,
   dateIso: string,
+  within?: DateRange,
 ): DatePlan {
   const next: DatePlan = { ...plan };
 
@@ -207,7 +220,7 @@ export function planDate(
   // this the untouched days still resolve through the recurring pattern, so
   // moving one session shuffles the others as a side effect.
   for (const date of weekDates) {
-    if (next[date] === undefined) next[date] = slotForDate(schedule, date, plan) ?? null;
+    if (next[date] === undefined) next[date] = slotForDate(schedule, date, plan, within) ?? null;
   }
 
   if (slot === undefined) {
