@@ -1068,15 +1068,6 @@ export function ProgramScreen({
             >
               ›
             </button>
-            {week.some((day) => day.plannedSlot && day.sessionIds.length === 0) && (
-              <button
-                type="button"
-                onClick={() => void clearWeek()}
-                className="rounded-lg bg-surface-2 px-2.5 py-1 text-[12px] font-medium text-text-dim"
-              >
-                Clear
-              </button>
-            )}
           </span>
         }
       >
@@ -1087,6 +1078,20 @@ export function ProgramScreen({
           onPickDay={setEditingDate}
           onMoveSlot={(slot, date) => void movePlanned(slot, date)}
         />
+        {/* Under the strip and off to the side, away from the week arrows:
+            next to them it was pressed by mistake, and a cleared week is
+            seven taps to put back. */}
+        {week.some((day) => day.plannedSlot && day.sessionIds.length === 0) && (
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={() => void clearWeek()}
+              className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-text-faint"
+            >
+              Clear this week
+            </button>
+          </div>
+        )}
         {violations.length === 0 ? null : (
           <p className="mt-3 text-[12px] font-semibold" style={{ color: 'var(--color-rir-1)' }}>
             {violations.length} golf rule violation{violations.length === 1 ? '' : 's'}:{' '}

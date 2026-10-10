@@ -379,12 +379,12 @@ describe('clearing a week', () => {
     const { ui } = await openProgram();
 
     await waitFor(() => expect(dayButton(MONDAY).getAttribute('aria-label')).toMatch(/Monday squats/));
-    await ui.click(screen.getByRole('button', { name: 'Clear' }));
+    await ui.click(screen.getByRole('button', { name: 'Clear this week' }));
 
     await waitFor(() => expect(dayButton(MONDAY).getAttribute('aria-label')).not.toMatch(/squats/));
     expect(dayButton(WEDNESDAY).getAttribute('aria-label')).not.toMatch(/pulls/);
     // Nothing left to clear, so the button goes.
-    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear this week' })).toBeNull();
 
     // The usual weekdays still stand: next week has both workouts.
     await ui.click(screen.getByRole('button', { name: 'Next week' }));
@@ -413,11 +413,11 @@ describe('a usual day set after weeks were cleared', () => {
 
     // Clear this week and the next.
     await waitFor(() => expect(dayButton(MONDAY).getAttribute('aria-label')).toMatch(/Old Monday/));
-    await ui.click(screen.getByRole('button', { name: 'Clear' }));
+    await ui.click(screen.getByRole('button', { name: 'Clear this week' }));
     await ui.click(screen.getByRole('button', { name: 'Next week' }));
     const nextMonday = shiftIso(MONDAY, 7);
     await waitFor(() => expect(dayButton(nextMonday).getAttribute('aria-label')).toMatch(/Old Monday/));
-    await ui.click(screen.getByRole('button', { name: 'Clear' }));
+    await ui.click(screen.getByRole('button', { name: 'Clear this week' }));
     await waitFor(async () => expect((await readPlans())[BLOCK_ID]?.[nextMonday]).toBeNull());
     // Only the Mondays were pinned; Tuesday had nothing and gets no entry.
     expect((await readPlans())[BLOCK_ID]?.[shiftIso(nextMonday, 1)]).toBeUndefined();
