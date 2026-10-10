@@ -76,5 +76,13 @@ export default defineConfig(() => ({
      */
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}'],
+    /*
+     * The DOM suites wait on real things: the session draft is written on a
+     * one-second debounce, and its tests allow up to 4 s for each of two such
+     * writes. Vitest's default of 5 s for the WHOLE test cannot hold that on
+     * the CI runner, which is about half the speed of a laptop, and the deploy
+     * failed on exactly those tests. A test that is truly stuck still fails.
+     */
+    testTimeout: 15_000,
   },
 }));
