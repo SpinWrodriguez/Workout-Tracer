@@ -268,3 +268,40 @@ describe('an exercise the seed no longer lists', () => {
     expect(await db.exercise.count()).toBe(EXERCISES.length);
   });
 });
+
+describe('the muscle-plan additions', () => {
+  const ADDED = [
+    'bw_nordic_curl',
+    'cb_leg_curl',
+    'cb_overhead_triceps',
+    'cb_hip_adduction',
+    'cb_rear_delt_fly',
+    'db_incline_curl',
+    'db_single_leg_calf_raise',
+    'db_seated_calf_raise',
+  ];
+  const find = (id: string) => EXERCISES.find((e) => e.id === id);
+
+  it('are all in the seed and quiet on grip and spine, so they can sit near golf', () => {
+    for (const id of ADDED) {
+      const exercise = find(id);
+      expect(exercise, id).toBeTruthy();
+      expect(exercise?.gripLoad, id).not.toBe('high');
+      expect(exercise?.spinalLoad, id).toBe('none');
+    }
+  });
+
+  it('give the hamstrings a knee-bending exercise and the calves more than one', () => {
+    // Every hamstring exercise before these was a hip hinge.
+    expect(find('bw_nordic_curl')?.isHinge).toBe(false);
+    expect(find('cb_leg_curl')?.primaryMuscles).toEqual(['hamstrings']);
+    const calves = EXERCISES.filter((e) => e.primaryMuscles.includes('calves'));
+    expect(calves.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('read the cable stack through the single pulley, like every one-handle move', () => {
+    for (const id of ['cb_leg_curl', 'cb_overhead_triceps', 'cb_hip_adduction', 'cb_rear_delt_fly']) {
+      expect(find(id)?.loadMultiplier, id).toBe(CABLE_SINGLE_PULLEY);
+    }
+  });
+});

@@ -355,21 +355,28 @@ describe('the adductors have something of their own', () => {
    * The body map kept showing them pale and no arrangement of the week could
    * fix it: every exercise that reached the adductors reached them as a
    * secondary, and a secondary set counts half. A Copenhagen plank and a
-   * Cossack squat are the two movements that train them directly, and neither
-   * exists upstream — all 876 records were searched and the only adductor
-   * entries are stretches, a seated machine and plyometrics.
+   * Cossack squat train them directly, and neither exists upstream. The cable
+   * hip adduction does (Cable_Hip_Adduction), and it came with the ankle strap:
+   * the first adductor work that can be loaded a rung at a time.
    */
   it('is trained directly by at least one exercise', () => {
     const direct = EXERCISES.filter((e) => e.primaryMuscles.includes('adductors'));
-    expect(direct.map((e) => e.id).sort()).toEqual(['bw_copenhagen_plank', 'kb_cossack_squat']);
+    expect(direct.map((e) => e.id).sort()).toEqual([
+      'bw_copenhagen_plank',
+      'cb_hip_adduction',
+      'kb_cossack_squat',
+    ]);
+    // And one of them can be progressed by load, not only by lever or depth.
+    expect(direct.some((e) => e.station === 'cable' && e.loadMode === 'weight')).toBe(true);
   });
 
-  it('reaches them from a hold as well as from a squat', () => {
-    // One of each, so a week with no room for a loaded squat can still do it.
+  it('reaches them from a hold, a squat and a cable', () => {
+    /* One of each, so a week with no room for a loaded squat can still do it.
+       The cable is filed under carry, the pattern no coverage rule counts. */
     const patterns = EXERCISES.filter((e) => e.primaryMuscles.includes('adductors')).map(
       (e) => e.pattern,
     );
-    expect(new Set(patterns)).toEqual(new Set(['core', 'squat']));
+    expect(new Set(patterns)).toEqual(new Set(['core', 'squat', 'carry']));
   });
 
   it('times the hold and counts the squat', () => {

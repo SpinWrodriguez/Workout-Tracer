@@ -36,6 +36,23 @@ export const CUES: Record<string, string> = {
   cb_kickback:
     'Hinge over, upper arm parallel to the floor and still. Straighten fully and hold a beat — the light dial stops are the right ones here.',
 
+  bw_nordic_curl:
+    'Feet hooked under the Smith bar set low, knees on a pad. Lower as slowly as you can, hands catch you, push back up.',
+  cb_leg_curl:
+    'Ankle strap on the low pulley, face the stack, hold the frame. Curl the heel to the glute without the hip swinging back.',
+  cb_overhead_triceps:
+    'Rope on the low pulley, face away, elbows by the ears. Let the hands go deep behind the head — the stretch is the point.',
+  cb_hip_adduction:
+    'Ankle strap on the low pulley, side-on with the strapped leg nearest the stack. Sweep it across the standing foot.',
+  cb_rear_delt_fly:
+    'Pulleys at shoulder height, cross the cables, arms nearly straight. Open wide and stop before the shoulder blades pinch.',
+  db_incline_curl:
+    'Bench at about 45°, arms hanging straight down behind the body. Curl without the elbows drifting forward.',
+  db_single_leg_calf_raise:
+    'Ball of one foot on a plate, dumbbell in the same-side hand, other hand on the rack. Full stretch, pause at the top.',
+  db_seated_calf_raise:
+    'Sit on the bench, ball of the foot on a plate, dumbbell on the knee. Bent knee puts the work in the soleus.',
+
   cb_lat_pulldown: 'Both pulleys, so the stack is near true weight. Chest up, bar to the collarbone.',
   cb_seated_row: 'Both pulleys. Torso upright and quiet — no rowing with the lower back.',
   cb_fly: 'Slight forward lean, elbows soft and fixed. Hands meet in front of the sternum.',
