@@ -17,7 +17,7 @@ import {
 } from '../lib/volume';
 import { Card, Empty, Label, Screen, SegmentedToggle } from '../components/Layout';
 import { Silhouette } from '../components/Silhouette';
-import { phaseFor, planStateOf, planWeekOf, readCurrentBlock } from '../lib/goalPlans';
+import { planPhaseOf, planStateOf, readCurrentBlock } from '../lib/goalPlans';
 
 const REGIONS = ['all', 'upper', 'lower', 'core'] as const;
 type Region = (typeof REGIONS)[number];
@@ -75,7 +75,7 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
   const viewedWeek = shiftIso(weekStart(todayIso()), weekOffset * 7);
   const planTarget =
     current?.plan && weeks === 1 && planStateOf(current, viewedWeek) === 'active'
-      ? phaseFor(planWeekOf(current, viewedWeek)).setsPerMuscle
+      ? planPhaseOf(current, viewedWeek).setsPerMuscle
       : undefined;
   const share =
     planTarget ?? (training ? fairShare(training.weeklySetTarget, byId) : VOLUME_LOW);

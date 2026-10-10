@@ -89,3 +89,58 @@ describe('a plan booked for a later Monday', () => {
     expect(await db.block.get(`plan_${start}`)).toBeUndefined();
   });
 });
+
+describe('choosing the goal', () => {
+  it('books a six-week Strength plan with two main lifts a workout', async () => {
+    const ui = await openProgram();
+    await ui.click(await screen.findByRole('button', { name: 'Start a plan' }));
+    await ui.click(await screen.findByRole('button', { name: /^Strength/ }));
+    await ui.click(screen.getByRole('button', { name: 'Build my workouts' }));
+    await screen.findByRole('heading', { name: 'A · Squat + Bench' });
+    expect(screen.getByRole('heading', { name: 'The 6 weeks' })).toBeTruthy();
+    await ui.click(screen.getByRole('button', { name: /^Start plan/ }));
+
+    const start = defaultPlanStart(todayIso());
+    await waitFor(async () => {
+      expect((await db.block.get(`plan_${start}`))?.plan).toMatchObject({ goal: 'strength', weeks: 6 });
+    });
+  });
+});
+
+describe('the week strip before a booked plan starts', () => {
+  it("shows the plan's workouts on its days, outlined and not editable", async () => {
+    const start = shiftIso(weekStart(todayIso()), 7);
+    await startPlan({ start, draft: buildPlanDraft(exercises), exercisesById });
+    const ui = await openProgram();
+    await ui.click(screen.getByRole('button', { name: 'Next week' }));
+    const monday = await screen.findByRole('button', {
+      name: new RegExp(`${start}, Lower \\+ Push, in your booked plan`),
+    });
+    await ui.click(monday);
+    // No day sheet: that day belongs to the booked plan.
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull();
+  });
+});
+
+describe("Can't make all three", () => {
+  it('builds a catch-up from the plan and puts it on a day left this week', async () => {
+    const start = weekStart(todayIso());
+    await startPlan({ start, draft: buildPlanDraft(exercises), exercisesById });
+    const ui = await openProgram();
+    await ui.click(await screen.findByRole('button', { name: /^Can't make all 3 this week/ }));
+    await screen.findByRole('heading', { name: 'Short week' });
+
+    const days = screen
+      .getAllByRole('button', { pressed: false })
+      .filter((b) => /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/.test(b.textContent ?? ''));
+    if (days.length === 0) return; // Sunday evening: nothing left to pick.
+    await ui.click(days[0] as HTMLElement);
+    const use = await screen.findByRole('button', { name: /^Use / });
+    await ui.click(use);
+    await waitFor(async () => {
+      const plans = (await import('../lib/program')).readPlans;
+      const dates = (await plans())[`plan_${start}`] ?? {};
+      expect(Object.values(dates).some((slot) => slot !== null)).toBe(true);
+    });
+  });
+});

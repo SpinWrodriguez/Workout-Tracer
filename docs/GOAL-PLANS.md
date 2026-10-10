@@ -1,6 +1,6 @@
 # Goal plans — design
 
-Status: **phase 1 built** (§9); phases 2–4 to come. Mock-up of every screen below:
+Status: **phases 1–2 built, plus the Strength preset** (§9); the finisher and the end-of-plan report are still to come. Mock-up of every screen below:
 https://claude.ai/artifact/TNNugYsyWRBEXCStMoSTUy
 
 ## 1. Why
@@ -197,6 +197,11 @@ workouts are computed on the day from the plan's own rows, never stored as
 workouts of their own.
 
 ## 9. Phases of work
+
+Built so far: 1, 2, and the Strength preset from 4 (6 weeks, two main lifts
+and two accessories a workout, same days and golf rules), chosen on the setup
+sheet and suggested when a plan finishes. A booked plan shows its workouts on
+the week strip, outlined, before it starts.
 
 1. **Plan skeleton** — Muscle preset, Block fields, Start a plan with Build
    my workouts and slot swapping, calendar placement, the *Week N of 8*

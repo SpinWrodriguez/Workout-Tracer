@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
-import type { Exercise } from '../db/types';
+import type { Exercise, GoalId } from '../db/types';
 import { longDate, shiftIso, todayIso } from '../lib/format';
 import { WEEKDAY_LABEL } from '../lib/golf';
 import { prescription } from '../lib/repUnit';
 import {
-  MUSCLE_PHASES,
-  MUSCLE_WEEKS,
+  GOALS,
   buildPlanDraft,
   defaultPlanStart,
   phaseFor,
+  presetOf,
   prescriptionFor,
   slotOptions,
   type DraftWorkout,
@@ -35,6 +35,7 @@ function startChoices(today: string): string[] {
 export function StartPlanSheet({
   exercises,
   blockEnd,
+  initialGoal = 'muscle',
   onStart,
   onClose,
   starting = false,
@@ -44,7 +45,9 @@ export function StartPlanSheet({
   /** When the block now running ends, so the plan can follow straight on:
       it is the default start when it is one of the Mondays offered. */
   blockEnd?: string;
-  onStart: (start: string, draft: DraftWorkout[]) => void;
+  /** The goal selected when the sheet opens, e.g. the one that follows a finished plan. */
+  initialGoal?: GoalId;
+  onStart: (goal: GoalId, start: string, draft: DraftWorkout[]) => void;
   onClose: () => void;
   starting?: boolean;
 }) {
@@ -55,7 +58,10 @@ export function StartPlanSheet({
   );
   const [draft, setDraft] = useState<DraftWorkout[] | undefined>(undefined);
   const [swapping, setSwapping] = useState<{ workout: number; slot: number } | undefined>(undefined);
-  const week1 = phaseFor(1);
+  const [goal, setGoal] = useState<GoalId>(initialGoal);
+  const preset = presetOf(goal);
+  const WEEKS = preset.phases.length;
+  const week1 = phaseFor(1, goal);
 
   const setPick = (workout: number, slot: number, id: string) =>
     setDraft((prev) =>
@@ -72,26 +78,40 @@ export function StartPlanSheet({
         footer={
           <button
             type="button"
-            onClick={() => setDraft(buildPlanDraft(exercises))}
+            onClick={() => setDraft(buildPlanDraft(exercises, goal))}
             className="h-cta w-full rounded-full bg-cta font-semibold text-bg"
           >
             Build my workouts
           </button>
         }
       >
-        <div className="rounded-2xl bg-surface p-4">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="card-title">Muscle</span>
-            <Label>{MUSCLE_WEEKS} weeks</Label>
-          </div>
-          <p className="mt-1 text-[13px] font-medium text-text-dim">
-            8–12 reps, sets climbing from about {MUSCLE_PHASES[0]?.setsPerMuscle} to{' '}
-            {Math.max(...MUSCLE_PHASES.map((p) => p.setsPerMuscle))} per muscle a week, a lighter
-            week 8 with a re-test. Golf power opens every workout.
-          </p>
-          <p className="mt-2 text-[12px] font-medium text-text-dim">
-            Judged on the main lifts' estimated 1-RM, weekly sets per muscle and body weight.
-          </p>
+        <div className="flex flex-col gap-2">
+          {GOALS.map((id) => {
+            const option = presetOf(id);
+            const on = id === goal;
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setGoal(id)}
+                className={`rounded-2xl border-2 p-4 text-left ${
+                  on ? 'border-text bg-surface' : 'border-transparent bg-surface-2'
+                }`}
+              >
+                <span className="flex items-baseline justify-between gap-3">
+                  <span className="card-title">{option.label}</span>
+                  <Label>{option.phases.length} weeks</Label>
+                </span>
+                <span className="mt-1 block text-[13px] font-medium text-text-dim">{option.blurb}</span>
+                {on && (
+                  <span className="mt-2 block text-[12px] font-medium text-text-dim">
+                    {option.judgedOn} Golf power opens every workout.
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         <div className="mt-3 rounded-2xl bg-surface p-4">
@@ -121,7 +141,7 @@ export function StartPlanSheet({
             ))}
           </div>
           <p className="mt-2 text-[12px] font-medium text-text-dim">
-            Ends {longDate(shiftIso(start, MUSCLE_WEEKS * 7 - 1))}. Until it starts, your current
+            Ends {longDate(shiftIso(start, WEEKS * 7 - 1))}. Until it starts, your current
             workouts carry on as they are.
           </p>
         </div>
@@ -141,7 +161,7 @@ export function StartPlanSheet({
         <button
           type="button"
           disabled={starting || missing}
-          onClick={() => onStart(start, draft)}
+          onClick={() => onStart(goal, start, draft)}
           className="h-cta w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
         >
           {starting ? 'Starting…' : `Start plan · ${longDate(start)}`}
@@ -149,7 +169,7 @@ export function StartPlanSheet({
       }
     >
       <p className="text-[13px] font-medium text-text-dim">
-        These three repeat every week for {MUSCLE_WEEKS} weeks. Swap anything now; once started they
+        These three repeat every week for {WEEKS} weeks. Swap anything now; once started they
         stay put. Week 1 targets shown.
       </p>
 
@@ -173,7 +193,7 @@ export function StartPlanSheet({
             return (
               <div key={slot.key}>
                 {si === 0 && <Label className="mt-3 block">Golf · 8 min</Label>}
-                {si === 2 && <Label className="mt-3 block">Muscle</Label>}
+                {si === 2 && <Label className="mt-3 block">{preset.label}</Label>}
                 <div className="flex items-center gap-3 border-t border-border py-2 first:border-t-0">
                   <span className="w-[76px] shrink-0 text-[10.5px] font-bold tracking-wide text-text-faint uppercase">
                     {slot.label}
@@ -204,7 +224,7 @@ export function StartPlanSheet({
       ))}
 
       <section className="mt-3 rounded-2xl bg-surface p-4">
-        <h3 className="card-title">The {MUSCLE_WEEKS} weeks</h3>
+        <h3 className="card-title">The {WEEKS} weeks</h3>
         <div className="mt-2 overflow-x-auto">
           <table className="w-full text-[12.5px] tabular-nums">
             <thead>
@@ -217,7 +237,7 @@ export function StartPlanSheet({
               </tr>
             </thead>
             <tbody>
-              {MUSCLE_PHASES.map((phase) => (
+              {preset.phases.map((phase) => (
                 <tr key={phase.week} className="border-t border-border">
                   <td className="py-1.5 pr-2">{phase.week}</td>
                   <td className="py-1.5 pr-2 whitespace-nowrap">{phase.name}</td>

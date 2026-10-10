@@ -4,6 +4,7 @@ import type {
   BlockExercise,
   DaySlot,
   Exercise,
+  GoalId,
   GoalPlanInfo,
   MovementPattern,
   MuscleId,
@@ -13,7 +14,7 @@ import { daysBetween, shiftIso, todayIso, weekStart } from './format';
 import type { Weekday } from './golf';
 import { workingRepRange } from './blockValidation';
 import { isTimed } from './repUnit';
-import { readSchedules, writeSchedule, type BlockSchedule } from './program';
+import { readPlans, readSchedules, writePlan, writeSchedule, type BlockSchedule } from './program';
 
 /* -------------------------------------------------------------------------- */
 /*  Goal plans — docs/GOAL-PLANS.md.                                          */
@@ -129,7 +130,97 @@ export const MUSCLE_WORKOUTS: WorkoutDef[] = [
 ];
 
 export const MUSCLE_WEEKS = MUSCLE_PHASES.length;
-export const GOAL_LABEL = { muscle: 'Muscle' } as const;
+
+/* --- Strength ---------------------------------------------------------------- */
+
+/** Fewer, heavier sets on the main lifts; accessories hold the size. */
+export const STRENGTH_PHASES: PhaseTarget[] = [
+  { week: 1, name: 'Groove', mainSets: 3, accessorySets: 2, main: { low: 6, high: 8 }, accessory: { low: 8, high: 12 }, rir: '3', setsPerMuscle: 8, powerSets: 3 },
+  { week: 2, name: 'Groove', mainSets: 4, accessorySets: 2, main: { low: 6, high: 8 }, accessory: { low: 8, high: 12 }, rir: '2', setsPerMuscle: 9, powerSets: 3 },
+  { week: 3, name: 'Strength', mainSets: 4, accessorySets: 2, main: { low: 4, high: 6 }, accessory: { low: 8, high: 10 }, rir: '2', setsPerMuscle: 9, powerSets: 3 },
+  { week: 4, name: 'Strength', mainSets: 4, accessorySets: 2, main: { low: 4, high: 6 }, accessory: { low: 8, high: 10 }, rir: '1–2', setsPerMuscle: 9, powerSets: 3 },
+  { week: 5, name: 'Peak', mainSets: 3, accessorySets: 2, main: { low: 3, high: 5 }, accessory: { low: 8, high: 10 }, rir: '1', setsPerMuscle: 7, powerSets: 2 },
+  { week: 6, name: 'Lighter + test', mainSets: 2, accessorySets: 1, main: { low: 3, high: 5 }, accessory: { low: 8, high: 10 }, rir: '3', setsPerMuscle: 5, powerSets: 2 },
+];
+
+/** The Muscle workouts' slots, by key, so Strength reuses the same choices. */
+function slotsOf(slot: DaySlot, keys: string[], override: Partial<Record<string, Partial<SlotDef>>> = {}): SlotDef[] {
+  const def = MUSCLE_WORKOUTS.find((w) => w.slot === slot) as WorkoutDef;
+  return keys.map((key) => {
+    const base = def.slots.find((s) => s.key === key) as SlotDef;
+    return { ...base, ...override[key] };
+  });
+}
+
+/* Same days, same golf work first, same Friday rule. Each workout is two
+   main lifts and two accessories: strength is built on few lifts done often
+   and heavy, with rests long enough to make the next set count. */
+export const STRENGTH_WORKOUTS: WorkoutDef[] = [
+  {
+    slot: 'A',
+    name: 'Squat + Bench',
+    weekday: 1,
+    golfSafe: false,
+    slots: slotsOf('A', ['power', 'core', 'lower', 'push', 'single', 'triceps'], {
+      lower: { candidates: ['bb_back_squat', 'bb_front_squat', 'sm_squat'] },
+      push: { candidates: ['bb_bench_press', 'sm_bench_press'] },
+    }),
+  },
+  {
+    slot: 'B',
+    name: 'Hinge + Pull',
+    weekday: 3,
+    golfSafe: false,
+    slots: slotsOf('B', ['power', 'core', 'hinge', 'pull', 'row', 'hamcurl']),
+  },
+  {
+    slot: 'C',
+    name: 'Press + Glutes',
+    weekday: 5,
+    golfSafe: true,
+    slots: slotsOf('C', ['power', 'core', 'glutes', 'press', 'lats', 'reardelts'], {
+      press: { candidates: ['bb_overhead_press', 'db_shoulder_press', 'lm_press'] },
+    }),
+  },
+];
+
+export interface GoalPreset {
+  goal: GoalId;
+  label: string;
+  phases: PhaseTarget[];
+  workouts: WorkoutDef[];
+  /** One line on the setup sheet. */
+  blurb: string;
+  judgedOn: string;
+}
+
+export const PRESETS: Record<GoalId, GoalPreset> = {
+  muscle: {
+    goal: 'muscle',
+    label: 'Muscle',
+    phases: MUSCLE_PHASES,
+    workouts: MUSCLE_WORKOUTS,
+    blurb:
+      '8–12 reps, sets climbing from about 10 to 16 per muscle a week, and a lighter week 8 with a re-test.',
+    judgedOn: "Judged on the main lifts' estimated 1-RM, weekly sets per muscle and body weight.",
+  },
+  strength: {
+    goal: 'strength',
+    label: 'Strength',
+    phases: STRENGTH_PHASES,
+    workouts: STRENGTH_WORKOUTS,
+    blurb:
+      'Two heavy main lifts a workout, 6–8 reps down to 3–5, long rests, a lighter week 6 with a re-test.',
+    judgedOn: "Judged on the main lifts' estimated 1-RM. Keeps the size the Muscle plan built.",
+  },
+};
+
+export const GOALS = Object.keys(PRESETS) as GoalId[];
+export const GOAL_LABEL: Record<GoalId, string> = { muscle: 'Muscle', strength: 'Strength' };
+
+export function presetOf(goal: GoalId | undefined): GoalPreset {
+  return PRESETS[goal ?? 'muscle'] ?? PRESETS.muscle;
+}
 
 /* --- what fits where ------------------------------------------------------- */
 
@@ -171,8 +262,8 @@ export interface DraftWorkout {
  * it, never the same exercise twice in one workout. Deterministic, so pressing
  * it twice gives the same three workouts and the review is what changes them.
  */
-export function buildPlanDraft(exercises: Exercise[]): DraftWorkout[] {
-  return MUSCLE_WORKOUTS.map((def) => {
+export function buildPlanDraft(exercises: Exercise[], goal: GoalId = 'muscle'): DraftWorkout[] {
+  return presetOf(goal).workouts.map((def) => {
     const used = new Set<string>();
     const picks = def.slots.map((slot) => {
       const choice = slotOptions(slot, exercises, def.golfSafe).find((e) => !used.has(e.id));
@@ -185,9 +276,15 @@ export function buildPlanDraft(exercises: Exercise[]): DraftWorkout[] {
 
 /* --- the week's numbers ---------------------------------------------------- */
 
-export function phaseFor(week: number): PhaseTarget {
-  const clamped = Math.min(Math.max(1, week), MUSCLE_PHASES.length);
-  return MUSCLE_PHASES[clamped - 1] as PhaseTarget;
+export function phaseFor(week: number, goal: GoalId = 'muscle'): PhaseTarget {
+  const phases = presetOf(goal).phases;
+  const clamped = Math.min(Math.max(1, week), phases.length);
+  return phases[clamped - 1] as PhaseTarget;
+}
+
+/** A week back after time off: week 1's targets, under its own name. */
+function reentryPhase(goal: GoalId): PhaseTarget {
+  return { ...phaseFor(1, goal), name: 'Re-entry' };
 }
 
 /** Sets and range for one row this week, always inside the exercise's bounds. */
@@ -219,7 +316,10 @@ export function prescriptionFor(
 
 /** Said on the session screen while logging. */
 export function effortCueFor(phase: PhaseTarget, def: WorkoutDef): string {
-  const base = `Week ${phase.week} · ${phase.name}: ${phase.rir} reps in reserve on working sets.`;
+  const base =
+    phase.name === 'Re-entry'
+      ? `Re-entry week: week 1 targets, and start about 10% lighter than you left off.`
+      : `Week ${phase.week} · ${phase.name}: ${phase.rir} reps in reserve on working sets.`;
   return def.golfSafe ? `${base} Golf tomorrow, so nothing to failure.` : base;
 }
 
@@ -227,8 +327,25 @@ export function effortCueFor(phase: PhaseTarget, def: WorkoutDef): string {
 
 export type PlanState = 'upcoming' | 'active' | 'finished' | 'ended';
 
-export function planWeekOf(block: Block, date = todayIso()): number {
+/** Weeks since the plan started, by the calendar: 1 in its first week. */
+export function calendarWeekOf(block: Block, date = todayIso()): number {
   return Math.floor(daysBetween(block.startDate, date) / 7) + 1;
+}
+
+/** The plan week a date falls in: the calendar week, less repeats and re-entries. */
+export function planWeekOf(block: Block, date = todayIso()): number {
+  const weeks = block.plan?.weeks ?? MUSCLE_WEEKS;
+  const week = calendarWeekOf(block, date) - (block.plan?.offsetWeeks ?? 0);
+  return Math.min(Math.max(1, week), weeks);
+}
+
+/** This week's targets, re-entry included. */
+export function planPhaseOf(block: Block, date = todayIso()): PhaseTarget {
+  const goal = block.plan?.goal ?? 'muscle';
+  if (block.plan?.reentryWeek !== undefined && block.plan.reentryWeek === calendarWeekOf(block, date)) {
+    return reentryPhase(goal);
+  }
+  return phaseFor(planWeekOf(block, date), goal);
 }
 
 export function planStateOf(block: Block, date = todayIso()): PlanState | undefined {
@@ -277,22 +394,26 @@ export async function startPlan({
   start,
   draft,
   exercisesById,
+  goal = 'muscle',
 }: {
   start: string;
   draft: DraftWorkout[];
   exercisesById: Map<string, Exercise>;
+  goal?: GoalId;
 }): Promise<string> {
   const id = `plan_${start}`;
-  const info: GoalPlanInfo = { goal: 'muscle', weeks: MUSCLE_WEEKS, appliedWeek: 1 };
+  const preset = presetOf(goal);
+  const weeks = preset.phases.length;
+  const info: GoalPlanInfo = { goal, weeks, appliedWeek: 1 };
   const block: Block = {
     id,
     startDate: start,
-    endDate: shiftIso(start, MUSCLE_WEEKS * 7 - 1),
+    endDate: shiftIso(start, weeks * 7 - 1),
     focusMuscles: [],
-    notes: 'Muscle plan, 8 weeks.',
+    notes: `${preset.label} plan, ${weeks} weeks.`,
     plan: info,
   };
-  const phase = phaseFor(1);
+  const phase = phaseFor(1, goal);
   const rows: BlockExercise[] = [];
   const schedule: BlockSchedule = {};
   for (const { def, picks } of draft) {
@@ -325,37 +446,98 @@ export async function startPlan({
   return id;
 }
 
+/** Catch-up workouts live in these slots for one week, then go. */
+export const CATCH_UP_SLOTS: DaySlot[] = ['X', 'Y'];
+
+async function sessionsInCalendarWeek(block: Block, week: number): Promise<number> {
+  const from = shiftIso(block.startDate, (week - 1) * 7);
+  const to = shiftIso(from, 7);
+  return db.session
+    .where('date')
+    .between(from, to, true, false)
+    .filter((session) => session.blockId === block.id)
+    .count();
+}
+
 /**
- * Writes this week's targets into the plan's rows, once per week. Cheap to
- * call often: it returns at once when the week is already applied, so the
- * screens that read a workout call it before they read.
+ * Brings a running plan up to today, one calendar week at a time, and writes
+ * that week's targets into its rows. Cheap to call often: it returns at once
+ * when the week is already applied, so screens call it before they read.
+ *
+ * Each week boundary settles the week just gone (docs/GOAL-PLANS.md §3):
+ *  - a week with no session repeats: the plan week stays and the end moves
+ *    out a week;
+ *  - a second empty week in a row makes the next one a re-entry week, at
+ *    week-1 targets, which does not use up a plan week either;
+ *  - catch-up workouts made for the week are cleared.
  */
 export async function syncPlanWeek(block: Block | undefined, date = todayIso()): Promise<void> {
-  if (!block?.plan || planStateOf(block, date) !== 'active') return;
-  const week = Math.min(planWeekOf(block, date), block.plan.weeks);
-  if (block.plan.appliedWeek === week) return;
-  const phase = phaseFor(week);
+  if (!block?.plan || block.plan.endedAt || date < block.startDate) return;
+  const target = calendarWeekOf(block, date);
+  const applied = block.plan.appliedWeek ?? 1;
+  if (applied >= target) return;
+
+  let offset = block.plan.offsetWeeks ?? 0;
+  let reentry = block.plan.reentryWeek;
+  let lastEmpty = applied >= 2 ? (await sessionsInCalendarWeek(block, applied - 1)) === 0 : false;
+  for (let week = applied + 1; week <= target; week += 1) {
+    const prev = week - 1;
+    const prevEmpty = (await sessionsInCalendarWeek(block, prev)) === 0;
+    const wasReentry = reentry === prev;
+    if (wasReentry || prevEmpty) offset += 1;
+    reentry = prevEmpty && (lastEmpty || wasReentry) ? week : undefined;
+    lastEmpty = prevEmpty;
+  }
+
+  const plan: GoalPlanInfo = {
+    ...block.plan,
+    appliedWeek: target,
+    offsetWeeks: offset,
+    ...(reentry !== undefined ? { reentryWeek: reentry } : { reentryWeek: undefined }),
+  };
+  const next: Block = {
+    ...block,
+    endDate: shiftIso(block.startDate, (plan.weeks + offset) * 7 - 1),
+    plan,
+  };
+  const phase = planPhaseOf(next, date);
+
   const rows = await db.blockExercise.where('blockId').equals(block.id).toArray();
   const exercisesById = new Map(
     (await db.exercise.bulkGet([...new Set(rows.map((row) => row.exerciseId))]))
       .filter((exercise): exercise is Exercise => exercise !== undefined)
       .map((exercise) => [exercise.id, exercise]),
   );
-  const next = rows.map((row) => {
+  const kept = rows.filter((row) => !CATCH_UP_SLOTS.includes(row.daySlot));
+  const updated = kept.map((row) => {
     const exercise = exercisesById.get(row.exerciseId);
     if (!exercise || !row.role) return row;
     return { ...row, ...prescriptionFor(row.role, exercise, phase) };
   });
+
   const schedule = (await readSchedules())[block.id] ?? {};
-  for (const def of MUSCLE_WORKOUTS) {
+  for (const slot of CATCH_UP_SLOTS) delete schedule[slot];
+  for (const def of presetOf(plan.goal).workouts) {
     const day = schedule[def.slot];
     if (day) schedule[def.slot] = { ...day, effortCue: effortCueFor(phase, def) };
   }
+  const dates = { ...((await readPlans())[block.id] ?? {}) };
+  for (const [day, slot] of Object.entries(dates)) {
+    if (day < shiftIso(block.startDate, (target - 1) * 7)) delete dates[day];
+    else if (slot && CATCH_UP_SLOTS.includes(slot)) delete dates[day];
+  }
+
   await db.transaction('rw', db.block, db.blockExercise, async () => {
-    await db.blockExercise.bulkPut(next);
-    await db.block.put({ ...block, plan: { ...block.plan, appliedWeek: week } as GoalPlanInfo });
+    await db.blockExercise
+      .where('blockId')
+      .equals(block.id)
+      .filter((row) => CATCH_UP_SLOTS.includes(row.daySlot))
+      .delete();
+    await db.blockExercise.bulkPut(updated);
+    await db.block.put(next);
   });
   await writeSchedule(block.id, schedule);
+  await writePlan(block.id, dates);
 }
 
 /**

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import { readCurrentBlock, syncPlanWeek } from '../lib/goalPlans';
+import { readCurrentBlock, readUpcomingPlan, syncPlanWeek } from '../lib/goalPlans';
 import type { DaySlot, Exercise, GolfDay, MuscleId } from '../db/types';
 import { longDate, todayIso } from '../lib/format';
 import {
@@ -168,6 +168,14 @@ export function ProgramScreen({
     [block?.id],
     undefined,
   );
+  /* A plan booked for a later Monday: its days are shown on the strip from
+     its start date, in place of the current block's, so the week ahead says
+     what will really happen. Read-only until the plan starts. */
+  const booked = useLiveQuery(async () => {
+    const plan = await readUpcomingPlan();
+    if (!plan) return undefined;
+    return { block: plan, schedule: (await readSchedules())[plan.id] ?? {} };
+  }, []);
 
   /**
    * What this week actually did, alongside what it plans to.
@@ -262,6 +270,15 @@ export function ProgramScreen({
     }).map((day) => {
       // Resolved per date, so a session moved in one week shows as moved in
       // that week and nowhere else.
+      if (booked && day.date >= booked.block.startDate && day.date <= booked.block.endDate) {
+        const slot = slotForDate(booked.schedule, day.date, {});
+        return {
+          ...day,
+          plannedSlot: undefined,
+          intensity: undefined,
+          booked: slot ? (booked.schedule[slot]?.name ?? slot) : undefined,
+        };
+      }
       const plannedSlot = slotForDate(schedule ?? {}, day.date, datePlan ?? {});
       return {
         ...day,
@@ -270,7 +287,7 @@ export function ProgramScreen({
         intensity: plannedSlot ? (schedule?.[plannedSlot]?.intensity ?? 'heavy') : undefined,
       };
     });
-  }, [anchor, golfDays, weekHistory, byId, schedule, datePlan]);
+  }, [anchor, golfDays, weekHistory, byId, schedule, datePlan, booked]);
 
   /**
    * Every workout this block defines, placed or not. Read from the schedule as
@@ -1057,7 +1074,10 @@ export function ProgramScreen({
           week={week}
           labelFor={labelFor}
           shortLabelFor={shortLabelFor}
-          onPickDay={setEditingDate}
+          /* A booked plan's day is not this block's to edit. */
+          onPickDay={(date) => {
+            if (!week.find((day) => day.date === date)?.booked) setEditingDate(date);
+          }}
           onMoveSlot={(slot, date) => void movePlanned(slot, date)}
         />
         {violations.length === 0 ? null : (

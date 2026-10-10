@@ -25,6 +25,8 @@ export interface WeekStripDay extends WeekDay {
   plannedSlot?: DaySlot;
   /** How hard that workout is, which is now what colours the chip. */
   intensity?: Intensity;
+  /** A booked plan's workout on this date, shown before the plan starts. */
+  booked?: string;
 }
 
 /*
@@ -122,7 +124,9 @@ export function WeekStrip({
                     : day.loggedName
                       ? `, ${day.loggedName}, done`
                       : ''
-                }${day.golf ? `, golf ${day.golf.status}` : ''}${
+                }${day.booked ? `, ${day.booked}, in your booked plan` : ''}${
+                  day.golf ? `, golf ${day.golf.status}` : ''
+                }${
                   day.violation ? ', rule violation' : ''
                 }`}
               >
@@ -175,6 +179,16 @@ export function WeekStrip({
                   title={day.loggedName}
                 >
                   {day.loggedName ? pillLabel(day.loggedName) : 'Log'}
+                </div>
+              ) : day.booked ? (
+                /* Outlined rather than filled: on the calendar, not yet the
+                   block being trained. */
+                <div
+                  className="mt-1.5 rounded-lg border border-dashed px-0.5 py-1 text-center text-[9px] leading-[1.15] font-bold break-words"
+                  style={{ borderColor: EFFORT_COLOR.heavy, color: EFFORT_COLOR.heavy }}
+                  title={day.booked}
+                >
+                  {pillLabel(day.booked)}
                 </div>
               ) : day.golf ? (
                 <div

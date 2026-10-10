@@ -6,6 +6,7 @@ import type { Block } from '../db/types';
 import { shiftIso } from './format';
 import {
   MUSCLE_PHASES,
+  PRESETS,
   MUSCLE_WORKOUTS,
   buildPlanDraft,
   currentBlockOf,
@@ -14,7 +15,9 @@ import {
   fitsSlot,
   isGolfSafe,
   phaseFor,
+  planPhaseOf,
   planStateOf,
+  planWeekOf,
   prescriptionFor,
   slotOptions,
   startPlan,
@@ -167,14 +170,58 @@ describe('a plan in the database', () => {
     expect(squat).toMatchObject({ role: 'main', targetSets: 3, repRangeLow: 10, repRangeHigh: 12 });
   });
 
+  /** A logged session on a date, so that week counts. */
+  async function trained(blockId: string, date: string) {
+    await db.session.put({ id: `s_${date}`, blockId, daySlot: 'A', date });
+  }
+
   it('moves the targets on when a new week starts, once', async () => {
     const block = await started();
-    await syncPlanWeek(block, shiftIso(START, 14)); // week 3
+    await trained(block.id, START);
+    await trained(block.id, shiftIso(START, 7));
+    await syncPlanWeek(block, shiftIso(START, 14)); // calendar week 3
     const squat = await db.blockExercise.get([block.id, 'bb_back_squat', 'A']);
     expect(squat).toMatchObject({ repRangeLow: 8, repRangeHigh: 12 });
-    expect((await db.block.get(block.id))?.plan?.appliedWeek).toBe(3);
+    const now = (await db.block.get(block.id)) as Block;
+    expect(now.plan?.appliedWeek).toBe(3);
+    expect(planWeekOf(now, shiftIso(START, 14))).toBe(3);
     const cue = (await readSchedules())[block.id]?.A?.effortCue;
     expect(cue).toContain('Week 3 · Build');
+  });
+
+  it('repeats a week with nothing logged, and moves the end out a week', async () => {
+    const block = await started();
+    await trained(block.id, START); // week 1 trained, week 2 empty
+    await syncPlanWeek(block, shiftIso(START, 14));
+    const now = (await db.block.get(block.id)) as Block;
+    expect(planWeekOf(now, shiftIso(START, 14))).toBe(2);
+    expect(now.endDate).toBe(shiftIso(START, 8 * 7 + 6));
+    expect(planPhaseOf(now, shiftIso(START, 14)).name).toBe('Settle in');
+  });
+
+  it('runs a re-entry week after two empty weeks, then picks up where it stopped', async () => {
+    const block = await started();
+    await trained(block.id, START); // week 1, then weeks 2 and 3 off
+    await syncPlanWeek(block, shiftIso(START, 21)); // calendar week 4
+    let now = (await db.block.get(block.id)) as Block;
+    expect(planPhaseOf(now, shiftIso(START, 21)).name).toBe('Re-entry');
+    expect((await readSchedules())[block.id]?.A?.effortCue).toContain('10% lighter');
+
+    await trained(block.id, shiftIso(START, 21));
+    await syncPlanWeek(now, shiftIso(START, 28)); // calendar week 5
+    now = (await db.block.get(block.id)) as Block;
+    expect(planPhaseOf(now, shiftIso(START, 28)).name).not.toBe('Re-entry');
+    expect(planWeekOf(now, shiftIso(START, 28))).toBe(2);
+  });
+
+  it('clears catch-up workouts when the week turns', async () => {
+    const block = await started();
+    await trained(block.id, START);
+    await db.blockExercise.put({
+      blockId: block.id, exerciseId: 'bb_back_squat', daySlot: 'X', targetSets: 3, repRangeLow: 8, repRangeHigh: 10, order: 0, role: 'main',
+    });
+    await syncPlanWeek(block, shiftIso(START, 7));
+    expect(await db.blockExercise.where('daySlot').equals('X').count()).toBe(0);
   });
 
   it('is what readBlockPlan hands the session once it has started', async () => {
@@ -197,5 +244,31 @@ describe('a plan in the database', () => {
     await endPlan((await db.block.get(again)) as Block, '2026-12-28');
     expect(await db.block.get(again)).toBeUndefined();
     expect(await db.blockExercise.where('blockId').equals(again).count()).toBe(0);
+  });
+});
+
+describe('the Strength preset', () => {
+  it('runs six weeks of fewer, heavier sets on the same days', () => {
+    const preset = PRESETS.strength;
+    expect(preset.phases).toHaveLength(6);
+    expect(preset.workouts.map((w) => w.weekday)).toEqual([1, 3, 5]);
+    expect(phaseFor(3, 'strength').main).toEqual({ low: 4, high: 6 });
+  });
+
+  it('builds two main lifts a workout, and the Friday stays golf-safe', () => {
+    const draft = buildPlanDraft(EXERCISES, 'strength');
+    for (const { def, picks } of draft) {
+      expect(def.slots.filter((s) => s.role === 'main')).toHaveLength(2);
+      expect(picks.every(Boolean)).toBe(true);
+      if (def.golfSafe) for (const id of picks) expect(isGolfSafe(exercise(id as string))).toBe(true);
+    }
+    expect(draft[2]?.picks).toContain('bb_overhead_press');
+  });
+
+  it('starts as a six-week plan', async () => {
+    const id = await startPlan({ start: '2026-10-26', draft: buildPlanDraft(EXERCISES, 'strength'), exercisesById: byId, goal: 'strength' });
+    const block = (await db.block.get(id)) as Block;
+    expect(block.plan).toMatchObject({ goal: 'strength', weeks: 6 });
+    expect(block.endDate).toBe(shiftIso('2026-10-26', 41));
   });
 });
