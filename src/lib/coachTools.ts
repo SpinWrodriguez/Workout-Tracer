@@ -19,7 +19,13 @@
 /* -------------------------------------------------------------------------- */
 
 import { db } from '../db/db';
-import { MAX_MEMORY_NOTE_CHARS, addCoachMemory, readInventory } from '../db/settings';
+import {
+  MAX_MEMORY_NOTE_CHARS,
+  addCoachMemory,
+  readInventory,
+  readRetiredExercises,
+  withoutRetired,
+} from '../db/settings';
 import { barWeightFor } from './loadable';
 import { MUSCLE_BY_ID } from '../db/seed/muscles';
 import type { Exercise, MovementPattern, MuscleId, SetLog } from '../db/types';
@@ -414,7 +420,10 @@ export async function runCoachTool(
 ): Promise<ToolOutcome> {
   try {
     if (name === 'search_exercises') {
-      return { content: JSON.stringify(searchExercises(exercises, input)), isError: false };
+      /* Retired exercises are off the shelf: the coach cannot suggest what it
+         cannot find. Detail and history still answer for them by id. */
+      const choosable = withoutRetired(exercises, await readRetiredExercises());
+      return { content: JSON.stringify(searchExercises(choosable, input)), isError: false };
     }
     if (name === 'exercise_detail') {
       return { content: JSON.stringify(await exerciseDetail(exercises, input)), isError: false };

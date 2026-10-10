@@ -68,7 +68,13 @@ import {
 import { matchExistingWorkouts } from '../lib/weekReuse';
 import { stalledExerciseIds, usageByExercise } from '../lib/coachSignals';
 import { briefPayload, buildBrief, undertrained, type DayConstraints } from '../lib/aiBrief';
-import { readAiInstructions, readExerciseNotes, writeLastModelCall } from '../db/settings';
+import {
+  readAiInstructions,
+  readExerciseNotes,
+  readRetiredExercises,
+  withoutRetired,
+  writeLastModelCall,
+} from '../db/settings';
 import { DaySlotCard } from '../components/DaySlotCard';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ExerciseDetail } from '../components/ExerciseDetail';
@@ -214,6 +220,11 @@ export function ProgramScreen({
   }, []);
 
   const byId = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
+  /* What the generators may choose from. byId stays the whole table: a retired
+     exercise already in a workout still has a name, a load and a rule to obey. */
+  const retired = useLiveQuery(() => readRetiredExercises(), [], [] as string[]);
+  const retiredIds = useMemo(() => new Set(retired), [retired]);
+  const choosable = useMemo(() => withoutRetired(exercises, retiredIds), [exercises, retiredIds]);
 
   /* Session length and split shape are training preferences, edited in
      Settings. They were on this screen as part of the starter week, which put
@@ -496,7 +507,7 @@ export function ProgramScreen({
     if (!template) return undefined;
     return generateDay({
       blockId: block.id,
-      exercises,
+      exercises: choosable,
       focusMuscles: block.focusMuscles ?? [],
       template,
       exclude,
@@ -638,7 +649,7 @@ export function ProgramScreen({
     const current = await db.blockExercise.where('blockId').equals(block.id).toArray();
     const day = generateDay({
       blockId: block.id,
-      exercises,
+      exercises: choosable,
       /* What was pointed at, so the pick inside each pattern goes to the
          chosen muscle: the pattern says "a horizontal pull", this says "and
          make it the one that hits lats". */
@@ -798,7 +809,7 @@ export function ProgramScreen({
      * the whole list.
      */
     const available = libraryForMuscles(
-      libraryForFocuses(exercises, want.focus ? [want.focus] : []),
+      libraryForFocuses(choosable, want.focus ? [want.focus] : []),
       constraints.muscles ?? [],
     );
 
@@ -837,7 +848,9 @@ export function ProgramScreen({
             ],
           },
           {
-            exercisesById: byId,
+            /* Only what was on offer: a retired id slipping through reads as
+               unknown, and the retry loop asks again without it. */
+            exercisesById: new Map(available.map((e) => [e.id, e])),
             /*
              * Empty: there is no date here to be clear of. Assigning the
              * workout to a day is what surfaces a conflict, and the day editor
@@ -1394,6 +1407,7 @@ export function ProgramScreen({
       {addingTo && block && (
         <ExercisePicker
           exercises={exercises}
+          foldRetired
           selectedIds={entriesForSlot(slots ?? [], addingTo).map((entry) => entry.exerciseId)}
           onPick={(exerciseId) => void addBlockExercise(block.id, addingTo, exerciseId)}
           // Tapping a ticked row takes it back out, which is what the tick

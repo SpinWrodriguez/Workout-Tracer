@@ -432,3 +432,36 @@ export async function writeExerciseNote(exerciseId: string, note: string): Promi
   else delete notes[exerciseId];
   await db.settings.put({ key: EXERCISE_NOTES_KEY, value: notes });
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Retired exercises.                                                        */
+/*                                                                            */
+/*  Off the shelf, not out of the record. A retired exercise is never offered  */
+/*  to the generators, the coach's search or the add-exercise pickers' main    */
+/*  list — but its sets stay logged and charted, and it can come back with one */
+/*  tap. Deleting it instead would orphan every SetLog that names it.         */
+/* -------------------------------------------------------------------------- */
+
+export const RETIRED_EXERCISES_KEY = 'retiredExercises';
+
+export async function readRetiredExercises(): Promise<string[]> {
+  const row = await db.settings.get(RETIRED_EXERCISES_KEY);
+  if (!Array.isArray(row?.value)) return [];
+  return [...new Set(row.value.filter((id): id is string => typeof id === 'string' && id !== ''))];
+}
+
+export async function setExerciseRetired(exerciseId: string, retired: boolean): Promise<void> {
+  const current = new Set(await readRetiredExercises());
+  if (retired) current.add(exerciseId);
+  else current.delete(exerciseId);
+  await db.settings.put({ key: RETIRED_EXERCISES_KEY, value: [...current].sort() });
+}
+
+/** What the generators may choose from: everything not retired. */
+export function withoutRetired<T extends { id: string }>(
+  exercises: T[],
+  retired: Iterable<string>,
+): T[] {
+  const out = new Set(retired);
+  return out.size === 0 ? exercises : exercises.filter((exercise) => !out.has(exercise.id));
+}

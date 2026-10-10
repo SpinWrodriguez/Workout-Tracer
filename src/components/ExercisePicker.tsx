@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { readRetiredExercises } from '../db/settings';
 import type { Exercise, MuscleId, Station } from '../db/types';
 import { STATION_LABEL, STATION_ORDER } from '../db/seed/exercises';
 import { MUSCLES, muscleName } from '../db/seed/muscles';
@@ -16,8 +18,15 @@ export function ExercisePicker({
   onUnpick,
   onClose,
   onInfo,
+  foldRetired = false,
 }: {
   exercises: Exercise[];
+  /**
+   * Keeps retired exercises out of the main list, behind a fold at the
+   * bottom: still reachable for the odd day one is wanted, never in the way.
+   * Off for History, where a retired lift's chart is as wanted as any.
+   */
+  foldRetired?: boolean;
   selectedIds: string[];
   onPick: (exerciseId: string) => void;
   /**
@@ -36,6 +45,12 @@ export function ExercisePicker({
 }) {
   const [station, setStation] = useState<Station | 'all'>('all');
   const [muscle, setMuscle] = useState<MuscleId | 'all'>('all');
+  const [showRetired, setShowRetired] = useState(false);
+  const retired = useLiveQuery(
+    async () => (foldRetired ? new Set(await readRetiredExercises()) : undefined),
+    [foldRetired],
+  );
+  const retiredIds = retired as ReadonlySet<string> | undefined;
 
   const filtered = useMemo(() => {
     const list = exercises.filter((e) => {
@@ -56,15 +71,21 @@ export function ExercisePicker({
     );
   }, [exercises, station, muscle]);
 
+  const retiredRows = useMemo(
+    () => filtered.filter((e) => retiredIds?.has(e.id)),
+    [filtered, retiredIds],
+  );
+
   const grouped = useMemo(() => {
     const map = new Map<Station, Exercise[]>();
     for (const e of filtered) {
+      if (retiredIds?.has(e.id)) continue;
       const list = map.get(e.station) ?? [];
       list.push(e);
       map.set(e.station, list);
     }
     return [...map.entries()];
-  }, [filtered]);
+  }, [filtered, retiredIds]);
 
   const usedMuscles = useMemo(() => {
     const ids = new Set<string>();
@@ -74,6 +95,59 @@ export function ExercisePicker({
     }
     return MUSCLES.filter((m) => ids.has(m.id));
   }, [exercises]);
+
+  const renderRows = (list: Exercise[]) =>
+    list.map((exercise, i) => {
+      const already = selectedIds.includes(exercise.id);
+      return (
+        <div
+          key={exercise.id}
+          className={`flex items-center ${i > 0 ? 'border-t border-border' : ''}`}
+        >
+        <button
+          type="button"
+          onClick={() => (already && onUnpick ? onUnpick(exercise.id) : onPick(exercise.id))}
+          aria-pressed={onUnpick ? already : undefined}
+          className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 text-left"
+        >
+          <span className="min-w-0 flex-1">
+            <span
+              className={`block truncate text-[15px] font-medium ${
+                already ? 'text-text-faint' : 'text-text'
+              }`}
+            >
+              {exercise.name}
+            </span>
+            <span className="mt-0.5 block truncate text-[11px] font-medium text-text-dim">
+              {exercise.primaryMuscles.map(muscleName).join(' · ')}
+              {exercise.loadMultiplier !== 1 &&
+                ` · ×${exercise.loadMultiplier.toFixed(2)}`}
+              {exercise.loadMode === 'rpe_only' && ' · RPE only'}
+            </span>
+          </span>
+          <span className="shrink-0 text-text-dim">{already ? '✓' : '+'}</span>
+        </button>
+        {onInfo && (
+          <button
+            type="button"
+            onClick={() => onInfo(exercise.id)}
+            aria-label={`About ${exercise.name}`}
+            className="flex size-11 shrink-0 items-center justify-center text-text-dim"
+          >
+            <svg viewBox="0 0 24 24" className="size-4.5" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+              <path
+                d="M12 11v5.5M12 7.6v.8"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        )}
+        </div>
+      );
+    });
 
   return (
     <Sheet
@@ -104,65 +178,35 @@ export function ExercisePicker({
         </>
       }
     >
-      {grouped.length === 0 && <p className="py-6 text-text-dim">-- no matching exercises</p>}
+      {grouped.length === 0 && retiredRows.length === 0 && (
+        <p className="py-6 text-text-dim">-- no matching exercises</p>
+      )}
       {grouped.map(([s, list]) => (
         <div key={s} className="mb-5">
           <h3 className="label mb-2">{STATION_LABEL[s]}</h3>
           <div className="overflow-hidden rounded-2xl bg-surface">
-            {list.map((exercise, i) => {
-              const already = selectedIds.includes(exercise.id);
-              return (
-                <div
-                  key={exercise.id}
-                  className={`flex items-center ${i > 0 ? 'border-t border-border' : ''}`}
-                >
-                <button
-                  type="button"
-                  onClick={() => (already && onUnpick ? onUnpick(exercise.id) : onPick(exercise.id))}
-                  aria-pressed={onUnpick ? already : undefined}
-                  className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 text-left"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span
-                      className={`block truncate text-[15px] font-medium ${
-                        already ? 'text-text-faint' : 'text-text'
-                      }`}
-                    >
-                      {exercise.name}
-                    </span>
-                    <span className="mt-0.5 block truncate text-[11px] font-medium text-text-dim">
-                      {exercise.primaryMuscles.map(muscleName).join(' · ')}
-                      {exercise.loadMultiplier !== 1 &&
-                        ` · ×${exercise.loadMultiplier.toFixed(2)}`}
-                      {exercise.loadMode === 'rpe_only' && ' · RPE only'}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-text-dim">{already ? '✓' : '+'}</span>
-                </button>
-                {onInfo && (
-                  <button
-                    type="button"
-                    onClick={() => onInfo(exercise.id)}
-                    aria-label={`About ${exercise.name}`}
-                    className="flex size-11 shrink-0 items-center justify-center text-text-dim"
-                  >
-                    <svg viewBox="0 0 24 24" className="size-4.5" fill="none" aria-hidden="true">
-                      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
-                      <path
-                        d="M12 11v5.5M12 7.6v.8"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </button>
-                )}
-                </div>
-              );
-            })}
+            {renderRows(list)}
           </div>
         </div>
       ))}
+      {retiredRows.length > 0 && (
+        <div className="mb-5">
+          <button
+            type="button"
+            onClick={() => setShowRetired((prev) => !prev)}
+            aria-expanded={showRetired}
+            className="label mb-2 flex w-full items-center justify-between"
+          >
+            <span>Retired ({retiredRows.length})</span>
+            <span>{showRetired ? 'Hide' : 'Show'}</span>
+          </button>
+          {showRetired && (
+            <div className="overflow-hidden rounded-2xl bg-surface opacity-70">
+              {renderRows(retiredRows)}
+            </div>
+          )}
+        </div>
+      )}
     </Sheet>
   );
 }

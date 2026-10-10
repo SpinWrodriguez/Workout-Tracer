@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Exercise } from '../db/types';
-import { MAX_EXERCISE_NOTE_CHARS, readExerciseNotes, readInventory, writeExerciseNote } from '../db/settings';
+import {
+  MAX_EXERCISE_NOTE_CHARS,
+  readExerciseNotes,
+  readInventory,
+  readRetiredExercises,
+  setExerciseRetired,
+  writeExerciseNote,
+} from '../db/settings';
 import { DEFAULT_INVENTORY, barWeightFor } from '../lib/loadable';
 import { STATION_LABEL } from '../db/seed/exercises';
 import { muscleName } from '../db/seed/muscles';
@@ -57,6 +64,10 @@ export function ExerciseDetail({
   // undefined while loading; the textarea keys on it so the draft is not wiped.
   const myNote = useLiveQuery(async () => (await readExerciseNotes())[exercise.id] ?? '', [exercise.id]);
   const bar = barWeightFor(exercise, inventory);
+  const retired = useLiveQuery(
+    async () => (await readRetiredExercises()).includes(exercise.id),
+    [exercise.id],
+  );
 
   // `undefined` while loading, `null` once we know there is nothing to show.
   // An unmapped exercise is known to be empty without a lookup.
@@ -255,6 +266,25 @@ export function ExerciseDetail({
               ? 'Not downloaded yet — fetch descriptions and photos in Settings.'
               : 'Nothing upstream matches this movement, so there is no photo. The cue above is it.'}
           </p>
+        </div>
+      )}
+      {/* Last, because it is the one control here that changes the shelf
+          rather than describing the movement. */}
+      {retired !== undefined && (
+        <div className="mt-3 rounded-2xl bg-surface p-4">
+          <Label>{retired ? 'Retired' : 'In rotation'}</Label>
+          <p className="mt-1.5 text-[13px] leading-snug text-text-dim">
+            {retired
+              ? 'Never offered to new workouts, the coach or the add-exercise list. Its history stays.'
+              : 'Retire it to keep it out of new workouts and suggestions. Its history stays, and it can come back any time.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => void setExerciseRetired(exercise.id, !retired)}
+            className="mt-3 w-full rounded-full bg-surface-2 py-2.5 text-[13px] font-semibold"
+          >
+            {retired ? 'Bring it back' : 'Retire this exercise'}
+          </button>
         </div>
       )}
     </Sheet>

@@ -16,6 +16,10 @@ import {
   mergeInventory,
   mergeTraining,
   readCoachMemory,
+  RETIRED_EXERCISES_KEY,
+  readRetiredExercises,
+  setExerciseRetired,
+  withoutRetired,
 } from './settings';
 
 beforeEach(async () => {
@@ -118,5 +122,32 @@ describe('the 1.5 kg plate that never existed', () => {
       ],
     });
     expect(merged.plates).toEqual([{ kg: 1.25, pairs: 4 }]);
+  });
+});
+
+describe('retired exercises', () => {
+  it('stores a set of ids and takes one back out', async () => {
+    expect(await readRetiredExercises()).toEqual([]);
+    await setExerciseRetired('bb_deadlift', true);
+    await setExerciseRetired('sm_squat', true);
+    // Retiring twice is still one entry.
+    await setExerciseRetired('bb_deadlift', true);
+    expect(await readRetiredExercises()).toEqual(['bb_deadlift', 'sm_squat']);
+
+    await setExerciseRetired('bb_deadlift', false);
+    expect(await readRetiredExercises()).toEqual(['sm_squat']);
+  });
+
+  it('ignores a hand-edited row that is not a list of ids', async () => {
+    await db.settings.put({ key: RETIRED_EXERCISES_KEY, value: ['ok', 3, '', null] });
+    expect(await readRetiredExercises()).toEqual(['ok']);
+    await db.settings.put({ key: RETIRED_EXERCISES_KEY, value: 'bb_deadlift' });
+    expect(await readRetiredExercises()).toEqual([]);
+  });
+
+  it('leaves only the choosable exercises', () => {
+    const rows = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    expect(withoutRetired(rows, ['b']).map((row) => row.id)).toEqual(['a', 'c']);
+    expect(withoutRetired(rows, [])).toBe(rows);
   });
 });

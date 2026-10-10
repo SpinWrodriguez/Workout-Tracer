@@ -1100,6 +1100,7 @@ export function SessionScreen({
       {picking && (
         <ExercisePicker
           exercises={exercises}
+          foldRetired
           selectedIds={draft.exercises.map((e) => e.exerciseId)}
           onPick={addExercise}
           onUnpick={removeExercise}

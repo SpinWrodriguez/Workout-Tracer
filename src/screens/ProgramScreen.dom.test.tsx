@@ -29,6 +29,7 @@ import { shiftIso, todayIso, weekStart } from '../lib/format';
 import { realMinutes, timeFactor } from '../lib/timeModel';
 import { WEEKDAY_LABEL, weekdayOf } from '../lib/golf';
 import { readPlans, readSchedules } from '../lib/program';
+import { readRetiredExercises, setExerciseRetired } from '../db/settings';
 import { ProgramScreen } from './ProgramScreen';
 
 /*
@@ -203,6 +204,56 @@ describe('making a workout', () => {
         created?.name,
       );
     }
+  });
+});
+
+describe('retired exercises', () => {
+  it('never builds a workout from an exercise that has been retired', async () => {
+    /* Build once and see what it picks, retire every one of those, build a
+       second workout of the same shape: none of them may come back. */
+    await seedSchedule({
+      A: { intensity: 'heavy', name: 'First squats' },
+      B: { intensity: 'heavy', name: 'Second squats' },
+    });
+    const { ui } = await openProgram();
+
+    const build = async (name: string, slot: 'A' | 'B') => {
+      const card = await workoutCard(name);
+      await ui.click(within(card).getByRole('button', { name: 'Build this workout' }));
+      let ids: string[] = [];
+      await waitFor(async () => {
+        const rows = await db.blockExercise.where('daySlot').equals(slot).toArray();
+        expect(rows.length).toBeGreaterThan(0);
+        ids = rows.map((row) => row.exerciseId);
+      });
+      return ids;
+    };
+
+    const first = await build('First squats', 'A');
+    for (const id of first) await setExerciseRetired(id, true);
+    /* Emptied, so the builder's "complement the other workouts" rule cannot be
+       what keeps them out of the second one — only retirement can. */
+    await db.blockExercise.where('daySlot').equals('A').delete();
+    // The live query has to see the retirement before the second build reads it.
+    await waitFor(async () => expect(await readRetiredExercises()).toHaveLength(first.length));
+
+    const second = await build('Second squats', 'B');
+    expect(second.filter((id) => first.includes(id))).toEqual([]);
+  });
+
+  it('keeps a retired exercise out of the add list, behind its own fold', async () => {
+    await setExerciseRetired('bb_deadlift', true);
+    await seedSchedule({ A: { intensity: 'heavy', name: 'Pull day' } });
+    await seedWorkout('A', ['bw_pull_up']);
+    const { ui } = await openProgram();
+
+    const card = await editWorkout(ui, await workoutCard('Pull day'));
+    await ui.click(within(card).getByRole('button', { name: /Add exercise/ }));
+    const fold = await screen.findByRole('button', { name: /Retired \(1\)/ });
+    expect(screen.queryByText('Conventional deadlift')).toBeNull();
+
+    await ui.click(fold);
+    expect(await screen.findByText('Conventional deadlift')).toBeTruthy();
   });
 });
 
