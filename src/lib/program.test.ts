@@ -496,3 +496,19 @@ describe('moving a session in one week', () => {
     expect(normalisePlan({ b: { '2026-09-02': null } })).toEqual({ b: { '2026-09-02': null } });
   });
 });
+
+describe('a goal plan saved by a later version of the app', () => {
+  it('stays in the data but never becomes the working block', async () => {
+    const current = (await readBlockPlan())?.block;
+    expect(current).toBeTruthy();
+    await db.block.put({
+      id: 'plan_2026-10-12',
+      startDate: '2026-10-12',
+      endDate: '2026-12-06',
+      focusMuscles: [],
+      plan: { goal: 'muscle', weeks: 8 },
+    } as never);
+    expect((await readBlockPlan())?.block.id).toBe(current?.id);
+    expect(await db.block.get('plan_2026-10-12')).toBeTruthy();
+  });
+});

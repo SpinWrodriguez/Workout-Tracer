@@ -1,6 +1,6 @@
 # Goal plans — design
 
-Status: **phases 1–2 built, plus the Strength preset** (§9); the finisher and the end-of-plan report are still to come. Mock-up of every screen below:
+Status: **agreed, not built.** Mock-up of every screen below:
 https://claude.ai/artifact/TNNugYsyWRBEXCStMoSTUy
 
 ## 1. Why
@@ -35,19 +35,6 @@ golf second but protected.
 - **Mon / Wed / Fri**, starting **Mon 26 Oct**, ending Sun 20 Dec. Golf is
   Saturday, so Friday's workout (C) is built golf-safe from the start: no
   high-grip, no high spinal load, no heavy legs, no finisher.
-- **Every workout runs in the same order:** 5 min warm-up (90/90 hip switch,
-  open book, T-spine + high knee; not counted as sets), 8–10 min **golf
-  power** (one explosive or rotational move 3 × 5 fast, one anti-rotation
-  move 2 × 8–10), then the muscle work, then the Mon/Wed finisher. About 85%
-  of the week's sets are muscle work and 15% golf, close to the 1-in-6 the
-  conditioning month already did.
-- **Golf power by day:** Mon jump squat + Pallof press; Wed landmine
-  rotational press + Copenhagen plank; Fri light cable chop + side plank as a
-  primer for Saturday. Weeks 1–5 train speed; weeks 6–7 keep it fast but drop
-  to 2 sets so it adds no fatigue while the lifting peaks; week 8 re-tests.
-- **Muscle choices that serve the swing:** glutes and hips against early
-  extension, adductors for a stable lead leg, lats against lead-arm collapse,
-  anti-rotation core so the turn does not come from the lower back.
 - **Three workouts, seven slots each**, about 55 minutes:
   - A · Lower + Push: opener, lower main, upper push, single-leg, delts,
     overhead triceps, calves.
@@ -57,14 +44,12 @@ golf second but protected.
     pullover, fly, rear delts, seated calves.
 - **Progression inside the plan** is the existing rule (top of range at
   RIR ≥ 2 → next rung). The plan changes only the *target* each week: range,
-  sets, reps in reserve, rest. (Planned, not built yet: one extra set the
-  following week for the muscle lowest on Levels.)
+  sets, reps in reserve, rest. A lagging muscle (lowest on Levels last week)
+  gets one extra set the following week.
 - **Small finisher** on Mon and Wed, about 8 minutes, to keep the conditioning
   month's gains. Formats in §4.
 - **Judged on:** estimated 1-RM of the main lifts (week 1 vs week 8), weekly
-  sets per muscle, and the 7-day body-weight average staying ≤ 82 kg. Golf
-  side: standing broad jump and the landmine scoop toss load moved fast,
-  week 1 vs week 8, plus swing speed when a radar is available.
+  sets per muscle, and the 7-day body-weight average staying ≤ 82 kg.
 
 ## 3. Short weeks — the backup plan
 
@@ -137,32 +122,16 @@ The app only knows sets of reps or seconds. The finisher needs a timed block.
   done, and a suggested next plan (Muscle → Strength).
 - The old 12 workouts stay with the old block: history and charts keep them.
 
-## 6. A way back
-
-The plan has to be something the lifter can leave. Two layers:
-
-- **In the app: End plan.** One button on the plan banner, with a confirm.
-  It ends the plan's block where it is, keeps every logged set, and puts the
-  app back to free-form: Program shows the workout shelf, New workout and the
-  day sheet exactly as today. Nothing about the old way is deleted by the
-  plan; while a plan runs, the loose shelf is hidden, not removed.
-- **In the code: the branch `before-goal-plans`** on GitHub is the app as it
-  stood before any of this was built (commit de547b1). If the plan feature
-  as a whole is not wanted, that branch is what the app goes back to; the
-  data model changes are additive, so data logged during a plan still loads
-  in it.
-
-## 7. Clean-up (done)
+## 6. Clean-up (done)
 
 Removed to make room: the AI week planner, Home's Recent sessions, and three
 Settings cards merged into About & data. **Kept:** Levels, the coach chat, and
 workout generation, which becomes the engine of *Build my workouts*.
 
-When a plan is running, the Program shelf of loose workouts is hidden and the
-plan's three workouts take its place; one-off workouts stay possible from the
-+. Ending the plan brings the shelf back (§6).
+Still to go when the plan lands: the Program shelf of loose workouts. The
+plan's three workouts replace it; one-off workouts stay possible from the +.
 
-## 8. Data model
+## 7. Data model
 
 All additive; backup version 4 → 5 with a no-op migration.
 
@@ -196,17 +165,12 @@ Presets live in code (`src/lib/goalPlans.ts`). The catch-up and two-day
 workouts are computed on the day from the plan's own rows, never stored as
 workouts of their own.
 
-## 9. Phases of work
-
-Built so far: 1, 2, and the Strength preset from 4 (6 weeks, two main lifts
-and two accessories a workout, same days and golf rules), chosen on the setup
-sheet and suggested when a plan finishes. A booked plan shows its workouts on
-the week strip, outlined, before it starts.
+## 8. Phases of work
 
 1. **Plan skeleton** — Muscle preset, Block fields, Start a plan with Build
    my workouts and slot swapping, calendar placement, the *Week N of 8*
    banner, weekly targets on cards and in the session, Levels against the
-   target, End plan. Ends the current block cleanly.
+   target. Ends the current block cleanly.
 2. **Short weeks** — how weeks count, the catch-up and two-day versions,
    repeat and re-entry weeks.
 3. **Finisher** — formats, interval timer, conditioning minutes on History.

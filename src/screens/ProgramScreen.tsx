@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import { readCurrentBlock, readUpcomingPlan, syncPlanWeek } from '../lib/goalPlans';
 import type { DaySlot, Exercise, GolfDay, MuscleId } from '../db/types';
 import { longDate, todayIso } from '../lib/format';
 import {
@@ -39,6 +38,7 @@ import {
   entriesForSlot,
   reorderBlockExercises,
   planDate,
+  readLatestBlock,
   readPlans,
   readSchedules,
   removeBlockExercise,
@@ -50,7 +50,6 @@ import {
   writeSchedule,
 } from '../lib/program';
 import { DayEditor, type DayEditorSlot } from '../components/DayEditor';
-import { PlanCard } from '../components/PlanCard';
 import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
 import { isModelAvailable } from '../lib/askModel';
 import {
@@ -140,12 +139,7 @@ export function ProgramScreen({
   /* A first block has no history, which is what bars advanced movements. */
   const hasHistory = useLiveQuery(async () => (await db.setLog.count()) > 0, [], false);
 
-  /* The current block: a plan once its Monday comes, the free-form block
-     before it otherwise (and again once a plan is ended). */
-  const block = useLiveQuery(() => readCurrentBlock(), [], undefined);
-  useEffect(() => {
-    if (block?.plan) void syncPlanWeek(block);
-  }, [block]);
+  const block = useLiveQuery(() => readLatestBlock(), [], undefined);
   const golfDays = useLiveQuery(() => db.golfDay.toArray(), [], undefined);
   /* Every round, with whether it already happened: a round marked played no
      longer bars its own day, and `gripConflictOn` only looks forward anyway. */
@@ -168,14 +162,6 @@ export function ProgramScreen({
     [block?.id],
     undefined,
   );
-  /* A plan booked for a later Monday: its days are shown on the strip from
-     its start date, in place of the current block's, so the week ahead says
-     what will really happen. Read-only until the plan starts. */
-  const booked = useLiveQuery(async () => {
-    const plan = await readUpcomingPlan();
-    if (!plan) return undefined;
-    return { block: plan, schedule: (await readSchedules())[plan.id] ?? {} };
-  }, []);
 
   /**
    * What this week actually did, alongside what it plans to.
@@ -270,15 +256,6 @@ export function ProgramScreen({
     }).map((day) => {
       // Resolved per date, so a session moved in one week shows as moved in
       // that week and nowhere else.
-      if (booked && day.date >= booked.block.startDate && day.date <= booked.block.endDate) {
-        const slot = slotForDate(booked.schedule, day.date, {});
-        return {
-          ...day,
-          plannedSlot: undefined,
-          intensity: undefined,
-          booked: slot ? (booked.schedule[slot]?.name ?? slot) : undefined,
-        };
-      }
       const plannedSlot = slotForDate(schedule ?? {}, day.date, datePlan ?? {});
       return {
         ...day,
@@ -287,7 +264,7 @@ export function ProgramScreen({
         intensity: plannedSlot ? (schedule?.[plannedSlot]?.intensity ?? 'heavy') : undefined,
       };
     });
-  }, [anchor, golfDays, weekHistory, byId, schedule, datePlan, booked]);
+  }, [anchor, golfDays, weekHistory, byId, schedule, datePlan]);
 
   /**
    * Every workout this block defines, placed or not. Read from the schedule as
@@ -1037,10 +1014,7 @@ export function ProgramScreen({
 
   return (
     <Screen title="Program">
-      <PlanCard block={block} choosable={choosable} exercisesById={byId} />
-
       <Card
-        className="mt-3"
         title="Week"
         trailing={
           <span className="flex gap-1">
@@ -1074,10 +1048,7 @@ export function ProgramScreen({
           week={week}
           labelFor={labelFor}
           shortLabelFor={shortLabelFor}
-          /* A booked plan's day is not this block's to edit. */
-          onPickDay={(date) => {
-            if (!week.find((day) => day.date === date)?.booked) setEditingDate(date);
-          }}
+          onPickDay={setEditingDate}
           onMoveSlot={(slot, date) => void movePlanned(slot, date)}
         />
         {violations.length === 0 ? null : (
@@ -1129,21 +1100,17 @@ export function ProgramScreen({
                 the week strip's job: tap a day. The week planner that used to
                 sit here only matched shelf workouts to days, which the day
                 sheet already does one tap at a time. */}
-            {/* A plan's three workouts are fixed for its length, so it takes
-                no new ones; a one-off session is still the + away. */}
-            {!block.plan && (
-              <button
-                type="button"
-                onClick={() => setCreating(true)}
-                disabled={freeSlot() === undefined}
-                className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
-              >
-                {freeSlot() === undefined ? `All ${DAY_SLOTS.length} workouts used` : 'New workout'}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              disabled={freeSlot() === undefined}
+              className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
+            >
+              {freeSlot() === undefined ? `All ${DAY_SLOTS.length} workouts used` : 'New workout'}
+            </button>
 
             <Label className="mt-3 block text-center">
-              {block.plan ? 'Plan' : 'Block'}: {longDate(block.startDate)} — {longDate(block.endDate)}
+              Block: {longDate(block.startDate)} — {longDate(block.endDate)}
             </Label>
           </>
         ) : (
