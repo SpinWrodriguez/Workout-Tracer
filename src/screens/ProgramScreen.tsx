@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
+import { readCurrentBlock, syncPlanWeek } from '../lib/goalPlans';
 import type { DaySlot, Exercise, GolfDay, MuscleId } from '../db/types';
 import { longDate, todayIso } from '../lib/format';
 import {
@@ -49,6 +50,7 @@ import {
   writeSchedule,
 } from '../lib/program';
 import { DayEditor, type DayEditorSlot } from '../components/DayEditor';
+import { PlanCard } from '../components/PlanCard';
 import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
 import { isModelAvailable } from '../lib/askModel';
 import {
@@ -138,7 +140,12 @@ export function ProgramScreen({
   /* A first block has no history, which is what bars advanced movements. */
   const hasHistory = useLiveQuery(async () => (await db.setLog.count()) > 0, [], false);
 
-  const block = useLiveQuery(() => db.block.orderBy('startDate').reverse().first(), [], undefined);
+  /* The current block: a plan once its Monday comes, the free-form block
+     before it otherwise (and again once a plan is ended). */
+  const block = useLiveQuery(() => readCurrentBlock(), [], undefined);
+  useEffect(() => {
+    if (block?.plan) void syncPlanWeek(block);
+  }, [block]);
   const golfDays = useLiveQuery(() => db.golfDay.toArray(), [], undefined);
   /* Every round, with whether it already happened: a round marked played no
      longer bars its own day, and `gripConflictOn` only looks forward anyway. */
@@ -1013,7 +1020,10 @@ export function ProgramScreen({
 
   return (
     <Screen title="Program">
+      <PlanCard block={block} choosable={choosable} exercisesById={byId} />
+
       <Card
+        className="mt-3"
         title="Week"
         trailing={
           <span className="flex gap-1">
@@ -1099,17 +1109,21 @@ export function ProgramScreen({
                 the week strip's job: tap a day. The week planner that used to
                 sit here only matched shelf workouts to days, which the day
                 sheet already does one tap at a time. */}
-            <button
-              type="button"
-              onClick={() => setCreating(true)}
-              disabled={freeSlot() === undefined}
-              className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
-            >
-              {freeSlot() === undefined ? `All ${DAY_SLOTS.length} workouts used` : 'New workout'}
-            </button>
+            {/* A plan's three workouts are fixed for its length, so it takes
+                no new ones; a one-off session is still the + away. */}
+            {!block.plan && (
+              <button
+                type="button"
+                onClick={() => setCreating(true)}
+                disabled={freeSlot() === undefined}
+                className="h-cta mt-3 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
+              >
+                {freeSlot() === undefined ? `All ${DAY_SLOTS.length} workouts used` : 'New workout'}
+              </button>
+            )}
 
             <Label className="mt-3 block text-center">
-              Block: {longDate(block.startDate)} — {longDate(block.endDate)}
+              {block.plan ? 'Plan' : 'Block'}: {longDate(block.startDate)} — {longDate(block.endDate)}
             </Label>
           </>
         ) : (

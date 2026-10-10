@@ -149,6 +149,8 @@ export interface Muscle {
   svgPathId: string; // for the silhouette, Phase 4
 }
 
+export type PlanRole = 'power' | 'core' | 'main' | 'accessory';
+
 // Mesocycle — exercises stay FIXED inside a block.
 export interface Block {
   id: string;
@@ -156,9 +158,33 @@ export interface Block {
   endDate: string; // 6–8 weeks
   focusMuscles: MuscleId[];
   notes?: string;
+  /** Present when the block is a goal plan (docs/GOAL-PLANS.md). */
+  plan?: GoalPlanInfo;
+}
+
+export type GoalId = 'muscle';
+
+export interface GoalPlanInfo {
+  goal: GoalId;
+  weeks: number;
+  /**
+   * The plan week whose targets were last written into this block's
+   * workouts. Targets are applied by rewriting the rows once a week, so every
+   * screen that reads a workout sees the week's numbers without knowing what
+   * a plan is.
+   */
+  appliedWeek?: number;
+  /** Set by End plan. An ended plan is never the current block again. */
+  endedAt?: string;
 }
 
 export interface BlockExercise {
+  /**
+   * What the row does in a goal plan, which decides how its target moves week
+   * to week: golf power stays short and fast, core keeps its own range, mains
+   * and accessories follow the phase. Absent outside a plan.
+   */
+  role?: PlanRole;
   blockId: string;
   exerciseId: string;
   daySlot: DaySlot;

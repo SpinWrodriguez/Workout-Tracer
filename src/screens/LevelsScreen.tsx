@@ -17,6 +17,7 @@ import {
 } from '../lib/volume';
 import { Card, Empty, Label, Screen, SegmentedToggle } from '../components/Layout';
 import { Silhouette } from '../components/Silhouette';
+import { phaseFor, planStateOf, planWeekOf, readCurrentBlock } from '../lib/goalPlans';
 
 const REGIONS = ['all', 'upper', 'lower', 'core'] as const;
 type Region = (typeof REGIONS)[number];
@@ -67,7 +68,17 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
    * and the target is 36.
    */
   const training = useLiveQuery(() => readTraining(), [], undefined);
-  const share = training ? fairShare(training.weeklySetTarget, byId) : VOLUME_LOW;
+  /* During a plan the target is the plan's own for the week being viewed:
+     about 10 sets a muscle in week 1, 16 at the peak. Outside a plan, the even
+     share of the weekly set target as before. */
+  const current = useLiveQuery(() => readCurrentBlock(), [], undefined);
+  const viewedWeek = shiftIso(weekStart(todayIso()), weekOffset * 7);
+  const planTarget =
+    current?.plan && weeks === 1 && planStateOf(current, viewedWeek) === 'active'
+      ? phaseFor(planWeekOf(current, viewedWeek)).setsPerMuscle
+      : undefined;
+  const share =
+    planTarget ?? (training ? fairShare(training.weeklySetTarget, byId) : VOLUME_LOW);
   const floorNeeds = Math.ceil((MUSCLES.length * VOLUME_LOW) / weightedPerSet(byId));
 
   const volume = useLiveQuery(async () => {
@@ -157,7 +168,11 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
               <span className="text-[14px] font-medium">{row.name}</span>
               <Label className="text-right">
                 {row.sets} {row.sets === 1 ? 'set' : 'sets'} —{' '}
-                {row.status === 'high' ? `over ${VOLUME_HIGH}` : `under its share of ${share}`}
+                {row.status === 'high'
+                  ? `over ${VOLUME_HIGH}`
+                  : planTarget !== undefined
+                    ? `under the plan's ${share}`
+                    : `under its share of ${share}`}
               </Label>
             </div>
           ))}
@@ -171,6 +186,9 @@ export function LevelsScreen({ exercises }: { exercises: Exercise[] }) {
             </p>
           )}
           <p className="mt-2 text-[12px] font-medium text-text-dim">
+            {planTarget !== undefined
+              ? `This plan week aims for about ${planTarget} sets per muscle. `
+              : ''}
             Counted as 1 set per primary muscle and 0.5 per secondary. The share is your{' '}
             {training?.weeklySetTarget ?? '--'} weekly sets spread evenly over{' '}
             {MUSCLES.length} muscles — {share} each. Clearing the {VOLUME_LOW}-set training floor

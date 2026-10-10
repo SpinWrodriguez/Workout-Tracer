@@ -1,6 +1,6 @@
 # Goal plans — design
 
-Status: **agreed, not built.** Mock-up of every screen below:
+Status: **phase 1 built** (§9); phases 2–4 to come. Mock-up of every screen below:
 https://claude.ai/artifact/TNNugYsyWRBEXCStMoSTUy
 
 ## 1. Why
@@ -57,8 +57,8 @@ golf second but protected.
     pullover, fly, rear delts, seated calves.
 - **Progression inside the plan** is the existing rule (top of range at
   RIR ≥ 2 → next rung). The plan changes only the *target* each week: range,
-  sets, reps in reserve, rest. A lagging muscle (lowest on Levels last week)
-  gets one extra set the following week.
+  sets, reps in reserve, rest. (Planned, not built yet: one extra set the
+  following week for the muscle lowest on Levels.)
 - **Small finisher** on Mon and Wed, about 8 minutes, to keep the conditioning
   month's gains. Formats in §4.
 - **Judged on:** estimated 1-RM of the main lifts (week 1 vs week 8), weekly

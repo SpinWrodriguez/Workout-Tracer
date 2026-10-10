@@ -1,4 +1,5 @@
 import { db } from '../db/db';
+import { readCurrentBlock, syncPlanWeek } from './goalPlans';
 import type { Block, BlockExercise, DaySlot, Exercise } from '../db/types';
 import { weekdayOf, type Weekday } from './golf';
 import { desiredRange } from './blockBuilder';
@@ -137,7 +138,14 @@ export function normaliseSchedule(value: unknown): ScheduleByBlock {
       map[slot] = {
         ...(scheduled ? { weekday: weekday as Weekday } : {}),
         intensity,
-        effortCue: intensity === 'light' ? LIGHT_DAY_CUE : undefined,
+        /* A cue a goal plan wrote for the week wins; otherwise the light day
+           carries its standing cue and a heavy day none. */
+        effortCue:
+          typeof value.effortCue === 'string' && value.effortCue.trim()
+            ? value.effortCue.trim()
+            : intensity === 'light'
+              ? LIGHT_DAY_CUE
+              : undefined,
         // Absent rather than false: a hand-built day keeps the shape it has
         // always had, and only generated days carry the extra key.
         ...(value.generated === true ? { generated: true } : {}),
@@ -338,7 +346,15 @@ export interface BlockPlan {
 }
 
 export async function readBlockPlan(): Promise<BlockPlan | undefined> {
-  const block = await db.block.orderBy('startDate').reverse().first();
+  /* The current block, not simply the newest: a plan booked for next Monday
+     is newer than the block still running, and an ended plan is never
+     current again. A running plan's week targets are brought up to date
+     before anything reads them. */
+  let block = await readCurrentBlock();
+  if (block?.plan) {
+    await syncPlanWeek(block);
+    block = (await db.block.get(block.id)) ?? block;
+  }
   if (!block) return undefined;
   const [schedules, plans, entries] = await Promise.all([
     readSchedules(),
