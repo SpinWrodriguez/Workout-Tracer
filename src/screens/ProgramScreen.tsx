@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { DaySlot, Exercise, GolfDay, MuscleId } from '../db/types';
-import { todayIso } from '../lib/format';
+import { longDate, todayIso } from '../lib/format';
 import {
   WEEKDAY_LABEL,
   buildWeek,
@@ -50,6 +50,8 @@ import {
   writeSchedule,
 } from '../lib/program';
 import { DayEditor, type DayEditorSlot } from '../components/DayEditor';
+import { RotationCard } from '../components/RotationCard';
+import { forecastWeek, offerFor, readRotation, readRotationSessions } from '../lib/rotation';
 import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
 import { isModelAvailable } from '../lib/askModel';
 import {
@@ -140,6 +142,19 @@ export function ProgramScreen({
   const hasHistory = useLiveQuery(async () => (await db.setLog.count()) > 0, [], false);
 
   const block = useLiveQuery(() => readLatestBlock(), [], undefined);
+  /* The plan, when the block runs as a rotation, and this block's sessions:
+     the next workout is the one after the last logged, so the strip has to
+     know every session, not only this week's. */
+  const rotation = useLiveQuery(
+    async () => (block ? ((await readRotation(block.id)) ?? null) : null),
+    [block?.id],
+    null,
+  );
+  const rotationSessions = useLiveQuery(
+    async () => (block ? readRotationSessions(block.id) : []),
+    [block?.id],
+    [],
+  );
   const golfDays = useLiveQuery(() => db.golfDay.toArray(), [], undefined);
   /* Every round as a date. A round is in the morning and behind the day's
      session; `gripConflictOn` only looks forward anyway. */
@@ -245,23 +260,42 @@ export function ProgramScreen({
   }, [anchor, onWeekChange]);
 
   const week: WeekStripDay[] = useMemo(() => {
-    return buildWeek({
+    const base = buildWeek({
       anchorDate: anchor,
       golfDays: golfDays ?? [],
       sessions: weekHistory?.sessions ?? [],
       exercisesById: byId,
-    }).map((day) => {
+    });
+    const dates = base.map((day) => day.date);
+    const forecast = rotation
+      ? forecastWeek({
+          rotation,
+          weekDates: dates,
+          sessions: rotationSessions ?? [],
+          dates: datePlan ?? {},
+          entries: slots ?? [],
+          exercisesById: byId,
+          golf: golfDateList,
+          golfWeekdays: training.golfWeekdays as never,
+        })
+      : undefined;
+    return base.map((day) => {
       // Resolved per date, so a session moved in one week shows as moved in
-      // that week and nowhere else.
-      const plannedSlot = slotForDate(schedule ?? {}, day.date, datePlan ?? {}, block);
+      // that week and nowhere else. A plan forecasts the week from its order
+      // and the usual days; the weekday pattern is only read without one.
+      const fc = forecast?.[day.date];
+      const plannedSlot = forecast
+        ? fc?.slot
+        : slotForDate(schedule ?? {}, day.date, datePlan ?? {}, block);
       return {
         ...day,
         plannedSlot,
         // What colours the chip, now that "light" is no longer a word on it.
         intensity: plannedSlot ? (schedule?.[plannedSlot]?.intensity ?? 'heavy') : undefined,
+        forecast: fc?.kind === 'forecast' || fc?.kind === 'next',
       };
     });
-  }, [anchor, golfDays, weekHistory, byId, schedule, datePlan, block]);
+  }, [anchor, golfDays, weekHistory, byId, schedule, datePlan, block, rotation, rotationSessions, slots, golfDateList, training.golfWeekdays]);
 
   /**
    * Every workout this block defines, placed or not. Read from the schedule as
@@ -381,10 +415,36 @@ export function ProgramScreen({
    * between two workouts when the question is really "have I got time for
    * this one". Everything below is already computed for the day cards.
    */
-  const editorSlots: DayEditorSlot[] = definedSlots.map((slot) => {
+  const offer =
+    rotation && editingDate
+      ? offerFor(editingDate, {
+          rotation,
+          sessions: rotationSessions ?? [],
+          dates: datePlan ?? {},
+          entries: slots ?? [],
+          exercisesById: byId,
+          golf: golfDateList,
+          golfWeekdays: training.golfWeekdays as never,
+        })
+      : undefined;
+  const editorOrder = offer ? [offer.first, ...offer.rest, ...definedSlots.filter((s) => !rotation?.order.includes(s))] : definedSlots;
+  const editorSlots: DayEditorSlot[] = editorOrder.filter((s, i, a) => a.indexOf(s) === i && definedSlots.includes(s)).map((slot) => {
     const list = entriesForSlot(slots ?? [], slot);
     const onDate = dateFor(slot);
+    const inPlan = rotation?.order.includes(slot) ?? false;
+    const tag = !offer
+      ? undefined
+      : slot === offer.first
+        ? offer.golfEve
+          ? 'golf-safe first'
+          : 'next'
+        : inPlan && offer.golfEve
+          ? 'not before golf'
+          : inPlan && slot === offer.rest[0]
+            ? 'skip ahead'
+            : undefined;
     return {
+      ...(tag ? { tag } : {}),
       slot,
       label: labelFor(slot),
       intensity: schedule?.[slot]?.intensity ?? 'heavy',
@@ -1037,6 +1097,16 @@ export function ProgramScreen({
 
   return (
     <Screen title="Program">
+      {block && (
+        <RotationCard
+          block={block}
+          rotation={rotation ?? undefined}
+          sessions={rotationSessions ?? []}
+          slots={definedSlots}
+          labelFor={labelFor}
+          golfWeekdays={training.golfWeekdays as never}
+        />
+      )}
       <Card
         title="Week"
         trailing={
@@ -1077,7 +1147,7 @@ export function ProgramScreen({
         {/* Under the strip and off to the side, away from the week arrows:
             next to them it was pressed by mistake, and a cleared week is
             seven taps to put back. */}
-        {week.some((day) => day.plannedSlot && day.sessionIds.length === 0) && (
+        {!rotation && week.some((day) => day.plannedSlot && day.sessionIds.length === 0) && (
           <div className="mt-3 flex justify-end">
             <button
               type="button"
@@ -1134,35 +1204,10 @@ export function ProgramScreen({
               {freeSlot() === undefined ? `All ${DAY_SLOTS.length} workouts used` : 'New workout'}
             </button>
 
-            {/* The block's dates, editable: the usual weekdays run from the
-                first to the last, and the calendar after that is empty. An
-                eight-week plan ends when it ends. */}
-            <div className="mt-3 flex items-center justify-center gap-2 text-[12px] font-medium text-text-dim">
-              <span>Block</span>
-              <input
-                type="date"
-                value={block.startDate}
-                max={block.endDate}
-                aria-label="Block starts"
-                onChange={(event) => {
-                  if (event.target.value) void db.block.put({ ...block, startDate: event.target.value });
-                }}
-                className="rounded-lg bg-surface-2 px-2 py-1 text-[12px] font-medium text-text"
-              />
-              <span>to</span>
-              <input
-                type="date"
-                value={block.endDate}
-                min={block.startDate}
-                aria-label="Block ends"
-                onChange={(event) => {
-                  if (event.target.value) void db.block.put({ ...block, endDate: event.target.value });
-                }}
-                className="rounded-lg bg-surface-2 px-2 py-1 text-[12px] font-medium text-text"
-              />
-            </div>
-            <Label className="mt-1.5 block text-center">
-              Usual days run to the last date; after it the calendar is empty.
+            <Label className="mt-3 block text-center">
+              {rotation
+                ? 'The plan decides the days; see the card at the top.'
+                : `Block: ${longDate(block.startDate)} — ${longDate(block.endDate)}`}
             </Label>
           </>
         ) : (
@@ -1365,11 +1410,15 @@ export function ProgramScreen({
             setEditingDate(null);
           }}
           usualLabel={`Do this every ${WEEKDAY_LABEL[weekdayOf(editingDate)]}`}
-          onSetUsual={() => {
-            const current = week.find((day) => day.date === editingDate)?.plannedSlot;
-            if (current) void makeUsual(current, editingDate);
-            setEditingDate(null);
-          }}
+          onSetUsual={
+            rotation
+              ? undefined
+              : () => {
+                  const current = week.find((day) => day.date === editingDate)?.plannedSlot;
+                  if (current) void makeUsual(current, editingDate);
+                  setEditingDate(null);
+                }
+          }
           onSetGolf={(status) => {
             void setGolf(editingDate, status);
             setEditingDate(null);

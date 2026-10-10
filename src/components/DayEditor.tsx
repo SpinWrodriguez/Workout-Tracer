@@ -31,6 +31,8 @@ export interface DayEditorSlot {
   sets: number;
   /** Undefined while the workout is empty and there is nothing to time. */
   minutes?: number;
+  /** A word from the plan: "next", "golf-safe first", "not before golf". */
+  tag?: string;
   /**
    * The weekday this workout already occupies in the week BEING VIEWED, if it
    * is in it. Resolved from that week's plan, not the standing weekday: the
@@ -215,9 +217,10 @@ export function DayEditor({
                  own workout skips the tag: the sheet is titled with that day,
                  and a tag agreeing with the title is noise. */
               tag={
-                row.onWeekday !== undefined && row.onWeekday !== weekday
+                row.tag ??
+                (row.onWeekday !== undefined && row.onWeekday !== weekday
                   ? WEEKDAY_LABEL[row.onWeekday]
-                  : undefined
+                  : undefined)
               }
               ariaLabel={`${row.label}, ${EFFORT_WORD[row.intensity]}, ${
                 row.exercises === 0

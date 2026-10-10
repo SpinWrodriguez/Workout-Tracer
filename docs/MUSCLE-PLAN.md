@@ -147,9 +147,10 @@ trend shows its estimated 1-RM, week 1 against week 8. Body weight stays ≤ 82 
    squat, RDL, Bulgarian split squat, leg curl, calves" and fix what it gets
    wrong. Name them A · Lower, B · Pull, C · Push, D · Glutes + arms.
 2. In each one, set the sets and reps to the week-1 numbers.
-3. Open the day sheet on a Monday and give A "Do this every Monday"; B every
-   Wednesday (or Tuesday on 4-day weeks); C every Friday (Thursday on 4-day
-   weeks). D and E have no usual day: put them on a day when the week has one.
+3. Program → **Make a plan**: tap A, B, C, D in that order, mark D "4-day
+   only", pick the days you usually train, 8 weeks, start date. Whatever day
+   you train you get the next one in order; the days are only a forecast.
+   E has no place in the order: add it on a Friday by hand when you want it.
 4. Keep the old twelve workouts? Move them out of the way: retire the ones you
    will not use so the shelf is short. The history keeps them.
 5. Week 3 and week 6: edit the two main lifts in A, B and C as in the table.

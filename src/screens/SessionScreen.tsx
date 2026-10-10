@@ -25,6 +25,7 @@ import {
 import { hasLoadTranslation } from '../lib/load';
 import { DEFAULT_INVENTORY, barWeightFor, ladderFor, type Inventory } from '../lib/loadable';
 import { sessionWarnings, type RuleWarning } from '../lib/golf';
+import { offerFor, readForecastInput } from '../lib/rotation';
 import {
   DEFAULT_REP_RANGE,
   OUTCOME_LABEL,
@@ -204,10 +205,18 @@ export function SessionScreen({
 
       // Freestyle is a decision, not an absence: it must not quietly load
       // today's programmed session just because one exists.
+      /* Under a plan today's workout is the next in order (golf eve aside);
+         without one it is whatever the weekday pattern says. */
+      const forecast = blockPlan && !daySlot && !freestyle ? await readForecastInput(blockPlan.block.id, exercisesById) : undefined;
+      if (cancelled) return;
       const slot = freestyle
         ? undefined
         : (daySlot ??
-          (blockPlan ? slotForDate(blockPlan.schedule, date, blockPlan.dates, blockPlan.block) : undefined));
+          (forecast
+            ? offerFor(date, forecast).first
+            : blockPlan
+              ? slotForDate(blockPlan.schedule, date, blockPlan.dates, blockPlan.block)
+              : undefined));
       const programmed =
         blockPlan && slot ? entriesForSlot(blockPlan.entries, slot).length > 0 : false;
 

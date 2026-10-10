@@ -1,8 +1,19 @@
 import { db } from '../db/db';
+import { readTraining } from '../db/settings';
 import type { BlockExercise, DaySlot } from '../db/types';
 import { weekdayOf, type Weekday } from './golf';
 import { shiftIso, todayIso, weekStart } from './format';
 import { entriesForSlot, readBlockPlan, slotForDate } from './program';
+import {
+  forecastWeek,
+  nextFrom,
+  queueFrom,
+  readRotation,
+  readRotationSessions,
+  rotationWeekOf,
+  type DayKind,
+  type Rotation,
+} from './rotation';
 import type { Intensity } from './weekTemplate';
 
 /* -------------------------------------------------------------------------- */
@@ -39,6 +50,17 @@ export interface WeekPlan {
   today: string;
   todaySlot?: DaySlot;
   scheduled: boolean;
+  /** The plan, when the block runs as a rotation. */
+  rotation?: {
+    plan: Rotation;
+    /** What to do next, whatever day it is. */
+    next: DaySlot;
+    /** The ones after it, in order. */
+    then: DaySlot[];
+    week: number;
+    /** How each date in this week got its workout. */
+    kinds: Record<string, DayKind>;
+  };
 }
 
 /**
@@ -86,9 +108,38 @@ export async function readWeekPlan(anchorDate?: string): Promise<WeekPlan | unde
    */
   const weekDates = Array.from({ length: 7 }, (_, i) => shiftIso(from, i));
   const dateOf = new Map<DaySlot, string>();
-  for (const date of weekDates) {
-    const slot = slotForDate(plan.schedule, date, plan.dates, plan.block);
-    if (slot !== undefined && !dateOf.has(slot)) dateOf.set(slot, date);
+  /* A rotation forecasts the week from the order and the usual days; the
+     usual-weekday pattern is only read when there is no plan. */
+  const rotation = await readRotation(plan.block.id);
+  const rotationSessions = rotation ? await readRotationSessions(plan.block.id) : [];
+  const kinds: Record<string, DayKind> = {};
+  if (rotation) {
+    const exercisesById = new Map((await db.exercise.toArray()).map((e) => [e.id, e]));
+    const golf = (await db.golfDay.toArray()).map((row) => ({ date: row.date }));
+    const training = await readTraining();
+    const week = forecastWeek({
+      rotation,
+      weekDates,
+      sessions: rotationSessions,
+      dates: plan.dates,
+      entries: plan.entries,
+      exercisesById,
+      golf,
+      golfWeekdays: training.golfWeekdays as Weekday[],
+      today,
+    });
+    for (const date of weekDates) {
+      const day = week[date];
+      if (day && !dateOf.has(day.slot)) {
+        dateOf.set(day.slot, date);
+        kinds[date] = day.kind;
+      }
+    }
+  } else {
+    for (const date of weekDates) {
+      const slot = slotForDate(plan.schedule, date, plan.dates, plan.block);
+      if (slot !== undefined && !dateOf.has(slot)) dateOf.set(slot, date);
+    }
   }
 
   const all: PlannedDay[] = slots
@@ -124,14 +175,33 @@ export async function readWeekPlan(anchorDate?: string): Promise<WeekPlan | unde
   const pending = days.filter((day) => !day.done && day.entries.length > 0);
   const upcoming = pending.filter((day) => day.date !== undefined && day.date >= today);
 
+  const rotationNext = rotation ? nextFrom(rotation, rotationSessions, today) : undefined;
+  const todaySlotOf = (): DaySlot | undefined => {
+    if (!rotation) return slotForDate(plan.schedule, today, plan.dates, plan.block);
+    // Today's forecast if there is one; otherwise simply the next in order.
+    const onToday = [...dateOf.entries()].find(([, date]) => date === today)?.[0];
+    if (onToday && kinds[today] === 'done') return undefined;
+    return onToday ?? rotationNext;
+  };
   return {
     blockId: plan.block.id,
     weekStarting: from,
     days,
     all,
-    next: (upcoming[0] ?? pending[0])?.slot,
+    next: rotationNext ?? (upcoming[0] ?? pending[0])?.slot,
     today,
-    todaySlot: slotForDate(plan.schedule, today, plan.dates, plan.block),
-    scheduled: Object.keys(plan.schedule).length > 0,
+    todaySlot: todaySlotOf(),
+    scheduled: Object.keys(plan.schedule).length > 0 || rotation !== undefined,
+    ...(rotation && rotationNext
+      ? {
+          rotation: {
+            plan: rotation,
+            next: rotationNext,
+            then: queueFrom(rotation, rotationNext).slice(1),
+            week: rotationWeekOf(rotation, today),
+            kinds,
+          },
+        }
+      : {}),
   };
 }

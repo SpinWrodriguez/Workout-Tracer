@@ -261,6 +261,52 @@ export function DashboardScreen({
         <p className="mb-3 text-[14px] leading-snug font-medium">{caddieText}</p>
       )}
 
+      {program?.rotation && (() => {
+        const r = program.rotation;
+        const next = program.all.find((day) => day.slot === r.next);
+        const nameOf = (slot: DaySlot) => {
+          const day = program.all.find((d) => d.slot === slot);
+          return day ? dayLabel({ slot, name: day.name, exercises: day.entries.map((e) => byId.get(e.exerciseId)).filter((e): e is Exercise => e !== undefined), intensity: day.intensity }) : slot;
+        };
+        const names = (next?.entries ?? [])
+          .map((entry) => byId.get(entry.exerciseId)?.name)
+          .filter(Boolean)
+          .slice(0, 4)
+          .join(' · ');
+        const week = r.week;
+        return (
+          <Card
+            title="Next up"
+            className="mb-3"
+            trailing={
+              <Label>
+                {week < 1 ? `starts ${WEEKDAY_LABEL[weekdayOf(r.plan.start)]}` : week > r.plan.weeks ? 'plan finished' : `week ${week} of ${r.plan.weeks}`}
+              </Label>
+            }
+          >
+            <p className="text-[20px] leading-tight font-semibold">{nameOf(r.next)}</p>
+            <p className="mt-0.5 truncate text-[12px] font-medium text-text-dim">{names || '---'}</p>
+            <button
+              type="button"
+              onClick={() => {
+                tap();
+                onStartDay(r.next);
+              }}
+              disabled={(next?.entries.length ?? 0) === 0}
+              className="h-cta relative mt-3 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
+            >
+              Start {nameOf(r.next)}
+              <HapticTick />
+            </button>
+            {r.then.length > 0 && (
+              <p className="mt-2 text-[12px] font-medium text-text-dim">
+                Then {r.then.map(nameOf).join(', then ')}. Whatever day you train, you get the next one.
+              </p>
+            )}
+          </Card>
+        );
+      })()}
+
       {programDays.length > 0 && (
         <Card title="Your week" className="mb-3">
           {programDays.map((day, i) => {

@@ -25,6 +25,8 @@ export interface WeekStripDay extends WeekDay {
   plannedSlot?: DaySlot;
   /** How hard that workout is, which is now what colours the chip. */
   intensity?: Intensity;
+  /** A plan's forecast for this day, not a booking: drawn dashed. */
+  forecast?: boolean;
 }
 
 /*
@@ -117,7 +119,9 @@ export function WeekStrip({
                     ? `, ${labelFor(day.plannedSlot)}, ${
                         day.sessionIds.length > 0
                           ? 'done'
-                          : EFFORT_WORD[day.intensity ?? 'heavy']
+                          : day.forecast
+                            ? 'forecast'
+                            : EFFORT_WORD[day.intensity ?? 'heavy']
                       }`
                     : day.loggedName
                       ? `, ${day.loggedName}, done`
@@ -150,14 +154,16 @@ export function WeekStrip({
                      then, rust heavy and teal light. */
                   className={`mt-1.5 cursor-grab touch-none rounded-lg px-0.5 py-1 text-center text-[9px] leading-[1.15] font-bold break-words hyphens-auto select-none ${
                     drag?.slot === day.plannedSlot ? 'opacity-30' : ''
-                  } ${done ? 'bg-cta text-bg' : ''}`}
+                  } ${done ? 'bg-cta text-bg' : day.forecast ? 'text-text-dim' : ''}`}
                   style={
                     done
                       ? undefined
-                      : {
-                          background: EFFORT_COLOR[day.intensity ?? 'heavy'],
-                          color: EFFORT_TEXT[day.intensity ?? 'heavy'],
-                        }
+                      : day.forecast
+                        ? { outline: '1.5px dashed var(--color-text-faint)', outlineOffset: '-1.5px' }
+                        : {
+                            background: EFFORT_COLOR[day.intensity ?? 'heavy'],
+                            color: EFFORT_TEXT[day.intensity ?? 'heavy'],
+                          }
                   }
                 >
                   {shortLabelFor(day.plannedSlot)}

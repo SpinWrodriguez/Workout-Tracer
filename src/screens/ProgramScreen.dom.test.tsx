@@ -20,7 +20,7 @@ import {
   draw,
 } from '../test/dom';
 
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
 import type { BlockExercise } from '../db/types';
@@ -461,12 +461,69 @@ describe('the calendar after the block', () => {
       expect(dayButton(nextMonday).getAttribute('aria-label')).not.toMatch(/Monday squats/),
     );
 
-    // Move the end out a week from the footnote and the Monday comes back.
-    const end = screen.getByLabelText('Block ends') as HTMLInputElement;
-    fireEvent.change(end, { target: { value: shiftIso(endThisSunday, 7) } });
+    // Move the end out a week and the Monday comes back.
+    await db.block.put({ ...(block as NonNullable<typeof block>), endDate: shiftIso(endThisSunday, 7) });
     await waitFor(() =>
       expect(dayButton(nextMonday).getAttribute('aria-label')).toMatch(/Monday squats/),
     );
+  });
+});
+
+describe('a plan as a rotation', () => {
+  it('is made from the shelf, forecasts the usual days, and offers the next workout first', async () => {
+    await seedSchedule({
+      A: { intensity: 'heavy', name: 'Lower' },
+      B: { intensity: 'heavy', name: 'Pull' },
+      C: { intensity: 'heavy', name: 'Push' },
+    });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedWorkout('B', ['bw_pull_up']);
+    await seedWorkout('C', ['bb_bench_press']);
+    const { ui } = await openProgram();
+
+    // Enabled once the shelf has loaded.
+    const make = await screen.findByRole('button', { name: 'Make a plan' });
+    await waitFor(() => expect(make.hasAttribute('disabled')).toBe(false));
+    await ui.click(make);
+    await ui.click(await screen.findByRole('button', { name: 'Lower' }));
+    await ui.click(screen.getByRole('button', { name: 'Pull' }));
+    await ui.click(screen.getByRole('button', { name: 'Push' }));
+    // Picked rows are numbered in the order tapped.
+    expect(screen.getByRole('button', { name: '3. Push' })).toBeTruthy();
+    // Mon, Wed, Fri are on by default; the start date is this Monday.
+    await ui.click(screen.getByRole('button', { name: /^Start plan/ }));
+
+    await screen.findByRole('heading', { name: 'Plan · Week 1 of 8' });
+    /* Days gone by show only what was logged, so read the forecast on next
+       week, where every day is ahead whatever today is. */
+    await ui.click(screen.getByRole('button', { name: 'Next week' }));
+    const mon = shiftIso(MONDAY, 7);
+    const wed = shiftIso(MONDAY, 9);
+    const thu = shiftIso(MONDAY, 10);
+    const fri = shiftIso(MONDAY, 11);
+    // The strip forecasts the week from the order: Lower, Pull, Push.
+    await waitFor(() => expect(dayButton(mon).getAttribute('aria-label')).toMatch(/Lower, forecast/));
+    expect(dayButton(wed).getAttribute('aria-label')).toMatch(/Pull, forecast/);
+    expect(dayButton(fri).getAttribute('aria-label')).toMatch(/Push, forecast/);
+    // Not a usual day, so nothing is drawn there.
+    expect(dayButton(thu).getAttribute('aria-label')).not.toMatch(/Lower|Pull|Push/);
+
+    // The day sheet puts the next workout first, tagged.
+    await ui.click(dayButton(thu));
+    const sheet = await screen.findByRole('heading', { name: 'Thu' });
+    const tiles = within(sheet.parentElement as HTMLElement).getAllByRole('button', { name: /^(Lower|Pull|Push),/ });
+    expect(tiles[0]?.getAttribute('aria-label')).toMatch(/^Lower/);
+    // No usual-day button under a plan.
+    expect(screen.queryByRole('button', { name: /^Do this every/ })).toBeNull();
+    await ui.click(screen.getByRole('button', { name: 'Done' }));
+
+    // Adding a training day redraws the forecast: four days, three workouts,
+    // so the order goes round again. Friday is the eve of Saturday golf, so
+    // it takes the golf-safe one (bench) from the second round, not the squat.
+    const days = within(screen.getByRole('group', { name: 'Days I usually train' }));
+    await ui.click(days.getByRole('button', { name: 'Thu' }));
+    await waitFor(() => expect(dayButton(thu).getAttribute('aria-label')).toMatch(/Push/));
+    expect(dayButton(fri).getAttribute('aria-label')).toMatch(/Push/);
   });
 });
 
