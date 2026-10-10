@@ -23,7 +23,7 @@ import {
   MAX_MEMORY_NOTE_CHARS,
   addCoachMemory,
   readInventory,
-  readRetiredExercises,
+  readUnofferedExercises,
   withoutRetired,
 } from '../db/settings';
 import { barWeightFor } from './loadable';
@@ -420,9 +420,9 @@ export async function runCoachTool(
 ): Promise<ToolOutcome> {
   try {
     if (name === 'search_exercises') {
-      /* Retired exercises are off the shelf: the coach cannot suggest what it
+      /* Retired and deleted exercises are off the shelf: the coach cannot suggest what it
          cannot find. Detail and history still answer for them by id. */
-      const choosable = withoutRetired(exercises, await readRetiredExercises());
+      const choosable = withoutRetired(exercises, await readUnofferedExercises());
       return { content: JSON.stringify(searchExercises(choosable, input)), isError: false };
     }
     if (name === 'exercise_detail') {

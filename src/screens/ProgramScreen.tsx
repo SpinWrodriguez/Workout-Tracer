@@ -71,7 +71,7 @@ import { briefPayload, buildBrief, undertrained, type DayConstraints } from '../
 import {
   readAiInstructions,
   readExerciseNotes,
-  readRetiredExercises,
+  readUnofferedExercises,
   withoutRetired,
   writeLastModelCall,
 } from '../db/settings';
@@ -220,11 +220,12 @@ export function ProgramScreen({
   }, []);
 
   const byId = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
-  /* What the generators may choose from. byId stays the whole table: a retired
-     exercise already in a workout still has a name, a load and a rule to obey. */
-  const retired = useLiveQuery(() => readRetiredExercises(), [], [] as string[]);
-  const retiredIds = useMemo(() => new Set(retired), [retired]);
-  const choosable = useMemo(() => withoutRetired(exercises, retiredIds), [exercises, retiredIds]);
+  /* What the generators may choose from. byId stays the whole table: a
+     retired or deleted exercise already in a workout, or behind a logged set,
+     still has a name, a load and a rule to obey. */
+  const unoffered = useLiveQuery(() => readUnofferedExercises(), [], [] as string[]);
+  const unofferedIds = useMemo(() => new Set(unoffered), [unoffered]);
+  const choosable = useMemo(() => withoutRetired(exercises, unofferedIds), [exercises, unofferedIds]);
 
   /* Session length and split shape are training preferences, edited in
      Settings. They were on this screen as part of the starter week, which put
@@ -848,7 +849,7 @@ export function ProgramScreen({
             ],
           },
           {
-            /* Only what was on offer: a retired id slipping through reads as
+            /* Only what was on offer: a retired or deleted id slipping through reads as
                unknown, and the retry loop asks again without it. */
             exercisesById: new Map(available.map((e) => [e.id, e])),
             /*

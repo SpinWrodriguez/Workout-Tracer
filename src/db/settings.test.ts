@@ -20,6 +20,8 @@ import {
   readRetiredExercises,
   setExerciseRetired,
   withoutRetired,
+  readUnofferedExercises,
+  setExerciseDeleted,
 } from './settings';
 
 beforeEach(async () => {
@@ -149,5 +151,16 @@ describe('retired exercises', () => {
     const rows = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
     expect(withoutRetired(rows, ['b']).map((row) => row.id)).toEqual(['a', 'c']);
     expect(withoutRetired(rows, [])).toBe(rows);
+  });
+});
+
+describe('deleted exercises', () => {
+  it('joins the retired ones in what is never offered', async () => {
+    await setExerciseRetired('sm_squat', true);
+    await setExerciseDeleted('bb_deadlift', true);
+    await setExerciseDeleted('sm_squat', true);
+    expect((await readUnofferedExercises()).sort()).toEqual(['bb_deadlift', 'sm_squat']);
+    await setExerciseDeleted('bb_deadlift', false);
+    expect(await readUnofferedExercises()).toEqual(['sm_squat']);
   });
 });

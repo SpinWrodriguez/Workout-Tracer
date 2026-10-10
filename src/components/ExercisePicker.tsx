@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { readRetiredExercises } from '../db/settings';
+import { readDeletedExercises, readRetiredExercises } from '../db/settings';
 import type { Exercise, MuscleId, Station } from '../db/types';
 import { STATION_LABEL, STATION_ORDER } from '../db/seed/exercises';
 import { MUSCLES, muscleName } from '../db/seed/muscles';
@@ -50,10 +50,14 @@ export function ExercisePicker({
      in its place, but still says it is retired, so nobody has to open its
      sheet to find out. */
   const allRetired = useLiveQuery(async () => new Set(await readRetiredExercises()), []);
+  /* Deleted is gone from every list, History's included — its past sets still
+     chart from the exercise rows on the History screen itself. */
+  const deleted = useLiveQuery(async () => new Set(await readDeletedExercises()), []);
   const retiredIds = foldRetired ? allRetired : undefined;
 
   const filtered = useMemo(() => {
     const list = exercises.filter((e) => {
+      if (deleted?.has(e.id)) return false;
       if (station !== 'all' && e.station !== station) return false;
       if (
         muscle !== 'all' &&
@@ -69,7 +73,7 @@ export function ExercisePicker({
         STATION_ORDER.indexOf(a.station) - STATION_ORDER.indexOf(b.station) ||
         a.name.localeCompare(b.name),
     );
-  }, [exercises, station, muscle]);
+  }, [exercises, station, muscle, deleted]);
 
   const retiredRows = useMemo(
     () => filtered.filter((e) => retiredIds?.has(e.id)),

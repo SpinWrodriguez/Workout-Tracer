@@ -465,3 +465,40 @@ export function withoutRetired<T extends { id: string }>(
   const out = new Set(retired);
   return out.size === 0 ? exercises : exercises.filter((exercise) => !out.has(exercise.id));
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Deleted exercises.                                                        */
+/*                                                                            */
+/*  A tombstone, not a row deletion, for two reasons. The seed puts every      */
+/*  curated exercise back on each boot, so a deleted row would return the      */
+/*  next time the app opened. And History reads an exercise's name, load mode */
+/*  and cable multiplier from its row: a set logged against a missing row     */
+/*  would chart as a raw id at the wrong weight. So the row stays, and every  */
+/*  list that OFFERS exercises leaves it out — pickers, generators, the       */
+/*  coach — while everything that READS the past keeps finding it.            */
+/*                                                                            */
+/*  Only an exercise no workout holds can be deleted; the screen enforces it,  */
+/*  because a workout that still programs it would otherwise show a name      */
+/*  nobody can add again.                                                     */
+/* -------------------------------------------------------------------------- */
+
+export const DELETED_EXERCISES_KEY = 'deletedExercises';
+
+export async function readDeletedExercises(): Promise<string[]> {
+  const row = await db.settings.get(DELETED_EXERCISES_KEY);
+  if (!Array.isArray(row?.value)) return [];
+  return [...new Set(row.value.filter((id): id is string => typeof id === 'string' && id !== ''))];
+}
+
+export async function setExerciseDeleted(exerciseId: string, deleted: boolean): Promise<void> {
+  const current = new Set(await readDeletedExercises());
+  if (deleted) current.add(exerciseId);
+  else current.delete(exerciseId);
+  await db.settings.put({ key: DELETED_EXERCISES_KEY, value: [...current].sort() });
+}
+
+/** Everything the generators and the coach must not offer: retired or deleted. */
+export async function readUnofferedExercises(): Promise<string[]> {
+  const [retired, deleted] = await Promise.all([readRetiredExercises(), readDeletedExercises()]);
+  return [...new Set([...retired, ...deleted])];
+}

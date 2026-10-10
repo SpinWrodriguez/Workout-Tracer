@@ -9,6 +9,7 @@ import { AiInstructionsEditor, ModelKeyEditor } from '../components/ModelKeyEdit
 import { CoachMemory } from '../components/CoachMemory';
 import { TrainingPrefsEditor } from '../components/TrainingPrefsEditor';
 import { NutritionSync } from '../components/NutritionSync';
+import { DeletedExercises } from '../components/DeletedExercises';
 import { clearFreeDb, fetchAndStoreFreeDb, mappedIds, type EnrichReport } from '../lib/freeDb';
 import { EXERCISES } from '../db/seed/exercises';
 
@@ -261,6 +262,10 @@ export function SettingsScreen() {
 
       <div className="mt-3">
         <InventoryEditor />
+      </div>
+
+      <div className="mt-3">
+        <DeletedExercises />
       </div>
     </Screen>
   );

@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
 import { monthTitle, shiftIso, shiftMonth, todayIso, weekStart } from '../lib/format';
 import { HistoryScreen } from './HistoryScreen';
-import { setExerciseRetired } from '../db/settings';
+import { setExerciseDeleted, setExerciseRetired } from '../db/settings';
 
 /** A finished session on a date, named so the list rows can be told apart. */
 async function logSession(id: string, date: string, name: string) {
@@ -225,5 +225,27 @@ describe('retired exercises in the History list', () => {
     // And a lift still in rotation carries no tag.
     const squat = screen.getByText('Back squat').closest('button') as HTMLElement;
     expect(within(squat).queryByText('Retired')).toBeNull();
+  });
+});
+
+describe('a deleted exercise in History', () => {
+  it('keeps its logged sets and chart, and drops it from the Other list', async () => {
+    await db.session.put({ id: 's_dl', blockId: BLOCK_ID, daySlot: 'A', date: todayIso(), durationMin: 30 });
+    await db.setLog.put({
+      sessionId: 's_dl', exerciseId: 'bb_deadlift', setNo: 1, weightKg: 100, effectiveKg: 100, reps: 5,
+    });
+    await setExerciseDeleted('bb_deadlift', true);
+    draw(<HistoryScreen exercises={exercises} onOpen={vi.fn()} />);
+    const ui = user();
+
+    // Still on the screen by name, with its best set charted.
+    const row = await screen.findByRole('button', { name: /Conventional deadlift/ });
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    await screen.findByText('best top set in range');
+
+    // But not offered as something to look up.
+    await ui.click(screen.getByRole('button', { name: 'Other' }));
+    await screen.findByText('Back squat');
+    await waitFor(() => expect(screen.getAllByText('Conventional deadlift')).toHaveLength(1));
   });
 });

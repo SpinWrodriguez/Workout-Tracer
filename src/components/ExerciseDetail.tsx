@@ -5,11 +5,16 @@ import {
   MAX_EXERCISE_NOTE_CHARS,
   readExerciseNotes,
   readInventory,
+  readDeletedExercises,
   readRetiredExercises,
+  setExerciseDeleted,
   setExerciseRetired,
   writeExerciseNote,
 } from '../db/settings';
 import { DEFAULT_INVENTORY, barWeightFor } from '../lib/loadable';
+import { db } from '../db/db';
+import { readBlockPlan } from '../lib/program';
+import { slotFallback } from '../lib/dayLabel';
 import { STATION_LABEL } from '../db/seed/exercises';
 import { muscleName } from '../db/seed/muscles';
 import { cueFor, scalingFor, stepsFor } from '../db/seed/cues';
@@ -68,6 +73,24 @@ export function ExerciseDetail({
     async () => (await readRetiredExercises()).includes(exercise.id),
     [exercise.id],
   );
+  /* What deleting would touch: the current block's workouts that still hold
+     it (which block the delete — a finished block's never will) and the sets
+     logged against it (which it keeps). */
+  const standing = useLiveQuery(async () => {
+    const [deletedIds, plan, logged] = await Promise.all([
+      readDeletedExercises(),
+      readBlockPlan(),
+      db.setLog.where('exerciseId').equals(exercise.id).count(),
+    ]);
+    const workouts = [
+      ...new Set(
+        (plan?.entries ?? [])
+          .filter((entry) => entry.exerciseId === exercise.id)
+          .map((entry) => plan?.schedule[entry.daySlot]?.name ?? slotFallback(entry.daySlot)),
+      ),
+    ];
+    return { deleted: deletedIds.includes(exercise.id), workouts, logged };
+  }, [exercise.id]);
 
   // `undefined` while loading, `null` once we know there is nothing to show.
   // An unmapped exercise is known to be empty without a lookup.
@@ -270,7 +293,23 @@ export function ExerciseDetail({
       )}
       {/* Last, because it is the one control here that changes the shelf
           rather than describing the movement. */}
-      {retired !== undefined && (
+      {standing?.deleted ? (
+        <div className="mt-3 rounded-2xl bg-surface p-4">
+          <Label>Deleted</Label>
+          <p className="mt-1.5 text-[13px] leading-snug text-text-dim">
+            Gone from every list and never offered again. Sets already logged against it stay in
+            History.
+          </p>
+          <button
+            type="button"
+            onClick={() => void setExerciseDeleted(exercise.id, false)}
+            className="mt-3 w-full rounded-full bg-surface-2 py-2.5 text-[13px] font-semibold"
+          >
+            Restore it
+          </button>
+        </div>
+      ) : (
+        retired !== undefined && (
         <div className="mt-3 rounded-2xl bg-surface p-4">
           <Label>{retired ? 'Retired' : 'In rotation'}</Label>
           <p className="mt-1.5 text-[13px] leading-snug text-text-dim">
@@ -284,6 +323,38 @@ export function ExerciseDetail({
             className="mt-3 w-full rounded-full bg-surface-2 py-2.5 text-[13px] font-semibold"
           >
             {retired ? 'Bring it back' : 'Retire this exercise'}
+          </button>
+        </div>
+        )
+      )}
+
+      {standing && !standing.deleted && (
+        <div className="mt-3 rounded-2xl bg-surface p-4">
+          <Label>Delete</Label>
+          <p className="mt-1.5 text-[13px] leading-snug text-text-dim">
+            {standing.workouts.length > 0
+              ? `In ${standing.workouts.join(', ')}. Take it out of ${
+                  standing.workouts.length === 1 ? 'that workout' : 'those workouts'
+                } first.`
+              : standing.logged > 0
+                ? `Removes it from every list for good. Its ${standing.logged} logged set${
+                    standing.logged === 1 ? '' : 's'
+                  } stay in History.`
+                : 'Removes it from every list for good. Never logged, so nothing else changes.'}
+          </p>
+          <button
+            type="button"
+            disabled={standing.workouts.length > 0}
+            onClick={() => {
+              if (!window.confirm(`Delete ${exercise.name}? It can be restored from Settings.`)) {
+                return;
+              }
+              void setExerciseDeleted(exercise.id, true);
+            }}
+            className="mt-3 w-full rounded-full py-2.5 text-[13px] font-semibold disabled:opacity-40"
+            style={{ background: 'var(--color-danger)', color: 'var(--color-danger-text)' }}
+          >
+            Delete this exercise
           </button>
         </div>
       )}
