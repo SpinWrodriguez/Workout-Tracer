@@ -38,9 +38,6 @@ const RPE_HINT: Record<number, string> = {
 
 const WEEKEND: Weekday[] = [6, 7];
 
-const GOLF_TIMES = ['morning', 'afternoon'] as const;
-const GOLF_TIME_LABEL = { morning: 'Golf in the morning', afternoon: 'Golf in the afternoon' };
-
 const SESSION_LENGTHS = ['30', '40', '60'] as const;
 const SESSION_LENGTH_LABEL = { '30': '30 min', '40': '40 min', '60': '60 min' };
 
@@ -84,7 +81,8 @@ export function TrainingPrefsEditor() {
     >
       <Label>Golf days</Label>
       <p className="mt-1 text-[13px] text-text-dim">
-        Grip and heavy back work stay clear of the day before a round.
+        Rounds are in the morning: the day before keeps grip and heavy back work off, and the
+        golf day itself is a normal evening to train.
       </p>
       <div className="mt-2 flex gap-1.5">
         {WEEKEND.map((weekday) => (
@@ -97,19 +95,6 @@ export function TrainingPrefsEditor() {
           </Chip>
         ))}
       </div>
-      <div className="mt-2">
-        <SegmentedToggle
-          options={GOLF_TIMES}
-          value={prefs.golfTime}
-          onChange={(next) => patch({ golfTime: next })}
-          labels={GOLF_TIME_LABEL}
-        />
-      </div>
-      <p className="mt-1 text-[13px] text-text-dim">
-        {prefs.golfTime === 'morning'
-          ? 'Morning golf: the same evening is a normal training day.'
-          : 'Afternoon golf: nothing is placed on a golf day, and grip work stays off it.'}
-      </p>
 
       <Label className="mt-4 block">Session length</Label>
       <p className="mt-1 text-[13px] text-text-dim">

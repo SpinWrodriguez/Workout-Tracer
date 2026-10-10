@@ -123,13 +123,13 @@ describe('rule c — grip clearance computed from the calendar (defect 1)', () =
     expect(daysClearOfGolf(1, [6])).toBe(5); // Mon
     expect(daysClearOfGolf(2, [6])).toBe(4); // Tue
     expect(daysClearOfGolf(4, [6])).toBe(2); // Thu
-    expect(daysClearOfGolf(6, [6])).toBe(0); // the round itself
+    expect(daysClearOfGolf(6, [6])).toBe(7); // the round itself: morning golf, evening free
   });
 
-  it('lets a session sit on the golf day itself when the round is in the morning', () => {
-    const p = proposal([{ slot: 'A', weekday: 6, ids: ['bb_bench_press'] }]);
+  it('lets any session, grip work included, sit on the golf day itself', () => {
+    const p = proposal([{ slot: 'A', weekday: 6, ids: ['bb_bent_over_row'] }]);
     expect(codes(p, CONTEXT)).not.toContain('forbidden_day');
-    expect(codes(p, { ...CONTEXT, golfTime: 'afternoon' })).toContain('forbidden_day');
+    expect(codes(p, CONTEXT)).not.toContain('grip_conflict');
   });
 
   it('rejects high-grip work on a Friday with golf on Saturday', () => {

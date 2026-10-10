@@ -83,30 +83,14 @@ export interface GripConflict {
 }
 
 /**
- * A round as the date-based buffer reads it: where it is, and whether it has
- * already happened. The app has dates, never clock times, so a same-day round
- * is otherwise assumed to still be ahead of the session — which flagged an
- * evening session after a morning round. `played` is the lifter saying the
- * one fact the calendar cannot: this round is behind me.
+ * A round as the date-based buffer reads it. Rounds are played in the
+ * morning and training is in the evening, so a session on the round's own
+ * day comes after it and has nothing to protect: only the days before a
+ * round are constrained. (An afternoon round means no training that day, or
+ * a light morning, which is the lifter's call and not the calendar's.)
  */
 export interface GolfDateLite {
   date: string;
-  played?: boolean;
-}
-
-/**
- * Every round as the buffer reads it. A morning round is behind any session
- * on its day, so it counts as played for the day's own sake — the forward
- * buffers are untouched either way.
- */
-export function golfDatesOf(
-  golfDays: { date: string; status: GolfDay['status'] }[],
-  golfTime: 'morning' | 'afternoon' = 'morning',
-): GolfDateLite[] {
-  return golfDays.map((day) => ({
-    date: day.date,
-    played: day.status === 'played' || golfTime === 'morning',
-  }));
 }
 
 /**
@@ -118,10 +102,10 @@ export function golfDatesOf(
  */
 export function gripConflictOn(dateIso: string, golfDays: GolfDateLite[]): GripConflict | undefined {
   let best: GripConflict | undefined;
-  for (const { date: golfDate, played } of golfDays) {
+  for (const { date: golfDate } of golfDays) {
     const daysBefore = daysBetween(dateIso, golfDate);
-    if (daysBefore < 0 || daysBefore > GRIP_ADVISORY_DAYS) continue;
-    if (daysBefore === 0 && played) continue;
+    // Today's round is behind the session, so only tomorrow's and later count.
+    if (daysBefore <= 0 || daysBefore > GRIP_ADVISORY_DAYS) continue;
     const severity: GripSeverity = daysBefore <= GRIP_BUFFER_DAYS ? 'blocked' : 'advised';
     if (!best || daysBefore < best.daysBefore) best = { golfDate, daysBefore, severity };
   }
@@ -181,10 +165,9 @@ export function spineConflictOn(
   golfDays: GolfDateLite[],
 ): { golfDate: string; daysBefore: number } | undefined {
   let best: { golfDate: string; daysBefore: number } | undefined;
-  for (const { date: golfDate, played } of golfDays) {
+  for (const { date: golfDate } of golfDays) {
     const daysBefore = daysBetween(dateIso, golfDate);
-    if (daysBefore < 0 || daysBefore > SPINE_BUFFER_DAYS) continue;
-    if (daysBefore === 0 && played) continue;
+    if (daysBefore <= 0 || daysBefore > SPINE_BUFFER_DAYS) continue;
     if (!best || daysBefore < best.daysBefore) best = { golfDate, daysBefore };
   }
   return best;
@@ -212,7 +195,8 @@ function safeWeekdays(golfWeekdays: Weekday[], buffer: number): Weekday[] {
       // Distance forward around a repeating week, so Sunday reads as six days
       // before next Saturday rather than one day after this one.
       const forward = (golf - day + 7) % 7;
-      return forward > buffer;
+      // The round's own day is free: it is played in the morning.
+      return forward === 0 || forward > buffer;
     }),
   );
 }
@@ -356,8 +340,6 @@ export interface WeekInput {
   golfDays: GolfDay[];
   sessions: { id: string; date: string; exerciseIds: string[]; name?: string }[];
   exercisesById: Map<string, Exercise>;
-  /** Morning rounds leave their own evening free. The default. */
-  golfTime?: 'morning' | 'afternoon';
 }
 
 export function buildWeek({
@@ -365,11 +347,10 @@ export function buildWeek({
   golfDays,
   sessions,
   exercisesById,
-  golfTime = 'morning',
 }: WeekInput): WeekDay[] {
   const start = weekStart(anchorDate);
   // Rounds beyond the week still constrain its last days, so look ahead.
-  const golfDates = golfDatesOf(golfDays, golfTime);
+  const golfDates = golfDays.map((g) => ({ date: g.date }));
   const golfByDate = new Map(golfDays.map((g) => [g.date, g]));
 
   return WEEKDAYS.map((weekday) => {

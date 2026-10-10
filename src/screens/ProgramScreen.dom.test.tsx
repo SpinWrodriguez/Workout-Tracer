@@ -435,10 +435,13 @@ describe('a usual day set after weeks were cleared', () => {
     await ui.click(await screen.findByRole('button', { name: 'Do this every Mon' }));
     await waitFor(async () => expect((await readSchedules())[BLOCK_ID]?.B?.weekday).toBe(1));
 
-    // Next week's pin is gone, so the usual day shows there too.
-    const plan = (await readPlans())[BLOCK_ID] ?? {};
-    expect(plan[nextMonday]).toBeUndefined();
-    expect(plan[MONDAY]).toBeUndefined();
+    // Next week's pin is gone, so the usual day shows there too. The plan is
+    // written a tick after the schedule, so wait on it rather than read once.
+    await waitFor(async () => {
+      const plan = (await readPlans())[BLOCK_ID] ?? {};
+      expect(plan[nextMonday]).toBeUndefined();
+      expect(plan[MONDAY]).toBeUndefined();
+    });
   });
 });
 

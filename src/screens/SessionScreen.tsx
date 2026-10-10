@@ -20,12 +20,11 @@ import {
   readActiveSession,
   readExerciseNotes,
   readInventory,
-  readTraining,
   writeActiveSession,
 } from '../db/settings';
 import { hasLoadTranslation } from '../lib/load';
 import { DEFAULT_INVENTORY, barWeightFor, ladderFor, type Inventory } from '../lib/loadable';
-import { golfDatesOf, sessionWarnings, type RuleWarning } from '../lib/golf';
+import { sessionWarnings, type RuleWarning } from '../lib/golf';
 import {
   DEFAULT_REP_RANGE,
   OUTCOME_LABEL,
@@ -127,7 +126,7 @@ export function SessionScreen({
   const [inventory, setInventory] = useState<Inventory>(DEFAULT_INVENTORY);
   const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({});
   const [plan, setPlan] = useState<BlockPlan | undefined>(undefined);
-  const [golfDates, setGolfDates] = useState<{ date: string; played?: boolean }[]>([]);
+  const [golfDates, setGolfDates] = useState<{ date: string }[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
   /** The exercise whose rule notes are open; a dot stands in for them otherwise. */
   const [notesFor, setNotesFor] = useState<string | undefined>(undefined);
@@ -149,8 +148,8 @@ export function SessionScreen({
     void readExerciseNotes().then((next) => {
       if (!cancelled) setExerciseNotes(next);
     });
-    void Promise.all([db.golfDay.toArray(), readTraining()]).then(([rows, training]) => {
-      if (!cancelled) setGolfDates(golfDatesOf(rows, training.golfTime));
+    void db.golfDay.toArray().then((rows) => {
+      if (!cancelled) setGolfDates(rows.map((row) => ({ date: row.date })));
     });
     return () => {
       cancelled = true;

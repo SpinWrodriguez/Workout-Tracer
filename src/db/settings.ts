@@ -91,18 +91,9 @@ export async function writeInventory(inventory: Inventory): Promise<void> {
 
 export const TRAINING_KEY = 'training';
 
-export type GolfTime = 'morning' | 'afternoon';
-
 export interface TrainingPrefs {
   /** ISO weekdays a round is typically played. Sat is 6, Sun is 7. */
   golfWeekdays: number[];
-  /**
-   * When in the day the round is. The app has dates, not clock times, so
-   * this is how it knows whether a session on a golf day comes after the
-   * round (morning golf, evening training: nothing to protect) or before it
-   * (afternoon golf: the day is barred like the day before).
-   */
-  golfTime: GolfTime;
   weeklySetTarget: number;
   sessionMinutes: number;
   /**
@@ -123,7 +114,6 @@ export const MAX_MAX_RPE = 10;
 
 export const DEFAULT_TRAINING: TrainingPrefs = {
   golfWeekdays: [6],
-  golfTime: 'morning',
   weeklySetTarget: 33,
   sessionMinutes: 40,
   /* 9 — one rep in reserve on the hardest set. Not 10: training to failure
@@ -144,7 +134,6 @@ export function mergeTraining(value: unknown): TrainingPrefs {
   const rpe = Number(value.maxRpe);
   return {
     golfWeekdays,
-    golfTime: value.golfTime === 'afternoon' ? 'afternoon' : 'morning',
     weeklySetTarget:
       Number.isFinite(target) && target > 0 ? Math.round(target) : DEFAULT_TRAINING.weeklySetTarget,
     sessionMinutes:

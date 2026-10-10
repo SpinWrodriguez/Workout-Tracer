@@ -7,7 +7,6 @@ import {
   GRIP_BUFFER_DAYS,
   buildWeek,
   gripBufferNote,
-  golfDatesOf,
   gripConflictOn,
   gripSafeWeekdays,
   spineSafeWeekdays,
@@ -27,7 +26,7 @@ const THU = '2026-08-27';
 const FRI = '2026-08-28';
 const SAT = '2026-08-29';
 
-/** Rounds as the date-based rule now reads them: dates plus whether played. */
+/** Rounds as the date-based rule reads them: dates. */
 const on = (...dates: string[]) => dates.map((date) => ({ date }));
 
 const SATURDAY_GOLF: GolfDay[] = [{ date: SAT, status: 'planned', holes: 18 }];
@@ -73,12 +72,13 @@ describe('Phase 3 acceptance — the golf rule', () => {
 });
 
 describe('the buffer window', () => {
-  it('bars the round itself and the day before it', () => {
+  it('bars the day before the round, and not the round itself', () => {
     expect(GRIP_BUFFER_DAYS).toBe(1);
-    expect(gripConflictOn(SAT, on(SAT))).toMatchObject({ daysBefore: 0, severity: 'blocked' });
     expect(gripConflictOn(FRI, on(SAT))).toMatchObject({ daysBefore: 1, severity: 'blocked' });
-    expect(isGripSafe(SAT, on(SAT))).toBe(false);
     expect(isGripSafe(FRI, on(SAT))).toBe(false);
+    // The round is in the morning, so its own evening is free.
+    expect(gripConflictOn(SAT, on(SAT))).toBeUndefined();
+    expect(isGripSafe(SAT, on(SAT))).toBe(true);
   });
 
   it('advises rather than bars two days out', () => {
@@ -102,53 +102,33 @@ describe('the buffer window', () => {
     expect(gripConflictOn('2026-08-30', on(SAT))).toBeUndefined();
   });
 
-  it('frees the rest of the day once the round is marked played', () => {
-    /* The calendar has dates, never clock times, so a same-day round is
-       otherwise assumed to still be ahead of the session — which flagged an
-       evening pull after a morning round. Played is the lifter supplying the
-       missing fact. */
-    const played = [{ date: SAT, played: true }];
-    expect(gripConflictOn(SAT, played)).toBeUndefined();
-    expect(isGripSafe(SAT, played)).toBe(true);
-    expect(gripBufferNote(SAT, played)).toBeUndefined();
+  it("leaves the round's own day free: rounds are in the morning, training is after", () => {
+    expect(gripConflictOn(SAT, on(SAT))).toBeUndefined();
+    expect(isGripSafe(SAT, on(SAT))).toBe(true);
+    expect(gripBufferNote(SAT, on(SAT))).toBeUndefined();
     expect(
       sessionWarnings(
         { date: SAT, exercises: [{ exerciseId: 'bw_pull_up', loggedSets: 3 }] },
         byId,
-        played,
+        on(SAT),
       ),
     ).toEqual([]);
-  });
-
-  it('treats a morning round as behind the day, and an afternoon one as ahead of it', () => {
-    const planned = [{ date: SAT, status: 'planned' as const }];
-    expect(gripConflictOn(SAT, golfDatesOf(planned, 'morning'))).toBeUndefined();
-    expect(gripConflictOn(SAT, golfDatesOf(planned, 'afternoon'))).toMatchObject({ daysBefore: 0 });
-    // The day before is barred whichever it is.
-    expect(gripConflictOn(FRI, golfDatesOf(planned, 'morning'))).toMatchObject({ daysBefore: 1 });
-    // Played settles it either way.
-    expect(gripConflictOn(SAT, golfDatesOf([{ date: SAT, status: 'played' }], 'afternoon'))).toBeUndefined();
-  });
-
-  it('keeps every forward buffer even when the round is marked played', () => {
-    // Friday before a played Saturday round: nonsense in practice (you cannot
-    // play tomorrow's round today) but the rule must not be tricked by it.
-    const played = [{ date: SAT, played: true }];
-    expect(gripConflictOn(FRI, played)).toMatchObject({ daysBefore: 1, severity: 'blocked' });
+    // The day before is barred as ever.
+    expect(gripConflictOn(FRI, on(SAT))).toMatchObject({ daysBefore: 1, severity: 'blocked' });
   });
 
   it('picks the soonest round when two are close together', () => {
     expect(gripConflictOn(THU, on('2026-08-30', SAT))?.golfDate).toBe(SAT);
   });
 
-  it('leaves every day but Friday and Saturday safe for Saturday golf', () => {
-    // Only the round and the day before it are out.
-    expect(gripSafeWeekdays([6])).toEqual([1, 2, 3, 4, 7]);
+  it('leaves every day but Friday safe for Saturday golf', () => {
+    // Only the day before the round is out; the round's own evening is free.
+    expect(gripSafeWeekdays([6])).toEqual([1, 2, 3, 4, 6, 7]);
   });
 
-  it('shrinks the safe set to Mon through Thu when Sunday is played too', () => {
-    // Fri is the day before Sat, and Sat is the day before Sun.
-    expect(gripSafeWeekdays([6, 7])).toEqual([1, 2, 3, 4]);
+  it('takes Saturday out too when Sunday is played as well', () => {
+    // Fri is the day before Sat, and Sat is the day before Sun; Sun is free.
+    expect(gripSafeWeekdays([6, 7])).toEqual([1, 2, 3, 4, 7]);
   });
 
   it('leaves the whole week safe with no golf at all', () => {
@@ -162,8 +142,8 @@ describe('the buffer window', () => {
      * today; what matters is that the spine has its OWN answer rather than
      * borrowing the light day's, which is where it used to live.
      */
-    expect(spineSafeWeekdays([6])).toEqual([1, 2, 3, 4, 7]);
-    expect(spineSafeWeekdays([6, 7])).toEqual([1, 2, 3, 4]);
+    expect(spineSafeWeekdays([6])).toEqual([1, 2, 3, 4, 6, 7]);
+    expect(spineSafeWeekdays([6, 7])).toEqual([1, 2, 3, 4, 7]);
     expect(spineSafeWeekdays([])).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 
@@ -186,10 +166,8 @@ describe('saying the buffer out loud', () => {
       text: 'Golf tomorrow (Sat) — no grip, lat or forearm work, and no heavy spinal lifts.',
       severity: 'blocked',
     });
-    expect(gripBufferNote(SAT, on(SAT))).toEqual({
-      text: 'Golf today (Sat) — no grip, lat or forearm work, and no heavy spinal lifts.',
-      severity: 'blocked',
-    });
+    // Nothing on the round's own day: it is played in the morning.
+    expect(gripBufferNote(SAT, on(SAT))).toBeUndefined();
   });
 
   it('offers information, not an instruction, on a day that is merely close', () => {

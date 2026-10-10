@@ -8,7 +8,7 @@ import {
   type Weekday,
 } from './golf';
 
-import { weekdayAllowed, type TemplateDay } from './weekTemplate';
+import type { TemplateDay } from './weekTemplate';
 import { isTimed, rangeLabel, repUnitWord } from './repUnit';
 
 /* -------------------------------------------------------------------------- */
@@ -46,11 +46,6 @@ export interface ValidationContext {
   exercisesById: Map<string, Exercise>;
   /** Weekdays a round is played. Days-clear is derived from this, never given. */
   golfWeekdays: Weekday[];
-  /**
-   * Morning rounds leave the evening free, so a golf weekday is a training
-   * day; an afternoon round bars its whole day. Defaults to morning.
-   */
-  golfTime?: 'morning' | 'afternoon';
   weeklySetTarget: number;
   sessionBudgetMinutes: number;
   /** Block 1 has no history, so advanced movements are off the table. */
@@ -164,12 +159,14 @@ export const HARD_MAX_EXERCISES = 10;
 /* --- schedule facts, computed not claimed --------------------------------- */
 
 /**
- * Forward distance from `weekday` to the next round, around a repeating week.
- * 7 when no rounds are played at all.
+ * Forward distance from `weekday` to the next round ahead of it, around a
+ * repeating week. A round on the weekday itself is in the morning and behind
+ * the session, so that day reads as a full week clear. 7 when no rounds are
+ * played at all.
  */
 export function daysClearOfGolf(weekday: Weekday, golfWeekdays: Weekday[]): number {
   if (golfWeekdays.length === 0) return 7;
-  return Math.min(...golfWeekdays.map((golf) => (golf - weekday + 7) % 7));
+  return Math.min(...golfWeekdays.map((golf) => (golf - weekday + 7) % 7 || 7));
 }
 
 export function gripAllowed(weekday: Weekday, golfWeekdays: Weekday[]): boolean {
@@ -274,9 +271,6 @@ export function validateBlock(
 ): Violation[] {
   const violations: Violation[] = [];
   const { exercisesById, golfWeekdays } = context;
-  /* Which days no session may sit on at all: none when the round is in the
-     morning, the golf days when it is in the afternoon. */
-  const barred: Weekday[] = context.golfTime === 'afternoon' ? golfWeekdays : [];
 
   let weeklySets = 0;
   const covered = new Set<CoverageGroup>();
@@ -301,7 +295,7 @@ export function validateBlock(
           ? spineSafeWeekdays(golfWeekdays)
           : undefined;
     const usable = ([1, 2, 3, 4, 5, 6, 7] as Weekday[]).filter(
-      (weekday) => weekdayAllowed(weekday, barred) && (!safe || safe.includes(weekday)),
+      (weekday) => !safe || safe.includes(weekday),
     );
     return usable.find((weekday) => !taken.has(weekday)) ?? usable[0];
   };
@@ -311,15 +305,9 @@ export function validateBlock(
     const template = templateBySlot.get(day.slot);
 
     // Placement is owned by the template, so a day that has drifted off it is a
-    // bug in whatever produced the proposal, not a judgement call.
-    if (!weekdayAllowed(day.weekday, barred)) {
-      violations.push({
-        code: 'forbidden_day',
-        slot: day.slot,
-        message: `${nameOf(day)} is scheduled on ${WEEKDAY_LABEL[day.weekday]}, which is never a training day.`,
-        fix: moveFix(day.slot, freeWeekday('none')),
-      });
-    } else if (template && template.weekday !== day.weekday) {
+    // bug in whatever produced the proposal, not a judgement call. A golf day
+    // itself is a training day: the round is in the morning.
+    if (template && template.weekday !== day.weekday) {
       violations.push({
         code: 'forbidden_day',
         slot: day.slot,

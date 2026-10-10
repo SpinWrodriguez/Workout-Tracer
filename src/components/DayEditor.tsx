@@ -128,7 +128,7 @@ export function DayEditor({
 }: {
   date: string;
   /** Every round with whether it happened, so this day can say what it is close to. */
-  golfDates: { date: string; played?: boolean }[];
+  golfDates: { date: string }[];
   /** Workouts the block actually defines, so we never offer an empty day. */
   slots: DayEditorSlot[];
   /**
@@ -264,24 +264,6 @@ export function DayEditor({
             active={golf !== undefined}
             onClick={() => onSetGolf(golf ? undefined : 'planned')}
           />
-          {/* The one fact the calendar cannot know: dates carry no clock, so a
-              same-day round is otherwise assumed to still be ahead of any
-              session. Marking it played frees the rest of the day for grip
-              work — a morning round, an evening pull — while tomorrow's round
-              keeps constraining today exactly as before. */}
-          {golf && (
-            <Tile
-              accent={EFFORT_COLOR.golf}
-              title="Round already played"
-              detail={
-                golf.status === 'played'
-                  ? 'Done — the rest of today is free to train'
-                  : 'Tap once you are back, and today opens up'
-              }
-              active={golf.status === 'played'}
-              onClick={() => onSetGolf(golf.status === 'played' ? 'planned' : 'played')}
-            />
-          )}
           {golf && clearRow('No round', () => onSetGolf(undefined))}
         </div>
 
