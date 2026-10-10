@@ -346,7 +346,7 @@ export function ExerciseDetail({
             type="button"
             disabled={standing.workouts.length > 0}
             onClick={() => {
-              if (!window.confirm(`Delete ${exercise.name}? It can be restored from Settings.`)) {
+              if (!window.confirm(`Delete ${exercise.name}? It can be restored from Settings → Exercises.`)) {
                 return;
               }
               void setExerciseDeleted(exercise.id, true);

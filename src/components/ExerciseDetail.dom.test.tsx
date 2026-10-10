@@ -7,7 +7,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Exercise } from '../db/types';
 import { db } from '../db/db';
 import { readDeletedExercises, readRetiredExercises } from '../db/settings';
-import { DeletedExercises } from './DeletedExercises';
 import { ExerciseDetail } from './ExerciseDetail';
 
 describe('retiring from the exercise sheet', () => {
@@ -37,17 +36,12 @@ describe('deleting from the exercise sheet', () => {
     expect(button).toHaveProperty('disabled', true);
   });
 
-  it('deletes a logged exercise, says its sets stay, and restores from Settings', async () => {
+  it('deletes a logged exercise, says its sets stay, and restores it', async () => {
     await db.setLog.put({
       sessionId: 's1', exerciseId: 'bb_deadlift', setNo: 1, weightKg: 100, effectiveKg: 100, reps: 5,
     });
     confirmWith(true);
-    draw(
-      <>
-        <ExerciseDetail exercise={deadlift()} onClose={vi.fn()} />
-        <DeletedExercises />
-      </>,
-    );
+    draw(<ExerciseDetail exercise={deadlift()} onClose={vi.fn()} />);
     const ui = user();
 
     await screen.findByText(/Its 1 logged set stay in History\./);
@@ -57,8 +51,7 @@ describe('deleting from the exercise sheet', () => {
     expect(await db.exercise.get('bb_deadlift')).toBeTruthy();
     expect(await db.setLog.where('exerciseId').equals('bb_deadlift').count()).toBe(1);
 
-    await ui.click(screen.getByRole('button', { name: /^Deleted exercises/ }));
-    await ui.click(await screen.findByRole('button', { name: 'Restore Conventional deadlift' }));
+    await ui.click(await screen.findByRole('button', { name: 'Restore it' }));
     await waitFor(async () => expect(await readDeletedExercises()).toEqual([]));
   });
 
