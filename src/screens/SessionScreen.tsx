@@ -128,6 +128,8 @@ export function SessionScreen({
   const [plan, setPlan] = useState<BlockPlan | undefined>(undefined);
   const [golfDates, setGolfDates] = useState<{ date: string; played?: boolean }[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
+  /** The exercise whose rule notes are open; a dot stands in for them otherwise. */
+  const [notesFor, setNotesFor] = useState<string | undefined>(undefined);
   const [targets, setTargets] = useState<Record<string, BlockExercise>>({});
   const [saving, setSaving] = useState(false);
   /* The rest comes from the exercise being logged: 30 seconds for a band walk,
@@ -731,6 +733,29 @@ export function SessionScreen({
             title={activeExercise.name}
             trailing={
               <span className="flex items-center gap-3">
+                {activeWarnings.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNotesFor((prev) => (prev === activeExercise.id ? undefined : activeExercise.id))
+                    }
+                    aria-label={`${activeWarnings.length} note${
+                      activeWarnings.length === 1 ? '' : 's'
+                    } about ${activeExercise.name}`}
+                    aria-expanded={notesFor === activeExercise.id}
+                    className="flex size-6 items-center justify-center"
+                  >
+                    <span
+                      className="size-2.5 rounded-full"
+                      style={{
+                        background: activeWarnings.some((w) => w.level === 'warn')
+                          ? 'var(--color-danger)'
+                          : 'var(--color-warn)',
+                      }}
+                      aria-hidden="true"
+                    />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setDetailId(activeExercise.id)}
@@ -764,10 +789,9 @@ export function SessionScreen({
                 minutes away — and by the time it mattered you had dismissed
                 it to get it out of the way.
 
-                Nothing is lost by waiting: the set rows only exist for the
-                active exercise, so a lift cannot be logged without passing
-                its note first. */}
-            {activeWarnings.map((warning) => (
+                Now behind a dot by the name: the sentence shows on a tap, so
+                the screen stays the work and the note stays one tap away. */}
+            {notesFor === activeId && activeWarnings.map((warning) => (
               <button
                 key={`${warning.exerciseId}:${warning.title}`}
                 type="button"

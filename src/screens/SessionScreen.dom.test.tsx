@@ -465,7 +465,9 @@ describe('a rule note sits with the exercise it is about', () => {
     await ui.click(screen.getByRole('button', { name: new RegExp(named(PULL_UP)) }));
     await screen.findByRole('heading', { name: named(PULL_UP) });
 
-    // On the pull-up: there it is, above the sets it is about.
+    // On the pull-up: a dot by the name, and the sentence only on a tap.
+    expect(screen.queryByText(/is high grip load/)).toBeNull();
+    await ui.click(screen.getByRole('button', { name: `1 note about ${named(PULL_UP)}` }));
     const note = await screen.findByText(`${named(PULL_UP)} is high grip load`);
     const card = note.closest('section') as HTMLElement;
     expect(card.textContent).toContain(named(PULL_UP));
@@ -481,9 +483,11 @@ describe('a rule note sits with the exercise it is about', () => {
     draw(<SessionScreen daySlot="A" exercises={exercises} onExit={vi.fn()} />);
     const ui = user();
 
+    await ui.click(await screen.findByRole('button', { name: `1 note about ${named(PULL_UP)}` }));
     const note = await screen.findByText(`${named(PULL_UP)} is high grip load`);
     await ui.click(note);
     await waitFor(() => expect(screen.queryByText(/is high grip load/)).toBeNull());
+    expect(screen.queryByRole('button', { name: /note.* about/ })).toBeNull();
   });
 });
 

@@ -322,6 +322,20 @@ export function ProgramScreen({
     await writePlan(block.id, planDate(current, schedule ?? {}, weekDates, slot, date));
   };
 
+  /**
+   * Clears the week on screen: every day not yet trained is set to nothing,
+   * the usual weekdays included. Only this week; the pattern stays for the
+   * weeks after it.
+   */
+  const clearWeek = async () => {
+    if (!block) return;
+    const trained = weekHistory?.trainedDates ?? new Set<string>();
+    const current = (await readPlans())[block.id] ?? {};
+    const next = { ...current };
+    for (const date of weekDates) if (!trained.has(date)) next[date] = null;
+    await writePlan(block.id, next);
+  };
+
   /** Promotes where a workout sits this week into where it always sits. */
   const makeUsual = async (slot: DaySlot, date: string) => {
     if (!block) return;
@@ -1041,6 +1055,15 @@ export function ProgramScreen({
             >
               ›
             </button>
+            {week.some((day) => day.plannedSlot && day.sessionIds.length === 0) && (
+              <button
+                type="button"
+                onClick={() => void clearWeek()}
+                className="rounded-lg bg-surface-2 px-2.5 py-1 text-[12px] font-medium text-text-dim"
+              >
+                Clear
+              </button>
+            )}
           </span>
         }
       >
@@ -1052,22 +1075,10 @@ export function ProgramScreen({
           onMoveSlot={(slot, date) => void movePlanned(slot, date)}
         />
         {violations.length === 0 ? null : (
-          <div className="mt-3 rounded-xl bg-surface-2 p-3">
-            <p className="text-[13px] font-semibold" style={{ color: 'var(--color-rir-1)' }}>
-              {violations.length} golf rule violation{violations.length === 1 ? '' : 's'}
-            </p>
-            {violations.map((day) => (
-              <p key={day.date} className="mt-1 text-[12px] font-medium text-text-dim">
-                {WEEKDAY_LABEL[day.weekday]}:{' '}
-                {day.highGripExercises.map((id) => byId.get(id)?.name ?? id).join(', ')} —{' '}
-                {day.gripConflict?.daysBefore === 0
-                  ? 'same day as a round'
-                  : `${day.gripConflict?.daysBefore} day${
-                      day.gripConflict?.daysBefore === 1 ? '' : 's'
-                    } before a round`}
-              </p>
-            ))}
-          </div>
+          <p className="mt-3 text-[12px] font-semibold" style={{ color: 'var(--color-rir-1)' }}>
+            {violations.length} golf rule violation{violations.length === 1 ? '' : 's'}:{' '}
+            {violations.map((day) => WEEKDAY_LABEL[day.weekday]).join(', ')}. See Worth fixing.
+          </p>
         )}
       </Card>
 
@@ -1121,7 +1132,12 @@ export function ProgramScreen({
       {/* Only problems, and only ones that carry their own fix. Advice about
           volume and time was noise: true, unactionable, and endless. */}
       {problems.length > 0 && (
-        <Card title="Worth fixing" className="mt-3">
+        <Card
+          title={`Worth fixing · ${problems.length}`}
+          className="mt-3"
+          collapsible
+          summary={problems[0]?.message}
+        >
           {problems.map((violation) => (
             <div
               key={violation.code + (violation.exerciseId ?? '') + (violation.slot ?? '')}

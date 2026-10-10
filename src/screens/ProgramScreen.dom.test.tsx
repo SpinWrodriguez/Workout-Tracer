@@ -291,7 +291,7 @@ describe('placement is one week, not every week', () => {
     const { ui } = await openProgram();
 
     // Unplaced: there is no date, so there is nothing to be clear of.
-    expect(screen.queryByRole('heading', { name: 'Worth fixing' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /^Worth fixing/ })).toBeNull();
 
     // Put it on the Friday before the round and the rule speaks.
     await ui.click(dayButton(FRIDAY));
@@ -307,7 +307,8 @@ describe('placement is one week, not every week', () => {
       }),
     );
 
-    const problems = await screen.findByRole('heading', { name: 'Worth fixing' });
+    // Shut by default: a count and one line, the rest on a tap.
+    const problems = await screen.findByRole('heading', { name: /^Worth fixing · \d/ });
     expect((problems.closest('section') as HTMLElement).textContent).toMatch(/round/i);
   });
 
@@ -364,6 +365,36 @@ describe('placement is one week, not every week', () => {
     const rows = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
     const grippy = rows.filter((row) => exercisesById.get(row.exerciseId)?.gripLoad === 'high');
     expect(grippy.map((row) => named(row.exerciseId))).toEqual([]);
+  });
+});
+
+describe('clearing a week', () => {
+  it('empties every untrained day of the week on screen, and only that week', async () => {
+    await seedSchedule({
+      A: { weekday: 1, intensity: 'heavy', name: 'Monday squats' },
+      B: { weekday: 3, intensity: 'heavy', name: 'Wednesday pulls' },
+    });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedWorkout('B', ['bw_pull_up']);
+    const { ui } = await openProgram();
+
+    await waitFor(() => expect(dayButton(MONDAY).getAttribute('aria-label')).toMatch(/Monday squats/));
+    await ui.click(screen.getByRole('button', { name: 'Clear' }));
+
+    await waitFor(() => expect(dayButton(MONDAY).getAttribute('aria-label')).not.toMatch(/squats/));
+    expect(dayButton(WEDNESDAY).getAttribute('aria-label')).not.toMatch(/pulls/);
+    // Nothing left to clear, so the button goes.
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+
+    // The usual weekdays still stand: next week has both workouts.
+    await ui.click(screen.getByRole('button', { name: 'Next week' }));
+    const nextMonday = shiftIso(MONDAY, 7);
+    await waitFor(() =>
+      expect(dayButton(nextMonday).getAttribute('aria-label')).toMatch(/Monday squats/),
+    );
+    const plan = (await readPlans())[BLOCK_ID] ?? {};
+    expect(plan[MONDAY]).toBeNull();
+    expect(plan[nextMonday]).toBeUndefined();
   });
 });
 
@@ -511,9 +542,10 @@ describe('fixing a rule violation', () => {
     await seedWorkout('A', ['bb_back_squat', 'bb_front_squat']);
     const { ui } = await openProgram();
 
-    const card = (await screen.findByRole('heading', { name: 'Worth fixing' }))
-      .closest('section') as HTMLElement;
+    const heading = await screen.findByRole('heading', { name: /^Worth fixing · \d/ });
+    const card = heading.closest('section') as HTMLElement;
     expect(card.textContent).toMatch(/heavy spinal-load lifts/);
+    await ui.click(heading);
 
     /* The later lift goes: the first heavy spinal lift of a session is the one
        it was built around. A fix that cannot say what it does is just bad news. */
@@ -521,7 +553,7 @@ describe('fixing a rule violation', () => {
       within(card).getByRole('button', { name: `Drop ${named('bb_front_squat')}` }),
     );
 
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Worth fixing' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('heading', { name: /^Worth fixing/ })).toBeNull());
     const remaining = await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray();
     expect(remaining.map((row) => row.exerciseId)).toEqual(['bb_back_squat']);
   });
