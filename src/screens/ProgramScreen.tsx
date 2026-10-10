@@ -332,7 +332,13 @@ export function ProgramScreen({
     const trained = weekHistory?.trainedDates ?? new Set<string>();
     const current = (await readPlans())[block.id] ?? {};
     const next = { ...current };
-    for (const date of weekDates) if (!trained.has(date)) next[date] = null;
+    /* Only days that have something on them are pinned to nothing. A rest
+       day gets no entry: a pin there would later veto a usual day set on
+       that weekday, for a week nobody meant to touch. */
+    for (const day of week) {
+      if (day.plannedSlot && !trained.has(day.date)) next[day.date] = null;
+      else if (!trained.has(day.date) && next[day.date] === null) delete next[day.date];
+    }
     await writePlan(block.id, next);
   };
 
@@ -341,10 +347,16 @@ export function ProgramScreen({
     if (!block) return;
     await writeSchedule(block.id, setUsualWeekday(schedule ?? {}, slot, weekdayOf(date)));
     // The date entry has done its job; leaving it would pin this one week
-    // against a pattern that now agrees with it anyway.
+    // against a pattern that now agrees with it anyway. The same for every
+    // later week cleared to nothing on this weekday: those pins were made
+    // before there was a usual day to keep, and would hide it for weeks.
     const current = (await readPlans())[block.id] ?? {};
     const cleaned = { ...current };
     delete cleaned[date];
+    const weekday = weekdayOf(date);
+    for (const [day, slot] of Object.entries(cleaned)) {
+      if (day > date && slot === null && weekdayOf(day) === weekday) delete cleaned[day];
+    }
     await writePlan(block.id, cleaned);
   };
 

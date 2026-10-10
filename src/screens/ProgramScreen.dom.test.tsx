@@ -398,6 +398,50 @@ describe('clearing a week', () => {
   });
 });
 
+describe('a usual day set after weeks were cleared', () => {
+  it('lifts the pins on that weekday, and Clear never pins a rest day', async () => {
+    /* The shape of a real week: twelve old workouts cleared out of seven
+       weeks ahead, then the new plan given its usual days. The clears must
+       not go on saying Rest every Monday until December. */
+    await seedSchedule({
+      A: { weekday: 1, intensity: 'heavy', name: 'Old Monday' },
+      B: { weekday: undefined, intensity: 'heavy', name: 'New lower' },
+    });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedWorkout('B', ['bb_front_squat']);
+    const { ui } = await openProgram();
+
+    // Clear this week and the next.
+    await waitFor(() => expect(dayButton(MONDAY).getAttribute('aria-label')).toMatch(/Old Monday/));
+    await ui.click(screen.getByRole('button', { name: 'Clear' }));
+    await ui.click(screen.getByRole('button', { name: 'Next week' }));
+    const nextMonday = shiftIso(MONDAY, 7);
+    await waitFor(() => expect(dayButton(nextMonday).getAttribute('aria-label')).toMatch(/Old Monday/));
+    await ui.click(screen.getByRole('button', { name: 'Clear' }));
+    await waitFor(async () => expect((await readPlans())[BLOCK_ID]?.[nextMonday]).toBeNull());
+    // Only the Mondays were pinned; Tuesday had nothing and gets no entry.
+    expect((await readPlans())[BLOCK_ID]?.[shiftIso(nextMonday, 1)]).toBeUndefined();
+
+    // Back to this week: put the new workout on Monday and make it usual.
+    await ui.click(screen.getByRole('button', { name: 'Today' }));
+    await ui.click(dayButton(MONDAY));
+    const sheet = await screen.findByRole('heading', { name: 'Mon' });
+    await ui.click(
+      await within(sheet.parentElement as HTMLElement).findByRole('button', { name: /^New lower,/ }),
+    );
+    // Picking closes the sheet; the usual-day button is on the next visit.
+    await waitFor(() => expect(dayButton(MONDAY).getAttribute('aria-label')).toMatch(/New lower/));
+    await ui.click(dayButton(MONDAY));
+    await ui.click(await screen.findByRole('button', { name: 'Do this every Mon' }));
+    await waitFor(async () => expect((await readSchedules())[BLOCK_ID]?.B?.weekday).toBe(1));
+
+    // Next week's pin is gone, so the usual day shows there too.
+    const plan = (await readPlans())[BLOCK_ID] ?? {};
+    expect(plan[nextMonday]).toBeUndefined();
+    expect(plan[MONDAY]).toBeUndefined();
+  });
+});
+
 describe('the starter week', () => {
   it('is gone — the screen is workouts and a calendar', async () => {
     await openProgram();
