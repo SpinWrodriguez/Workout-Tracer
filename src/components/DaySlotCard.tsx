@@ -5,6 +5,7 @@ import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
 import { Card, Empty, Label } from './Layout';
 import { EFFORT_COLOR, EFFORT_TEXT, EFFORT_WORD } from '../lib/effort';
 import { SortableRows } from './SortableRows';
+import { tap } from '../lib/haptics';
 import { HapticTick } from './HapticTick';
 import { formatDuration, isTimed, prescription, repUnitWord, stepFor } from '../lib/repUnit';
 
@@ -383,7 +384,10 @@ export function DaySlotCard({
           </button>
           <button
             type="button"
-            onClick={onStart}
+            onClick={() => {
+              tap();
+              onStart();
+            }}
             className={`relative h-11 flex-1 rounded-full font-semibold ${
               isToday ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
             }`}
@@ -408,11 +412,15 @@ export function DaySlotCard({
         ) : (
           <button
             type="button"
-            onClick={() => setOpen(!open)}
+            onClick={() => {
+              tap();
+              setOpen(!open);
+            }}
             aria-expanded={open}
             aria-label={`${open ? 'Hide' : 'Show'} the exercises in ${label}`}
-            className="mt-2 flex w-full items-center justify-between gap-3 py-1 text-left"
+            className="relative mt-2 flex w-full items-center justify-between gap-3 py-1 text-left"
           >
+            <HapticTick radius={8} />
             <Label>
               {entries.length} {entries.length === 1 ? 'exercise' : 'exercises'} · {totalSets} sets
               {minutes !== undefined ? ` · about ${minutes} min` : ''}

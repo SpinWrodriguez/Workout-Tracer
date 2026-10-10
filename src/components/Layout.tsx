@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from 'react';
+import { tap } from '../lib/haptics';
+import { HapticTick } from './HapticTick';
 
 /**
  * Screen shell. One screen = one job: a single scroll area, chrome pinned
@@ -116,10 +118,14 @@ export function Card({
       {rule}
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          tap();
+          setOpen(!open);
+        }}
         aria-expanded={open}
-        className="-my-1 flex w-full items-center gap-3 py-1 text-left"
+        className="relative -my-1 flex w-full items-center gap-3 py-1 text-left"
       >
+        <HapticTick radius={8} />
         <span className="min-w-0 flex-1">
           {title && <h2 className="card-title">{title}</h2>}
           {!open && summary !== undefined && (

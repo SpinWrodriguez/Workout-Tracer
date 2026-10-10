@@ -1,5 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
+import { HapticTick } from '../components/HapticTick';
+import { tap } from '../lib/haptics';
 import type { DaySlot, Exercise, MuscleId } from '../db/types';
 import {
   EM_WEIGHT,
@@ -329,13 +331,17 @@ export function DashboardScreen({
                   ) : (
                     <button
                       type="button"
-                      onClick={() => onStartDay(day.slot)}
+                      onClick={() => {
+                        tap();
+                        onStartDay(day.slot);
+                      }}
                       disabled={day.entries.length === 0}
-                      className={`shrink-0 rounded-full px-4 py-1.5 text-[13px] font-semibold disabled:text-text-faint ${
+                      className={`relative shrink-0 rounded-full px-4 py-1.5 text-[13px] font-semibold disabled:text-text-faint ${
                         isNext ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
                       }`}
                     >
                       Start
+                      <HapticTick />
                     </button>
                   )}
                 </div>

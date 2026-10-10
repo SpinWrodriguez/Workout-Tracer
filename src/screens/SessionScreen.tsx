@@ -736,15 +736,17 @@ export function SessionScreen({
                 {activeWarnings.length > 0 && (
                   <button
                     type="button"
-                    onClick={() =>
-                      setNotesFor((prev) => (prev === activeExercise.id ? undefined : activeExercise.id))
-                    }
+                    onClick={() => {
+                      tap();
+                      setNotesFor((prev) => (prev === activeExercise.id ? undefined : activeExercise.id));
+                    }}
                     aria-label={`${activeWarnings.length} note${
                       activeWarnings.length === 1 ? '' : 's'
                     } about ${activeExercise.name}`}
                     aria-expanded={notesFor === activeExercise.id}
-                    className="flex size-6 items-center justify-center"
+                    className="relative flex size-6 items-center justify-center"
                   >
+                    <HapticTick radius={12} />
                     <span
                       className="size-2.5 rounded-full"
                       style={{
