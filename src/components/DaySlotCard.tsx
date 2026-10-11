@@ -100,6 +100,7 @@ export function DaySlotCard({
   noteSevere,
   guide,
   planTag,
+  problems,
   editing,
   isToday,
   doneThisWeek = false,
@@ -139,6 +140,8 @@ export function DaySlotCard({
   guide?: string;
   /** Its place in the plan: "next", "2 of 4", or "extra". */
   planTag?: string;
+  /** Rule problems in this workout, each with the fix that clears it. */
+  problems?: { message: string; fixLabel?: string; onFix?: () => void }[];
   editing: boolean;
   isToday: boolean;
   /**
@@ -447,6 +450,20 @@ export function DaySlotCard({
             <Chevron open={open} />
           </button>
         ))}
+      {problems && problems.length > 0 && !editing && (
+        <div className="mt-1 flex flex-col gap-1">
+          {problems.map((problem) => (
+            <p key={problem.message} className="text-[12px] leading-snug font-medium" style={{ color: 'var(--color-warn)' }}>
+              {problem.message}
+              {problem.fixLabel && problem.onFix && (
+                <button type="button" onClick={problem.onFix} className="ml-2 rounded-full bg-surface-2 px-2.5 py-0.5 text-[11px] font-semibold text-text">
+                  {problem.fixLabel}
+                </button>
+              )}
+            </p>
+          ))}
+        </div>
+      )}
       {guide && !editing && (
         <div className="mt-1 flex items-start gap-3">
           <p className="min-w-0 flex-1 text-[12px] leading-snug font-medium text-text-dim">{guide}</p>

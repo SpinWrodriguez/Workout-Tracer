@@ -33,6 +33,8 @@ export interface DayEditorSlot {
   minutes?: number;
   /** A word from the plan: "next", "golf-safe first", "not before golf". */
   tag?: string;
+  /** Outside the plan's order: listed after the plan's workouts, under a heading. */
+  extra?: boolean;
   /**
    * The weekday this workout already occupies in the week BEING VIEWED, if it
    * is in it. Resolved from that week's plan, not the standing weekday: the
@@ -198,9 +200,12 @@ export function DayEditor({
 
         <Label className="mt-4 mb-1.5 block">Gym</Label>
         <div className="flex flex-col gap-1.5">
-          {slots.map((row) => (
+          {slots.map((row, i) => (
+            <div key={row.slot} className="contents">
+            {row.extra && !slots[i - 1]?.extra && (
+              <Label className="mt-2 block">Extras, outside the plan</Label>
+            )}
             <Tile
-              key={row.slot}
               accent={EFFORT_COLOR[row.intensity]}
               title={row.label}
               detail={
@@ -241,6 +246,7 @@ export function DayEditor({
               active={currentSlot === row.slot}
               onClick={() => onSetSlot(row.slot)}
             />
+            </div>
           ))}
           {currentSlot && clearRow('No gym this day', () => onSetSlot(undefined))}
         </div>

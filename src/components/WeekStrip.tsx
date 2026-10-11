@@ -55,7 +55,8 @@ export function WeekStrip({
   week: WeekStripDay[];
   onPickDay: (date: string) => void;
   /** Moves a workout to another DATE — this week only, not every week. */
-  onMoveSlot: (slot: DaySlot, date: string) => void;
+  /** Absent under a plan: the pills are forecasts, and dragging one would pin a date against the order. */
+  onMoveSlot?: (slot: DaySlot, date: string) => void;
   labelFor: (slot: DaySlot) => string;
   /** The pill is ~44px wide: the full name does not fit, the letter says nothing. */
   shortLabelFor: (slot: DaySlot) => string;
@@ -89,7 +90,7 @@ export function WeekStrip({
   const endDrag = () => {
     if (!drag) return;
     const target = week[drag.over];
-    if (target && target.plannedSlot !== drag.slot) onMoveSlot(drag.slot, target.date);
+    if (target && target.plannedSlot !== drag.slot) onMoveSlot?.(drag.slot, target.date);
     setDrag(null);
   };
 
@@ -147,12 +148,12 @@ export function WeekStrip({
                 <div
                   role="button"
                   tabIndex={0}
-                  onPointerDown={startDrag(day.plannedSlot, index)}
+                  onPointerDown={onMoveSlot ? startDrag(day.plannedSlot, index) : undefined}
                   aria-label={`${labelFor(day.plannedSlot)} — drag to move`}
                   /* Done stays the plain done colour: what it was built to
                      be stopped mattering the moment it was trained. Until
                      then, rust heavy and teal light. */
-                  className={`mt-1.5 cursor-grab touch-none rounded-lg px-0.5 py-1 text-center text-[9px] leading-[1.15] font-bold break-words hyphens-auto select-none ${
+                  className={`mt-1.5 ${onMoveSlot ? 'cursor-grab' : ''} touch-none rounded-lg px-0.5 py-1 text-center text-[9px] leading-[1.15] font-bold break-words hyphens-auto select-none ${
                     drag?.slot === day.plannedSlot ? 'opacity-30' : ''
                   } ${done ? 'bg-cta text-bg' : day.forecast ? 'text-text-dim' : ''}`}
                   style={

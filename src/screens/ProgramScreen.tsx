@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { DaySlot, Exercise, GolfDay, MuscleId } from '../db/types';
-import { longDate, todayIso } from '../lib/format';
+import { todayIso } from '../lib/format';
 import {
   WEEKDAY_LABEL,
   buildWeek,
@@ -440,6 +440,7 @@ export function ProgramScreen({
     const list = entriesForSlot(slots ?? [], slot);
     const onDate = dateFor(slot);
     const inPlan = rotation?.order.includes(slot) ?? false;
+    const extra = rotation !== null && !inPlan;
     const tag = !offer
       ? undefined
       : slot === offer.first
@@ -453,6 +454,7 @@ export function ProgramScreen({
             : undefined;
     return {
       ...(tag ? { tag } : {}),
+      ...(extra ? { extra: true } : {}),
       slot,
       label: labelFor(slot),
       intensity: schedule?.[slot]?.intensity ?? 'heavy',
@@ -1153,7 +1155,7 @@ export function ProgramScreen({
           labelFor={labelFor}
           shortLabelFor={shortLabelFor}
           onPickDay={setEditingDate}
-          onMoveSlot={(slot, date) => void movePlanned(slot, date)}
+          onMoveSlot={rotation ? undefined : (slot, date) => void movePlanned(slot, date)}
         />
         {/* Under the strip and off to the side, away from the week arrows:
             next to them it was pressed by mistake, and a cleared week is
@@ -1177,6 +1179,7 @@ export function ProgramScreen({
         )}
       </Card>
 
+      {!rotation && (
       <Card title={block ? 'What this week trains' : 'No block'} className="mt-3">
         {block ? (
           <>
@@ -1215,20 +1218,16 @@ export function ProgramScreen({
               {freeSlot() === undefined ? `All ${DAY_SLOTS.length} workouts used` : 'New workout'}
             </button>
 
-            <Label className="mt-3 block text-center">
-              {rotation
-                ? 'The plan decides the days; see the card at the top.'
-                : `Block: ${longDate(block.startDate)} — ${longDate(block.endDate)}`}
-            </Label>
           </>
         ) : (
           <Empty>--</Empty>
         )}
       </Card>
+      )}
 
       {/* Only problems, and only ones that carry their own fix. Advice about
           volume and time was noise: true, unactionable, and endless. */}
-      {problems.length > 0 && (
+      {!rotation && problems.length > 0 && (
         <Card
           title={`Worth fixing · ${problems.length}`}
           className="mt-3"
@@ -1293,6 +1292,17 @@ export function ProgramScreen({
           <DaySlotCard
             label={labelFor(slot)}
             planTag={planTag}
+            problems={
+              rotation
+                ? problems
+                    .filter((v) => v.slot === slot)
+                    .map((v) => ({
+                      message: v.message,
+                      fixLabel: v.fix?.label,
+                      onFix: v.fix ? () => void applyFix(v.fix as Fix) : undefined,
+                    }))
+                : undefined
+            }
             customName={scheduled?.name}
             onRename={(name) => void renameSlot(slot, name)}
             weekday={date !== undefined ? weekdayOf(date) : undefined}
@@ -1371,6 +1381,22 @@ export function ProgramScreen({
           </div>
         );
       })}
+
+      {rotation && block && (
+        <div className="mt-3">
+          {!cardOrder.some((s) => !rotation.order.includes(s) && (entriesForSlot(slots ?? [], s).length > 0 || schedule?.[s] !== undefined)) && (
+            <Label className="mb-2 block">Extras, outside the plan</Label>
+          )}
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            disabled={freeSlot() === undefined}
+            className="h-11 w-full rounded-full bg-surface-2 text-sm font-semibold text-text-dim disabled:text-text-faint"
+          >
+            {freeSlot() === undefined ? `All ${DAY_SLOTS.length} workouts used` : 'New workout'}
+          </button>
+        </div>
+      )}
 
 
       {creating && (
