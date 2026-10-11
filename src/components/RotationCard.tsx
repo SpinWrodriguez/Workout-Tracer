@@ -15,7 +15,7 @@ import { Card, Label, SegmentedToggle } from './Layout';
 import { Sheet } from './Sheet';
 import type { WorkoutGuide } from '../lib/workoutGuide';
 import type { BlockExercise, Exercise } from '../db/types';
-import { PlanLevels } from './PlanLevels';
+import { MiniMap, PlanLevels } from './PlanLevels';
 import { workoutTopMuscles } from '../lib/planLevels';
 
 /* -------------------------------------------------------------------------- */
@@ -148,14 +148,12 @@ export function RotationCard({
       <ol className="mt-1.5 flex flex-col gap-1.5" aria-label="Workouts in order">
         {rotation.order.map((slot) => {
           const isNext = slot === next && !finished;
-          const optional = rotation.optional.includes(slot);
-          const skipped = optional && rotation.trainingDays.length <= 3;
           return (
             <li
               key={slot}
               className={`flex items-center gap-3 rounded-xl px-3 py-2 ${
                 isNext ? 'bg-cta text-bg' : 'bg-surface-2'
-              } ${skipped ? 'opacity-60' : ''}`}
+              }`}
             >
               <span className="w-5 text-[13px] font-bold">{slot}</span>
               <span className="min-w-0 flex-1">
@@ -165,8 +163,9 @@ export function RotationCard({
                 </span>
               </span>
               <span className={`shrink-0 text-[11px] font-medium ${isNext ? 'opacity-80' : 'text-text-dim'}`}>
-                {isNext ? 'next' : skipped ? 'skipped on 3-day weeks' : optional ? '4-day weeks' : ''}
+                {isNext ? 'next' : ''}
               </span>
+              <MiniMap entries={entries.filter((row) => row.daySlot === slot)} exercisesById={exercisesById} />
             </li>
           );
         })}
@@ -174,7 +173,7 @@ export function RotationCard({
 
       <div className="mt-3">
         <PlanLevels
-          order={rotation.trainingDays.length <= 3 ? rotation.order.filter((s) => !rotation.optional.includes(s)) : rotation.order}
+          order={rotation.order}
           entries={entries}
           exercisesById={exercisesById}
         />
@@ -289,15 +288,12 @@ function SetupSheet({
 }) {
   const today = todayIso();
   const [order, setOrder] = useState<DaySlot[]>([]);
-  const [optional, setOptional] = useState<DaySlot[]>([]);
   const [days, setDays] = useState<Weekday[]>([1, 3, 5]);
   const [weeks, setWeeks] = useState<(typeof WEEK_OPTIONS)[number]>('8');
   const [start, setStart] = useState(weekStart(today));
 
   const toggleSlot = (slot: DaySlot) =>
     setOrder((prev) => (prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]));
-  const toggleOptional = (slot: DaySlot) =>
-    setOptional((prev) => (prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]));
   const toggleDay = (day: Weekday) =>
     setDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)));
 
@@ -314,7 +310,6 @@ function SetupSheet({
           onClick={() =>
             onStart({
               order,
-              optional: optional.filter((s) => order.includes(s)),
               trainingDays: days,
               start,
               weeks: Number(weeks),
@@ -330,8 +325,7 @@ function SetupSheet({
         <span className="card-title">Workouts, in order</span>
         <p className="mt-1 text-[13px] font-medium text-text-dim">
           Tap in the order you want them to repeat. Put an upper day between two lower
-          days, and the golf-safe one where it can land on the day before golf. Mark one
-          as 4-day only if it should be skipped on three-day weeks.
+          days, and the golf-safe one where it can land on the day before golf.
         </p>
         <div className="mt-2 flex flex-col gap-1.5">
           {slots.map((slot) => {
@@ -359,19 +353,7 @@ function SetupSheet({
                     </span>
                   </span>
                 </button>
-                {picked && (
-                  <button
-                    type="button"
-                    aria-pressed={optional.includes(slot)}
-                    aria-label={`${labelFor(slot)}: only on 4-day weeks`}
-                    onClick={() => toggleOptional(slot)}
-                    className={`shrink-0 rounded-lg px-2 py-2 text-[11px] font-semibold ${
-                      optional.includes(slot) ? 'bg-text text-bg' : 'bg-surface-2 text-text-dim'
-                    }`}
-                  >
-                    4-day only
-                  </button>
-                )}
+                <MiniMap entries={entries.filter((row) => row.daySlot === slot)} exercisesById={exercisesById} />
               </div>
             );
           })}
@@ -380,7 +362,7 @@ function SetupSheet({
 
       <div className="mt-3 rounded-2xl bg-surface p-4">
         <PlanLevels
-          order={days.length <= 3 ? order.filter((s) => !optional.includes(s)) : order}
+          order={order}
           entries={entries}
           exercisesById={exercisesById}
           defaultOpen

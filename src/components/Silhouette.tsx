@@ -58,11 +58,13 @@ function View({
   volume,
   side,
   x,
+  caption = true,
 }: {
   view: BodyView;
   volume: MuscleVolume;
   side: 'front' | 'back';
   x: number;
+  caption?: boolean;
 }) {
   const muscles = Object.keys(view.muscles) as MuscleId[];
   return (
@@ -101,15 +103,17 @@ function View({
         );
       })}
 
-      <text
-        x={view.width / 2}
-        y={view.height + CAPTION - 3}
-        textAnchor="middle"
-        fontSize="7"
-        fill="var(--color-text-dim)"
-      >
-        {side}
-      </text>
+      {caption && (
+        <text
+          x={view.width / 2}
+          y={view.height + CAPTION - 3}
+          textAnchor="middle"
+          fontSize="7"
+          fill="var(--color-text-dim)"
+        >
+          {side}
+        </text>
+      )}
     </g>
   );
 }
@@ -147,9 +151,9 @@ function Legend() {
   );
 }
 
-export function Silhouette({ volume }: { volume: MuscleVolume }) {
+export function Silhouette({ volume, compact = false }: { volume: MuscleVolume; compact?: boolean }) {
   const width = FRONT_VIEW.width + GAP + BACK_VIEW.width;
-  const height = Math.max(FRONT_VIEW.height, BACK_VIEW.height) + CAPTION;
+  const height = Math.max(FRONT_VIEW.height, BACK_VIEW.height) + (compact ? 0 : CAPTION);
   return (
     <div>
       <svg
@@ -158,15 +162,16 @@ export function Silhouette({ volume }: { volume: MuscleVolume }) {
         role="img"
         aria-label="Body map shaded by weekly set volume per muscle"
       >
-        <View view={FRONT_VIEW} volume={volume} side="front" x={0} />
+        <View view={FRONT_VIEW} volume={volume} side="front" x={0} caption={!compact} />
         <View
           view={BACK_VIEW}
           volume={volume}
           side="back"
           x={FRONT_VIEW.width + GAP}
+          caption={!compact}
         />
       </svg>
-      <Legend />
+      {!compact && <Legend />}
     </div>
   );
 }

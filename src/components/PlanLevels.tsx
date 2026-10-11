@@ -6,6 +6,7 @@ import { VOLUME_HIGH, VOLUME_LOW, volumeRows, type MuscleVolumeRow } from '../li
 import { HapticTick } from './HapticTick';
 import { Label } from './Layout';
 import { Silhouette } from './Silhouette';
+import { plannedSetsPerMuscle } from '../lib/volume';
 
 /* -------------------------------------------------------------------------- */
 /*  Levels for a plan before it runs: a week of the order on the body map,    */
@@ -32,7 +33,7 @@ export function PlanLevels({
   exercisesById,
   defaultOpen = false,
 }: {
-  /** The workouts a week holds: the order, less the optional ones on short weeks. */
+  /** The workouts a week holds: the order. */
   order: DaySlot[];
   entries: BlockExercise[];
   exercisesById: Map<string, Exercise>;
@@ -94,3 +95,19 @@ export function PlanLevels({
   );
 }
 
+
+/** One workout on the body map, thumbnail-sized, for a list row. */
+export function MiniMap({
+  entries,
+  exercisesById,
+}: {
+  entries: BlockExercise[];
+  exercisesById: Map<string, Exercise>;
+}) {
+  if (entries.length === 0) return null;
+  return (
+    <span className="w-16 shrink-0" aria-hidden="true">
+      <Silhouette volume={plannedSetsPerMuscle(entries, exercisesById)} compact />
+    </span>
+  );
+}

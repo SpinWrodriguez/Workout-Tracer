@@ -25,8 +25,6 @@ export const ROTATION_KEY = 'blockRotation';
 export interface Rotation {
   /** The workouts, in the order they repeat. */
   order: DaySlot[];
-  /** Workouts in the order that only run on weeks with four or more training days. */
-  optional: DaySlot[];
   /** The days usually trained. A forecast, not a booking. */
   trainingDays: Weekday[];
   /** The plan's first day; weeks run Monday to Sunday from its week. */
@@ -52,7 +50,6 @@ function normaliseRotation(value: unknown): Rotation | undefined {
     : [];
   return {
     order,
-    optional: slots(value.optional).filter((s) => order.includes(s)),
     trainingDays: [...new Set(trainingDays)].sort((a, b) => a - b),
     start: value.start,
     weeks: Number.isInteger(weeks) && weeks > 0 ? weeks : 8,
@@ -113,11 +110,10 @@ export function nextAfter(rotation: Rotation, last: DaySlot | undefined): DaySlo
   return rotation.order[(at + 1) % rotation.order.length] as DaySlot;
 }
 
-/** The order from `from`, once round, skipping the optional ones on short weeks. */
+/** The order from `from`, once round. */
 export function queueFrom(rotation: Rotation, from: DaySlot): DaySlot[] {
   const at = Math.max(0, rotation.order.indexOf(from));
-  const once = rotation.order.map((_, i) => rotation.order[(at + i) % rotation.order.length] as DaySlot);
-  return rotation.trainingDays.length <= 3 ? once.filter((s) => !rotation.optional.includes(s)) : once;
+  return rotation.order.map((_, i) => rotation.order[(at + i) % rotation.order.length] as DaySlot);
 }
 
 /** Safe the day before golf: nothing grip-heavy, nothing heavy on the spine. */

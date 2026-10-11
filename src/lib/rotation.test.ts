@@ -18,7 +18,7 @@ const entries = [
   row('C', 'bb_bench_press'), row('C', 'cb_lateral_raise'),
   row('D', 'kb_reverse_lunge'),
 ];
-const plan: Rotation = { order: ['A', 'B', 'C', 'D'], optional: ['D'], trainingDays: [1, 3, 5], start: MON, weeks: 8 };
+const plan: Rotation = { order: ['A', 'B', 'C', 'D'], trainingDays: [1, 3, 5], start: MON, weeks: 8 };
 const golf = [{ date: SAT }];
 const input = (over: Partial<Parameters<typeof forecastWeek>[0]> = {}) => ({
   rotation: plan, weekDates: week, sessions: [], dates: {}, entries, exercisesById: byId, golf, today: MON, ...over,
@@ -40,9 +40,9 @@ describe('the order', () => {
     expect(nextFrom(plan, [{ date: '2026-10-01', slot: 'C' as DaySlot }], MON)).toBe('A');
   });
 
-  it('leaves the optional workout out on three-day weeks', () => {
-    expect(queueFrom(plan, 'A')).toEqual(['A', 'B', 'C']);
-    expect(queueFrom({ ...plan, trainingDays: [1, 2, 4, 5] }, 'B')).toEqual(['B', 'C', 'D', 'A']);
+  it('goes once round from any point', () => {
+    expect(queueFrom(plan, 'A')).toEqual(['A', 'B', 'C', 'D']);
+    expect(queueFrom(plan, 'C')).toEqual(['C', 'D', 'A', 'B']);
   });
 });
 
@@ -83,8 +83,8 @@ describe('the week', () => {
     expect(out[shiftIso(MON, 1)]).toEqual({ slot: 'C', kind: 'forecast' });
     expect(out[shiftIso(MON, 2)]).toBeUndefined();
     // C was taken by hand and B carries grip work, so the golf eve takes the
-    // next golf-safe one in the queue: C again, from the round after.
-    expect(out[shiftIso(MON, 4)]).toEqual({ slot: 'C', kind: 'forecast' });
+    // next golf-safe one in the queue: D.
+    expect(out[shiftIso(MON, 4)]).toEqual({ slot: 'D', kind: 'forecast' });
   });
 
   it('shows nothing before the plan starts or after it ends', () => {
