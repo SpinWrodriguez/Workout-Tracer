@@ -26,7 +26,9 @@ import { COACH_TOOLS, runCoachTool } from './coachTools';
 import { daysBetween, shiftIso, todayIso, weekStart } from './format';
 import { WEEKDAY_LABEL, weekdayOf } from './golf';
 import { fairShare, setsPerMuscle } from './volume';
-import { readWeekPlan } from './weekPlan';
+import { readWeekPlan, type WeekPlan } from './weekPlan';
+import { rotationEnd } from './rotation';
+import type { DaySlot } from '../db/types';
 import { dayLabel } from './dayLabel';
 
 /**
@@ -62,6 +64,7 @@ The app's own numbers, so you never have to guess where one came from:
 - maxRpe is the hardest a working set should be, set by the lifter in Settings: 8 leaves two reps in reserve, 9 leaves one, 10 is failure. It caps what the generator builds and what they should be doing, so a set logged at RIR 0 under a ceiling of 8 is worth naming.
 - weeklySetTarget is a whole-week total of working sets across all muscles. The lifter sets it themselves with a stepper in Settings, in steps of 3. Nothing derives it from their recovery, their history or their goals. The generator builds weeks within 20% of it, and the validator rejects a week outside that band.
 - week is the week they are LOOKING AT, not always the current one — the Program screen has arrows and planning next week from this one is normal. week.viewing says which. When it is not the current week, "this week" in their question means that week, its workouts are a plan rather than a record, setsLogged of 0 means nothing has happened in it yet rather than that they skipped everything, and you say which week you mean.
+- plan, when present, is the fixed programme they follow: workouts in order, repeated for a set number of weeks, and whatever day they train they do the next one. plan.next is what they do next; plan.weekOf says how far in. The dates on week.workouts are then a forecast from their usual days, not bookings: an undated workout is further down the order, and a missed day moves nothing. Judge the week by the order and what was logged. Do not propose reordering, swapping or adding workouts while a plan runs unless asked.
 - recentSessions is every session of the last month (never fewer than the last six), headlines only — date, workout, sets done against planned, minutes. Before you claim when the last session was, or count rest days, READ recentSessions[0] — never work it from the flow of conversation, because "you have been resting" when they trained yesterday is a wrong answer about their own week. One date can hold a session AND a round AND other activity at once: check all three lists for the same date before calling any day a rest day. golfRounds is the actual rounds, the month behind and the fortnight booked ahead; the standing pattern in lifter.golfDays says which days rounds usually land on. weeklySetTotals is the month as a trajectory — sessions and working sets for this week and the four before, this week first. otherActivity is the physical life outside the gym, logged in the companion app — gardening, walks, a round by its calories — recovery load the program never scheduled, so weigh it when reading fatigue or advising a rest day. Use all of these unprompted the way a coach reads a logbook before speaking: a shrinking weekly total, a round two days after a heavy pull day, a workout that keeps finishing short of plan are all yours to notice. For anything older, or set-by-set, use the tools.
 - musclesUnderTheirShare is measured against fairSharePerMuscle, which is the weekly set target spread evenly over the 18 muscles — the share the week they asked for can actually give each one. A set counts 1 for each muscle it trains directly and 0.5 for each it trains indirectly. The training floor from the literature is 8 weighted sets a week per muscle and the ceiling is 20; clearing 8 on every muscle takes far more sets than a three-day week has, so the share is what a list of shortfalls is measured against and the floor is what to aim a priority muscle at. Say which of the two you mean.
 - Never explain one of the app's numbers by inventing how it was worked out. Say what it means and where it is set. Guessing at a derivation is the same mistake as guessing at a weight.
@@ -150,6 +153,20 @@ function volumeSummary(sets: SetLog[], byId: Map<string, Exercise>, threshold: n
  * through the same functions the screens use, so nothing here can say
  * something the app would not.
  */
+/** A workout's name as the app shows it, by slot. */
+function nameOfSlot(plan: WeekPlan, slot: DaySlot, byId: Map<string, Exercise>): string {
+  const day = plan.all.find((d) => d.slot === slot);
+  if (!day) return slot;
+  return dayLabel({
+    slot,
+    name: day.name,
+    exercises: day.entries
+      .map((entry) => byId.get(entry.exerciseId))
+      .filter((exercise): exercise is Exercise => exercise !== undefined),
+    intensity: day.intensity,
+  });
+}
+
 export async function buildCoachContext(
   exercises: Exercise[],
   /**
@@ -224,6 +241,20 @@ export async function buildCoachContext(
            one of the app's own facts. */
         notes: instructions || undefined,
       },
+      ...(plan?.rotation
+        ? {
+            plan: {
+              weekOf: plan.rotation.week,
+              weeks: plan.rotation.plan.weeks,
+              starts: `${WEEKDAY_LABEL[weekdayOf(plan.rotation.plan.start)]} ${plan.rotation.plan.start}`,
+              ends: rotationEnd(plan.rotation.plan),
+              order: plan.rotation.plan.order.map((slot) => nameOfSlot(plan, slot, byId)),
+              next: nameOfSlot(plan, plan.rotation.next, byId),
+              then: plan.rotation.then.map((slot) => nameOfSlot(plan, slot, byId)),
+              usualDays: plan.rotation.plan.trainingDays.map(weekdayName),
+            },
+          }
+        : {}),
       week: {
         starting: `${WEEKDAY_LABEL[weekdayOf(from)]} ${from}`,
         viewing: currentWeek

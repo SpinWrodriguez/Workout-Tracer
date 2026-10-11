@@ -15,6 +15,7 @@ import { EXERCISES } from '../db/seed/exercises';
 import { writeApiKey } from './askModel';
 import { shiftIso, todayIso, weekStart } from './format';
 import { writePlan, writeSchedule } from './program';
+import { writeRotation } from './rotation';
 import {
   MAX_TOOL_ROUNDS,
   MEMORY_TURNS,
@@ -223,8 +224,9 @@ describe('what the coach is sent', () => {
        Sunday gym-rest while Sunday's session sat in the very list it was
        sent, because it reasoned from its own narrative instead of re-reading.
        It is a budget, not a target — raise it when a rule earns it and not to
-       make room for prose. */
-    expect(system.length).toBeLessThan(8200);
+       make room for prose. Sixth raise: the plan, so the coach reads the
+       week's dates as a forecast and the order as the thing that matters. */
+    expect(system.length).toBeLessThan(8700);
   });
 
   it('licenses general training knowledge, not just a read of the data', async () => {
@@ -544,6 +546,27 @@ describe('which week the question is about', () => {
        Monday's workout came back as Sunday's, and the read of the whole split
        followed from there. */
     expect(placed?.weekday).toBe('Mon');
+  });
+
+  it('tells the coach about a running plan: the order, what is next, how far in', async () => {
+    await writeSchedule('block_1', {
+      A: { intensity: 'heavy', name: 'Lower' },
+      B: { intensity: 'heavy', name: 'Push' },
+    });
+    await db.blockExercise.bulkPut([
+      { blockId: 'block_1', exerciseId: 'bb_back_squat', daySlot: 'A' as const, targetSets: 3, repRangeLow: 8, repRangeHigh: 10, order: 0 },
+      { blockId: 'block_1', exerciseId: 'bb_bench_press', daySlot: 'B' as const, targetSets: 3, repRangeLow: 8, repRangeHigh: 10, order: 0 },
+    ]);
+    const start = weekStart(todayIso());
+    await writeRotation('block_1', { order: ['A', 'B'], trainingDays: [1, 3, 5], start, weeks: 8 });
+
+    const context = await buildCoachContext(EXERCISES);
+    const plan = context.payload.plan as Record<string, unknown>;
+    expect(plan).toMatchObject({ weekOf: 1, weeks: 8, order: ['Lower', 'Push'], next: 'Lower', then: ['Push'], usualDays: ['Mon', 'Wed', 'Fri'] });
+    expect(plan.starts).toBe(`Mon ${start}`);
+    // And the prompt says how to read it.
+    const { sent } = await ask([says('ok')]);
+    expect(sent[0]?.system[0]?.text ?? '').toMatch(/plan\.next is what they do next/);
   });
 
   it('is the current week when nothing is open', async () => {
