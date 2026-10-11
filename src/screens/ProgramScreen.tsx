@@ -52,7 +52,7 @@ import {
 import { DayEditor, type DayEditorSlot } from '../components/DayEditor';
 import { RotationCard } from '../components/RotationCard';
 import { workoutGuide } from '../lib/workoutGuide';
-import { forecastWeek, offerFor, readRotation, readRotationSessions } from '../lib/rotation';
+import { forecastWeek, nextFrom, offerFor, readRotation, readRotationSessions } from '../lib/rotation';
 import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
 import { isModelAvailable } from '../lib/askModel';
 import {
@@ -407,6 +407,13 @@ export function ProgramScreen({
    * the only address that matters now: placement is a date, so the answer
    * differs from week to week and that is the point.
    */
+  /* The shelf's order: under a plan its workouts first, in plan order, then
+     the rest; otherwise the slots as they come. */
+  const nextInOrder = rotation ? nextFrom(rotation, rotationSessions ?? [], todayIso()) : undefined;
+  const cardOrder: DaySlot[] = rotation
+    ? [...rotation.order, ...DAY_SLOTS.filter((s) => !rotation.order.includes(s))]
+    : DAY_SLOTS;
+
   const dateFor = (slot: DaySlot): string | undefined =>
     week.find((day) => day.plannedSlot === slot)?.date;
 
@@ -1253,11 +1260,21 @@ export function ProgramScreen({
         </Card>
       )}
 
-      {DAY_SLOTS.map((slot) => {
+      {cardOrder.map((slot, cardIndex) => {
         const list = entriesForSlot(slots ?? [], slot);
         const isEditing = editingSlot === slot;
         const scheduled = schedule?.[slot];
         if (list.length === 0 && !isEditing && scheduled === undefined) return null;
+        /* Under a plan the shelf reads as the plan: its workouts first, in
+           order, and whatever else exists under its own heading. */
+        const firstExtra = rotation !== null && cardIndex === rotation.order.length && cardIndex > 0;
+        const planTag = rotation
+          ? slot === nextInOrder
+            ? 'next'
+            : rotation.order.includes(slot)
+              ? `${rotation.order.indexOf(slot) + 1} of ${rotation.order.length}`
+              : 'extra'
+          : undefined;
         /* Where it sits in the week on screen, not a standing weekday. A card
            claiming "Mon" for a workout that is on Wednesday this week is the
            same confusion the DatePlan layer exists to end. */
@@ -1269,9 +1286,13 @@ export function ProgramScreen({
           (session) => session.slot === slot || session.name === labelFor(slot),
         );
         return (
+          <div key={slot}>
+            {firstExtra && (
+              <Label className="mt-5 block">Extras, outside the plan</Label>
+            )}
           <DaySlotCard
-            key={slot}
             label={labelFor(slot)}
+            planTag={planTag}
             customName={scheduled?.name}
             onRename={(name) => void renameSlot(slot, name)}
             weekday={date !== undefined ? weekdayOf(date) : undefined}
@@ -1347,6 +1368,7 @@ export function ProgramScreen({
               setEditingSlot(null);
             }}
           />
+          </div>
         );
       })}
 

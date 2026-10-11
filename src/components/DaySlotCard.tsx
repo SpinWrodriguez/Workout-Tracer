@@ -7,6 +7,7 @@ import { EFFORT_COLOR, EFFORT_TEXT, EFFORT_WORD } from '../lib/effort';
 import { SortableRows } from './SortableRows';
 import { tap } from '../lib/haptics';
 import { HapticTick } from './HapticTick';
+import { MiniMap } from './PlanLevels';
 import { formatDuration, isTimed, prescription, repUnitWord, stepFor } from '../lib/repUnit';
 
 /* -------------------------------------------------------------------------- */
@@ -98,6 +99,7 @@ export function DaySlotCard({
   note,
   noteSevere,
   guide,
+  planTag,
   editing,
   isToday,
   doneThisWeek = false,
@@ -135,6 +137,8 @@ export function DaySlotCard({
   noteSevere?: boolean;
   /** Where this workout fits in a week, read off its lifts (workoutGuide). */
   guide?: string;
+  /** Its place in the plan: "next", "2 of 4", or "extra". */
+  planTag?: string;
   editing: boolean;
   isToday: boolean;
   /**
@@ -232,6 +236,15 @@ export function DaySlotCard({
               {timesDone}
             </span>
           )}
+          {planTag && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                planTag === 'next' ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
+              }`}
+            >
+              {planTag}
+            </span>
+          )}
           <Label className={isToday && !doneThisWeek ? 'text-text!' : ''}>
             {/* The effort is the line above, not a word here. It stays in the
                 label a screen reader reads, where there is no line to see. */}
@@ -242,9 +255,12 @@ export function DaySlotCard({
                 ? isToday
                   ? 'today'
                   : WEEKDAY_LABEL[weekday]
-                : /* Said rather than left blank: a card with no day looked
-                     identical to one whose day had simply not rendered yet. */
-                  'no day yet'}
+                : planTag
+                  ? /* Under a plan the day is the plan's business, not the card's. */
+                    ''
+                  : /* Said rather than left blank: a card with no day looked
+                       identical to one whose day had simply not rendered yet. */
+                    'no day yet'}
           </Label>
         </span>
       }
@@ -432,7 +448,11 @@ export function DaySlotCard({
           </button>
         ))}
       {guide && !editing && (
-        <p className="mt-1 text-[12px] leading-snug font-medium text-text-dim">{guide}</p>
+        <div className="mt-1 flex items-start gap-3">
+          <p className="min-w-0 flex-1 text-[12px] leading-snug font-medium text-text-dim">{guide}</p>
+          {/* What it loads, at a glance: the week's map in miniature. */}
+          <MiniMap entries={entries} exercisesById={exercisesById} />
+        </div>
       )}
 
       {editing && (
