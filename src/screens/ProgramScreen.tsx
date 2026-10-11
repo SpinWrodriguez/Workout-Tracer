@@ -1434,6 +1434,7 @@ export function ProgramScreen({
           exercises={exercises}
           foldRetired
           selectedIds={entriesForSlot(slots ?? [], addingTo).map((entry) => entry.exerciseId)}
+          building={entriesForSlot(slots ?? [], addingTo)}
           onPick={(exerciseId) => void addBlockExercise(block.id, addingTo, exerciseId)}
           // Tapping a ticked row takes it back out, which is what the tick
           // looked like it promised.

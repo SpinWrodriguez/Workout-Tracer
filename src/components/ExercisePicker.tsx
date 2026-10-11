@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { readDeletedExercises, readRetiredExercises } from '../db/settings';
-import type { Exercise, MuscleId, Station } from '../db/types';
+import type { BlockExercise, Exercise, MuscleId, Station } from '../db/types';
+import { PlanLevels } from './PlanLevels';
 import { STATION_LABEL, STATION_ORDER } from '../db/seed/exercises';
 import { MUSCLES, muscleName } from '../db/seed/muscles';
 import { Chip } from './Layout';
@@ -19,8 +20,11 @@ export function ExercisePicker({
   onClose,
   onInfo,
   foldRetired = false,
+  building,
 }: {
   exercises: Exercise[];
+  /** The workout being built, so the picker shows what it loads as rows go in. */
+  building?: BlockExercise[];
   /**
    * Keeps retired exercises out of the main list, behind a fold at the
    * bottom: still reachable for the odd day one is wanted, never in the way.
@@ -43,6 +47,7 @@ export function ExercisePicker({
   /** Opens the cue, photo and description for one exercise. */
   onInfo?: (exerciseId: string) => void;
 }) {
+  const byId = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
   const [station, setStation] = useState<Station | 'all'>('all');
   const [muscle, setMuscle] = useState<MuscleId | 'all'>('all');
   const [showRetired, setShowRetired] = useState(false);
@@ -176,6 +181,17 @@ export function ExercisePicker({
               </Chip>
             ))}
           </div>
+          {building && (
+            <div className="mt-2 rounded-xl bg-surface px-3">
+              <PlanLevels
+                title="This workout"
+                single
+                order={[...new Set(building.map((row) => row.daySlot))]}
+                entries={building}
+                exercisesById={byId}
+              />
+            </div>
+          )}
           <div className="no-scrollbar -mx-4 mt-1.5 flex gap-1.5 overflow-x-auto px-4">
             <Chip active={muscle === 'all'} onClick={() => setMuscle('all')}>
               All muscles

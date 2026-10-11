@@ -32,12 +32,18 @@ export function PlanLevels({
   entries,
   exercisesById,
   defaultOpen = false,
+  title = 'Week in Levels',
+  single = false,
 }: {
   /** The workouts a week holds: the order. */
   order: DaySlot[];
   entries: BlockExercise[];
   exercisesById: Map<string, Exercise>;
   defaultOpen?: boolean;
+  /** 'Week in Levels' for a plan; a workout being built says what it is. */
+  title?: string;
+  /** One workout rather than a week: the summary names its top muscles instead of the week's range. */
+  single?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const volume = planWeekVolume(order, entries, exercisesById);
@@ -45,9 +51,13 @@ export function PlanLevels({
   const over = rows.filter((row) => row.status === 'high');
   const under = rows.filter((row) => row.status === 'low');
   const summary =
-    order.length === 0
-      ? 'Pick workouts to see the week'
-      : over.length > 0
+    rows.length === 0
+      ? single
+        ? 'Nothing in it yet'
+        : 'Pick workouts to see the week'
+      : single
+        ? rows.slice(0, 4).map((r) => `${r.name.toLowerCase()} ${r.sets}`).join(' · ')
+        : over.length > 0
         ? `${over.map((r) => r.name).join(', ')} over ${VOLUME_HIGH} sets`
         : `${rows.length} muscles · ${under.length} under ${VOLUME_LOW} sets · none over ${VOLUME_HIGH}`;
 
@@ -64,12 +74,15 @@ export function PlanLevels({
       >
         <HapticTick radius={8} />
         <span className="min-w-0 flex-1">
-          <span className="card-title">Week in Levels</span>
+          <span className="card-title">{title}</span>
           <span className="mt-0.5 block truncate text-[12px] font-medium text-text-dim">{summary}</span>
         </span>
+        {single && rows.length > 0 && (
+          <MiniMap entries={entries.filter((row) => order.includes(row.daySlot))} exercisesById={exercisesById} />
+        )}
         <span className="text-text-dim" aria-hidden="true">{open ? '▴' : '▾'}</span>
       </button>
-      {open && order.length > 0 && (
+      {open && rows.length > 0 && (
         <div className="mt-2">
           <Silhouette volume={volume} />
           <ul className="mt-2 grid grid-cols-2 gap-x-4" aria-label="Sets per muscle in a week of the plan">
@@ -79,15 +92,20 @@ export function PlanLevels({
                 className="flex items-baseline justify-between gap-2 border-t border-border py-1 text-[12.5px]"
               >
                 <span className="truncate font-medium">{row.name}</span>
-                <span className="shrink-0 font-semibold tabular-nums" style={{ color: statusColor(row.status) }}>
+                <span
+                  className="shrink-0 font-semibold tabular-nums"
+                  /* The under/over colours are weekly thresholds; one workout is not a week. */
+                  style={{ color: single ? undefined : statusColor(row.status) }}
+                >
                   {row.sets}
                 </span>
               </li>
             ))}
           </ul>
           <Label className="mt-2 block">
-            Sets a week, primary muscles counted in full and secondary in part. Blue is in range,
-            amber under {VOLUME_LOW}, red over {VOLUME_HIGH}.
+            {single
+              ? 'Sets in this workout, primary muscles counted in full and secondary in part.'
+              : `Sets a week, primary muscles counted in full and secondary in part. Blue is in range, amber under ${VOLUME_LOW}, red over ${VOLUME_HIGH}.`}
           </Label>
         </div>
       )}
