@@ -14,6 +14,9 @@ import { HapticTick } from './HapticTick';
 import { Card, Label, SegmentedToggle } from './Layout';
 import { Sheet } from './Sheet';
 import type { WorkoutGuide } from '../lib/workoutGuide';
+import type { BlockExercise, Exercise } from '../db/types';
+import { PlanLevels } from './PlanLevels';
+import { workoutTopMuscles } from '../lib/planLevels';
 
 /* -------------------------------------------------------------------------- */
 /*  The plan, at the top of Program: the order, the usual days, the week.      */
@@ -41,6 +44,8 @@ export function RotationCard({
   slots,
   labelFor,
   guideFor,
+  entries,
+  exercisesById,
   golfWeekdays,
 }: {
   block: Block;
@@ -51,6 +56,9 @@ export function RotationCard({
   labelFor: (slot: DaySlot) => string;
   /** Where each workout fits, read off its lifts. */
   guideFor: (slot: DaySlot) => WorkoutGuide | undefined;
+  /** Every row of the block, so a week of the order can be put on the body map. */
+  entries: BlockExercise[];
+  exercisesById: Map<string, Exercise>;
   golfWeekdays: Weekday[];
 }) {
   const [setup, setSetup] = useState(false);
@@ -87,6 +95,8 @@ export function RotationCard({
             slots={slots}
             labelFor={labelFor}
             guideFor={guideFor}
+            entries={entries}
+            exercisesById={exercisesById}
             golfWeekdays={golfWeekdays}
             onClose={() => setSetup(false)}
             onStart={(next) => {
@@ -161,6 +171,14 @@ export function RotationCard({
           );
         })}
       </ol>
+
+      <div className="mt-3">
+        <PlanLevels
+          order={rotation.trainingDays.length <= 3 ? rotation.order.filter((s) => !rotation.optional.includes(s)) : rotation.order}
+          entries={entries}
+          exercisesById={exercisesById}
+        />
+      </div>
 
       <Label className="mt-3 block">Days I usually train</Label>
       <div className="mt-1.5 grid grid-cols-7 gap-1" role="group" aria-label="Days I usually train">
@@ -254,6 +272,8 @@ function SetupSheet({
   slots,
   labelFor,
   guideFor,
+  entries,
+  exercisesById,
   golfWeekdays,
   onClose,
   onStart,
@@ -261,6 +281,8 @@ function SetupSheet({
   slots: DaySlot[];
   labelFor: (slot: DaySlot) => string;
   guideFor: (slot: DaySlot) => WorkoutGuide | undefined;
+  entries: BlockExercise[];
+  exercisesById: Map<string, Exercise>;
   golfWeekdays: Weekday[];
   onClose: () => void;
   onStart: (rotation: Rotation) => void;
@@ -332,6 +354,9 @@ function SetupSheet({
                     <span className={`block text-[11px] font-medium ${picked ? 'opacity-80' : 'text-text-dim'}`}>
                       {guideFor(slot)?.line ?? 'Empty'}
                     </span>
+                    <span className={`block text-[11px] font-medium ${picked ? 'opacity-80' : 'text-text-faint'}`}>
+                      {workoutTopMuscles(entries.filter((row) => row.daySlot === slot), exercisesById) || 'no sets'}
+                    </span>
                   </span>
                 </button>
                 {picked && (
@@ -351,6 +376,15 @@ function SetupSheet({
             );
           })}
         </div>
+      </div>
+
+      <div className="mt-3 rounded-2xl bg-surface p-4">
+        <PlanLevels
+          order={days.length <= 3 ? order.filter((s) => !optional.includes(s)) : order}
+          entries={entries}
+          exercisesById={exercisesById}
+          defaultOpen
+        />
       </div>
 
       <div className="mt-3 rounded-2xl bg-surface p-4">

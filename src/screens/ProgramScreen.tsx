@@ -1106,6 +1106,8 @@ export function ProgramScreen({
           slots={definedSlots}
           labelFor={labelFor}
           guideFor={(slot) => workoutGuide(entriesForSlot(slots ?? [], slot), byId, training.golfWeekdays as never)}
+          entries={slots ?? []}
+          exercisesById={byId}
           golfWeekdays={training.golfWeekdays as never}
         />
       )}
