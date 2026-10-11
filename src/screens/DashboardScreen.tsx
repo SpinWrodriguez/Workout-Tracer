@@ -47,10 +47,13 @@ const RING_ROW = 112;
 export function DashboardScreen({
   exercises,
   onStartDay,
+  onFreestyle,
   onOpenSettings,
 }: {
   exercises: Exercise[];
   onStartDay: (slot?: DaySlot) => void;
+  /** A session with no workout behind it: the rare case, so a line, not a button. */
+  onFreestyle?: () => void;
   onOpenSettings: () => void;
 }) {
   /*
@@ -394,8 +397,15 @@ export function DashboardScreen({
               </div>
             );
           })}
-
-
+          {onFreestyle && (
+            <button
+              type="button"
+              onClick={onFreestyle}
+              className="mt-3 w-full rounded-full bg-surface-2 py-2 text-[12.5px] font-medium text-text-dim"
+            >
+              Freestyle session, no workout behind it
+            </button>
+          )}
         </Card>
       )}
 

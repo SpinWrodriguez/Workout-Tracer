@@ -6,13 +6,10 @@ import { seedDatabase } from './db/seed';
 import { syncNow, syncWorkoutNow } from './lib/nutritionSync';
 import { startWorkoutAutoSync } from './lib/workoutAutoSync';
 import { BottomNav, type Tab } from './components/BottomNav';
-import { StartSheet, type StartOption } from './components/StartSheet';
-import { dayLabel } from './lib/dayLabel';
 import { ACTIVE_SESSION_KEY, readActiveSession } from './db/settings';
 import { ResumeBar } from './components/ResumeBar';
-import { CoachButton, CoachSheet } from './components/CoachSheet';
+import { CoachSheet } from './components/CoachSheet';
 import { isModelAvailable } from './lib/askModel';
-import { readWeekPlan } from './lib/weekPlan';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { LevelsScreen } from './screens/LevelsScreen';
@@ -28,7 +25,6 @@ type Route =
 export default function App() {
   const [ready, setReady] = useState(false);
   const [route, setRoute] = useState<Route>({ kind: 'tab', tab: 'dashboard' });
-  const [starting, setStarting] = useState(false);
   const [asking, setAsking] = useState(false);
   /* A question handed over by another screen — a session from History — asked
      the moment the sheet opens. */
@@ -67,36 +63,6 @@ export default function App() {
     });
   }, []);
 
-  /* Only read while the sheet is open: the + is not a reason to keep a query
-     alive behind every screen. */
-  const startOptions = useLiveQuery(async (): Promise<StartOption[]> => {
-    if (!starting) return [];
-    const plan = await readWeekPlan();
-    if (!plan) return [];
-    const byId = new Map((exercises ?? []).map((e) => [e.id, e]));
-    return plan.all.map((day) => {
-      const picked = day.entries
-        .map((entry) => byId.get(entry.exerciseId))
-        .filter((exercise) => exercise !== undefined);
-      return {
-        slot: day.slot,
-        label: dayLabel({
-          slot: day.slot,
-          name: day.name,
-          exercises: picked,
-          intensity: day.intensity,
-        }),
-        weekday: day.weekday,
-        date: day.date,
-        exerciseCount: day.entries.length,
-        done: day.done,
-        isToday: day.date !== undefined && day.date === plan.today,
-        isNext: day.slot === plan.next,
-        preview: picked.slice(0, 3).map((exercise) => exercise.name).join(' · '),
-      };
-    });
-  }, [starting, exercises]);
-
   if (!ready || exercises === undefined) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-bg">
@@ -127,6 +93,7 @@ export default function App() {
         <DashboardScreen
           exercises={exercises}
           onStartDay={startSession}
+          onFreestyle={() => setRoute({ kind: 'session', freestyle: true })}
           onOpenSettings={() => setRoute({ kind: 'tab', tab: 'settings' })}
         />
       )}
@@ -144,14 +111,6 @@ export default function App() {
       )}
       {route.tab === 'settings' && <SettingsScreen />}
 
-      {/* Not offered where nothing can answer it. `isModelAvailable` is false
-          with no key and no relay, and turns false again the moment a relay is
-          found not to be deployed — so the button does not sit there promising
-          an answer the app cannot get. */}
-      {isModelAvailable() && (
-        <CoachButton onOpen={() => setAsking(true)} raised={active !== undefined} />
-      )}
-
       {/* Above the nav, on every tab, whenever a workout is unfinished. The
           point of letting you leave mid-session is being able to get back. */}
       {active && (
@@ -164,7 +123,11 @@ export default function App() {
       <BottomNav
         tab={route.tab}
         onTab={(tab) => setRoute({ kind: 'tab', tab })}
-        onNewSession={() => setStarting(true)}
+        /* Not offered where nothing can answer it. `isModelAvailable` is
+           false with no key and no relay, and turns false again the moment a
+           relay is found not to be deployed — so the button does not sit
+           there promising an answer the app cannot get. */
+        onCoach={isModelAvailable() ? () => setAsking(true) : undefined}
       />
 
       {asking && (
@@ -182,20 +145,6 @@ export default function App() {
         />
       )}
 
-      {starting && (
-        <StartSheet
-          options={startOptions ?? []}
-          onPick={(slot) => {
-            setStarting(false);
-            startSession(slot);
-          }}
-          onFreestyle={() => {
-            setStarting(false);
-            setRoute({ kind: 'session', freestyle: true });
-          }}
-          onClose={() => setStarting(false)}
-        />
-      )}
     </>
   );
 }

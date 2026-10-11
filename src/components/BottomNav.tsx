@@ -70,11 +70,12 @@ function NavButton({
 export function BottomNav({
   tab,
   onTab,
-  onNewSession,
+  onCoach,
 }: {
   tab: Tab;
   onTab: (next: Tab) => void;
-  onNewSession: () => void;
+  /** The centre button: ask the coach from any screen. Absent when no model can answer. */
+  onCoach?: () => void;
 }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 bg-bg pb-[env(safe-area-inset-bottom)]">
@@ -84,20 +85,32 @@ export function BottomNav({
           <NavButton key={t} tab={t} active={tab === t} onClick={() => onTab(t)} />
         ))}
 
-        {/* Centre slot: keeps the grid at five, the FAB floats above the bar. */}
+        {/* Centre slot: keeps the grid at five, the FAB floats above the bar.
+            It was Start a session, which every screen already offers where
+            the workout is; the coach is the one thing wanted from any tab. */}
         <div className="w-16 shrink-0" aria-hidden="true" />
-        <button
-          type="button"
-          onClick={() => {
-            tap();
-            onNewSession();
-          }}
-          aria-label="Start a session"
-          className="absolute -top-6 left-1/2 flex size-14 -translate-x-1/2 items-center justify-center rounded-full bg-cta text-3xl leading-none font-light text-bg"
-        >
-          +
-          <HapticTick />
-        </button>
+        {onCoach && (
+          <button
+            type="button"
+            onClick={() => {
+              tap();
+              onCoach();
+            }}
+            aria-label="Ask about my training"
+            className="absolute -top-6 left-1/2 flex size-14 -translate-x-1/2 items-center justify-center rounded-full bg-cta text-bg"
+          >
+            <svg viewBox="0 0 24 24" className="size-6" fill="none" aria-hidden="true">
+              <path
+                d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12Z"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinejoin="round"
+              />
+              <path d="M9 11h6m-6 3h3.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            </svg>
+            <HapticTick />
+          </button>
+        )}
 
         {RIGHT.map((t) => (
           <NavButton key={t} tab={t} active={tab === t} onClick={() => onTab(t)} />

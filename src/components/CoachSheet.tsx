@@ -354,31 +354,3 @@ export function CoachSheet({
 }
 
 /** The floating button. Raised clear of the resume bar when one is showing. */
-export function CoachButton({ onOpen, raised }: { onOpen: () => void; raised: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label="Ask about my training"
-      /* Violet: the one accent the workout screens do not already use for
-         something, so it reads as "the AI thing" rather than as a set count
-         or a rule warning. Both themes define it. */
-      style={{ background: 'var(--color-bodyweight)', color: 'var(--color-bg)' }}
-      className={`fixed right-4 z-30 flex size-12 items-center justify-center rounded-full shadow-lg transition-transform active:scale-95 ${
-        raised
-          ? 'bottom-[calc(env(safe-area-inset-bottom)+124px)]'
-          : 'bottom-[calc(env(safe-area-inset-bottom)+76px)]'
-      }`}
-    >
-      <svg viewBox="0 0 24 24" className="size-5.5" fill="none" aria-hidden="true">
-        <path
-          d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12Z"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinejoin="round"
-        />
-        <path d="M9 11h6m-6 3h3.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      </svg>
-    </button>
-  );
-}
