@@ -97,6 +97,7 @@ export function DaySlotCard({
   minutes,
   note,
   noteSevere,
+  guide,
   editing,
   isToday,
   doneThisWeek = false,
@@ -132,6 +133,8 @@ export function DaySlotCard({
   note?: string;
   /** True where the note is a prohibition rather than a heads-up. */
   noteSevere?: boolean;
+  /** Where this workout fits in a week, read off its lifts (workoutGuide). */
+  guide?: string;
   editing: boolean;
   isToday: boolean;
   /**
@@ -428,6 +431,9 @@ export function DaySlotCard({
             <Chevron open={open} />
           </button>
         ))}
+      {guide && !editing && (
+        <p className="mt-1 text-[12px] leading-snug font-medium text-text-dim">{guide}</p>
+      )}
 
       {editing && (
         <label className="mt-1 mb-3 block">

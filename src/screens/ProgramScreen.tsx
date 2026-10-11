@@ -51,6 +51,7 @@ import {
 } from '../lib/program';
 import { DayEditor, type DayEditorSlot } from '../components/DayEditor';
 import { RotationCard } from '../components/RotationCard';
+import { workoutGuide } from '../lib/workoutGuide';
 import { forecastWeek, offerFor, readRotation, readRotationSessions } from '../lib/rotation';
 import { NewWorkoutSheet } from '../components/NewWorkoutSheet';
 import { isModelAvailable } from '../lib/askModel';
@@ -1104,6 +1105,7 @@ export function ProgramScreen({
           sessions={rotationSessions ?? []}
           slots={definedSlots}
           labelFor={labelFor}
+          guideFor={(slot) => workoutGuide(entriesForSlot(slots ?? [], slot), byId, training.golfWeekdays as never)}
           golfWeekdays={training.golfWeekdays as never}
         />
       )}
@@ -1280,6 +1282,7 @@ export function ProgramScreen({
               date !== undefined &&
               gripBufferNote(date, golfDateList)?.severity === 'blocked'
             }
+            guide={workoutGuide(list, byId, training.golfWeekdays as never)?.line}
             /* Real minutes, not the model's: the same learned factor that
                sized the budget this day was built to. */
             minutes={list.length > 0 ? realMinutes(estimateMinutes(list, byId), timeFactor) : undefined}

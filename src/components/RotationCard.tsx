@@ -13,6 +13,7 @@ import {
 import { HapticTick } from './HapticTick';
 import { Card, Label, SegmentedToggle } from './Layout';
 import { Sheet } from './Sheet';
+import type { WorkoutGuide } from '../lib/workoutGuide';
 
 /* -------------------------------------------------------------------------- */
 /*  The plan, at the top of Program: the order, the usual days, the week.      */
@@ -23,6 +24,14 @@ import { Sheet } from './Sheet';
 /* -------------------------------------------------------------------------- */
 
 const ALL_DAYS: Weekday[] = [1, 2, 3, 4, 5, 6, 7];
+
+/** The guide in three words for a list row: "Lower · heavy legs, grip". */
+function shortGuide(guide: WorkoutGuide | undefined): string {
+  if (!guide) return 'empty';
+  if (guide.golfSafe) return `${guide.body} · golf-safe`;
+  const loads = [guide.heavyLegs ? 'heavy legs' : '', guide.grip ? 'grip' : '', guide.spine && !guide.heavyLegs ? 'heavy spine' : ''].filter(Boolean);
+  return `${guide.body} · ${loads.join(', ')} · not the day before golf`;
+}
 const WEEK_OPTIONS = ['6', '8', '10'] as const;
 
 export function RotationCard({
@@ -31,6 +40,7 @@ export function RotationCard({
   sessions,
   slots,
   labelFor,
+  guideFor,
   golfWeekdays,
 }: {
   block: Block;
@@ -39,6 +49,8 @@ export function RotationCard({
   /** Every workout the block defines, in slot order. */
   slots: DaySlot[];
   labelFor: (slot: DaySlot) => string;
+  /** Where each workout fits, read off its lifts. */
+  guideFor: (slot: DaySlot) => WorkoutGuide | undefined;
   golfWeekdays: Weekday[];
 }) {
   const [setup, setSetup] = useState(false);
@@ -74,6 +86,7 @@ export function RotationCard({
           <SetupSheet
             slots={slots}
             labelFor={labelFor}
+            guideFor={guideFor}
             golfWeekdays={golfWeekdays}
             onClose={() => setSetup(false)}
             onStart={(next) => {
@@ -135,8 +148,13 @@ export function RotationCard({
               } ${skipped ? 'opacity-60' : ''}`}
             >
               <span className="w-5 text-[13px] font-bold">{slot}</span>
-              <span className="min-w-0 flex-1 truncate text-[14px] font-semibold">{labelFor(slot)}</span>
-              <span className={`text-[11px] font-medium ${isNext ? 'opacity-80' : 'text-text-dim'}`}>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14px] font-semibold">{labelFor(slot)}</span>
+                <span className={`block text-[11px] font-medium ${isNext ? 'opacity-80' : 'text-text-dim'}`}>
+                  {shortGuide(guideFor(slot))}
+                </span>
+              </span>
+              <span className={`shrink-0 text-[11px] font-medium ${isNext ? 'opacity-80' : 'text-text-dim'}`}>
                 {isNext ? 'next' : skipped ? 'skipped on 3-day weeks' : optional ? '4-day weeks' : ''}
               </span>
             </li>
@@ -235,12 +253,14 @@ function DayChip({
 function SetupSheet({
   slots,
   labelFor,
+  guideFor,
   golfWeekdays,
   onClose,
   onStart,
 }: {
   slots: DaySlot[];
   labelFor: (slot: DaySlot) => string;
+  guideFor: (slot: DaySlot) => WorkoutGuide | undefined;
   golfWeekdays: Weekday[];
   onClose: () => void;
   onStart: (rotation: Rotation) => void;
@@ -287,8 +307,9 @@ function SetupSheet({
       <div className="rounded-2xl bg-surface p-4">
         <span className="card-title">Workouts, in order</span>
         <p className="mt-1 text-[13px] font-medium text-text-dim">
-          Tap in the order you want them to repeat. Mark one as 4-day only if it should be
-          skipped on three-day weeks.
+          Tap in the order you want them to repeat. Put an upper day between two lower
+          days, and the golf-safe one where it can land on the day before golf. Mark one
+          as 4-day only if it should be skipped on three-day weeks.
         </p>
         <div className="mt-2 flex flex-col gap-1.5">
           {slots.map((slot) => {
@@ -306,7 +327,12 @@ function SetupSheet({
                   }`}
                 >
                   <span className="w-5 text-[13px] font-bold tabular-nums">{picked ? at + 1 : '·'}</span>
-                  <span className="min-w-0 flex-1 truncate text-[14px] font-semibold">{labelFor(slot)}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-semibold">{labelFor(slot)}</span>
+                    <span className={`block text-[11px] font-medium ${picked ? 'opacity-80' : 'text-text-dim'}`}>
+                      {guideFor(slot)?.line ?? 'Empty'}
+                    </span>
+                  </span>
                 </button>
                 {picked && (
                   <button
