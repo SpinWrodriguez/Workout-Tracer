@@ -41,10 +41,14 @@ function NavButton({
   return (
     <button
       type="button"
-      onClick={onClick}
-      className="flex flex-1 flex-col items-center gap-1 py-2"
+      onClick={() => {
+        tap();
+        onClick();
+      }}
+      className="relative flex flex-1 flex-col items-center gap-1 py-2"
       aria-current={active ? 'page' : undefined}
     >
+      <HapticTick radius={0} />
       <svg viewBox="0 0 24 24" className="size-5.5" fill="none" aria-hidden="true">
         <path
           d={ICONS[tab]}

@@ -25,7 +25,7 @@ import { useCallback } from 'react';
 /*  down, a workout started, saved or was thrown away, a generation was      */
 /*  asked for. Roughly a dozen places in the app.                            */
 /*                                                                           */
-/*  Also on the collapse/expand toggles — a card header, a workout's exercise */
+/*  Also on the tabs of the bottom bar, and on the collapse/expand toggles — a card header, a workout's exercise */
 /*  list, the rule-note dot — because the lifter asked for it: a fold that    */
 /*  ticks is one you know you hit. Beyond those it does not belong on         */
 /*  navigation, on opening or closing a sheet, on the keypad, or on the +/-   */
