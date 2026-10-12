@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { db } from '../db/db';
 import type { BlockExercise, DaySlot, Exercise, SetLog } from '../db/types';
 import { CABLE_STACK_KG, STATION_LABEL } from '../db/seed/exercises';
-import { MUSCLE_BY_ID } from '../db/seed/muscles';
-import { colorForRegion, regionOf } from '../lib/region';
 import { DEFAULT_BLOCK_ID } from '../db/seed';
 import { tap } from '../lib/haptics';
 import { HapticTick } from '../components/HapticTick';
@@ -33,7 +31,7 @@ import {
   type HistorySet,
   type Progression,
 } from '../lib/progression';
-import { friendlyDate, kg, todayIso } from '../lib/format';
+import { clock, kg, todayIso } from '../lib/format';
 import {
   countLoggedSets,
   deleteSession,
@@ -44,15 +42,17 @@ import {
   type DraftSet,
   type SessionDraft,
 } from '../lib/sessions';
-import { Card, Label, Screen } from '../components/Layout';
+import { Card, Screen } from '../components/Layout';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ExerciseDetail } from '../components/ExerciseDetail';
 import { ExerciseStrip } from '../components/ExerciseStrip';
 import { EffortPicker } from '../components/EffortPicker';
 import { NumberPad, type PadTarget } from '../components/NumberPad';
-import { RestTimerBar } from '../components/RestTimer';
+import { RestBar, RestChips } from '../components/RestTimer';
 import { restChoices, useRestTimer } from '../lib/restTimer';
-import { SetRow, type CellField } from '../components/SetRow';
+import { SetRow, type CellField, type Ghost } from '../components/SetRow';
+import { MiniMap } from '../components/PlanLevels';
+import { FinishSheet } from '../components/FinishSheet';
 import { dayLabel } from '../lib/dayLabel';
 import { isTimed, rangeLabel, repUnitWord, stepFor } from '../lib/repUnit';
 
@@ -133,6 +133,17 @@ export function SessionScreen({
   const [notesFor, setNotesFor] = useState<string | undefined>(undefined);
   const [targets, setTargets] = useState<Record<string, BlockExercise>>({});
   const [saving, setSaving] = useState(false);
+  /** The rest chips, open from the "rest 3:00" on the exercise. */
+  const [restOpen, setRestOpen] = useState(false);
+  /** Date, minutes, notes and the destructive buttons, behind Finish. */
+  const [finishOpen, setFinishOpen] = useState(false);
+  /* The clock in the corner, for a live session: how long you have been at it. */
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (sessionId) return;
+    const handle = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(handle);
+  }, [sessionId]);
   /* The rest comes from the exercise being logged: 30 seconds for a band walk,
      180 for a heavy deadlift. The timer counted 120 for all of it. */
   const timer = useRestTimer(
@@ -451,10 +462,20 @@ export function SessionScreen({
     ? entriesForSlot(plan.entries, (draft?.daySlot as DaySlot) ?? 'A')
     : [];
 
-  const toggleDone = (exerciseId: string, setIndex: number, set: DraftSet) => {
+  /**
+   * The tick. A set with nothing typed in it logs what the row was showing
+   * in faint type — last time plus the step — so a set that went to plan is
+   * one tap. Only a set with reps against it starts the rest.
+   */
+  const toggleDone = (exerciseId: string, setIndex: number, set: DraftSet, ghost?: Ghost) => {
     const nextDone = !set.done;
-    patchSet(exerciseId, setIndex, { done: nextDone });
-    if (nextDone && isLoggable(set)) timer.start();
+    const fill: Partial<DraftSet> = {};
+    if (nextDone && set.reps === undefined && ghost?.reps !== undefined) fill.reps = ghost.reps;
+    if (nextDone && set.weightKg === undefined && ghost?.weightKg !== undefined) {
+      fill.weightKg = ghost.weightKg;
+    }
+    patchSet(exerciseId, setIndex, { ...fill, done: nextDone });
+    if (nextDone && isLoggable({ ...set, ...fill })) timer.start();
   };
 
   /* --- keypad plumbing --------------------------------------------------- */
@@ -624,32 +645,33 @@ export function SessionScreen({
     .map((e) => exercisesById.get(e.exerciseId))
     .filter((e): e is Exercise => Boolean(e));
 
-  const loggedCounts = Object.fromEntries(
-    draft.exercises.map((e) => [e.exerciseId, e.sets.filter(isLoggable).length]),
+  const progress = Object.fromEntries(
+    draft.exercises.map((e) => [
+      e.exerciseId,
+      { logged: e.sets.filter((set) => set.done && isLoggable(set)).length, total: e.sets.length },
+    ]),
   );
 
   /* The golf rule and the hinge-fatigue note, spec Phase 3. Computed over the
      whole draft in performance order, not just the active exercise. */
-  const warnings: RuleWarning[] = draft
-    ? sessionWarnings(
-        {
-          date: draft.date,
-          exercises: draft.exercises.map((e) => ({
-            exerciseId: e.exerciseId,
-            loggedSets: e.sets.filter(isLoggable).length,
-          })),
-        },
-        exercisesById,
-        golfDates,
-      ).filter((w) => !dismissed.includes(`${w.exerciseId}:${w.title}`))
-    : [];
+  const warnings: RuleWarning[] = sessionWarnings(
+    {
+      date: draft.date,
+      exercises: draft.exercises.map((e) => ({
+        exerciseId: e.exerciseId,
+        loggedSets: e.sets.filter(isLoggable).length,
+      })),
+    },
+    exercisesById,
+    golfDates,
+  ).filter((w) => !dismissed.includes(`${w.exerciseId}:${w.title}`));
 
   /* Only the exercise in hand. The rest are true but not yet useful, and the
      one you are on is the one you can act on. */
   const activeWarnings = warnings.filter((warning) => warning.exerciseId === activeId);
 
   /* A light day carries its own instruction, set by the template. */
-  const effortCue = draft ? plan?.schedule[draft.daySlot as DaySlot]?.effortCue : undefined;
+  const effortCue = plan?.schedule[draft.daySlot as DaySlot]?.effortCue;
 
   const previous = activeId ? history[activeId] : undefined;
   const target = activeId ? targets[activeId] : undefined;
@@ -669,19 +691,85 @@ export function SessionScreen({
         })
       : undefined;
 
+  /*
+   * What a bare tick logs for each set: the suggested weight if there is
+   * one, else last time's for that set, else the set above; last time's reps
+   * for that set, else the top of the range. Shown faint in the row.
+   */
+  const ghostFor = (setIndex: number): Ghost | undefined => {
+    if (!activeExercise || !activeDraftExercise) return undefined;
+    const weightless = activeExercise.loadMode === 'bodyweight' || activeExercise.loadMode === 'rpe_only';
+    const prior = previous?.find((p) => p.setNo === setIndex + 1);
+    const above = activeDraftExercise.sets
+      .slice(0, setIndex)
+      .reverse()
+      .find((set) => set.weightKg !== undefined);
+    const weightKg = weightless
+      ? undefined
+      : (suggestion?.suggestedKg ?? above?.weightKg ?? prior?.weightKg);
+    const reps = prior?.reps ?? (target ? repHigh : undefined);
+    return weightKg === undefined && reps === undefined ? undefined : { weightKg, reps };
+  };
+
+  /* "Last time 50 kg × 10, 10, 9": the whole previous session in a line. */
+  const lastTime = (() => {
+    if (!activeExercise || !previous || previous.length === 0) return undefined;
+    const unit = isTimed(activeExercise) ? 's' : '';
+    const weights = new Set(previous.map((p) => p.weightKg));
+    const reps = previous.map((p) => `${p.reps ?? '--'}${unit}`).join(', ');
+    if (weights.size === 1 && previous[0]?.weightKg !== undefined) {
+      return `Last time ${kg(previous[0].weightKg)} kg × ${reps}`;
+    }
+    if (weights.size === 1) return `Last time ${reps}`;
+    return `Last time ${previous.map((p) => `${p.weightKg === undefined ? '' : `${kg(p.weightKg)}×`}${p.reps ?? '--'}`).join(', ')}`;
+  })();
+
+  const activeIndex = draft.exercises.findIndex((e) => e.exerciseId === activeId);
+  const nextExercise =
+    activeIndex >= 0 ? exercisesById.get(draft.exercises[activeIndex + 1]?.exerciseId ?? '') : undefined;
+  const activeDone =
+    activeDraftExercise !== undefined &&
+    activeDraftExercise.sets.length > 0 &&
+    activeDraftExercise.sets.every((set) => set.done);
+  const currentSetIndex = activeDraftExercise?.sets.findIndex((set) => !set.done) ?? -1;
+  const elapsedMin = Math.max(0, Math.floor((now - startedAt) / 60000));
+  const restCaption = activeExercise
+    ? currentSetIndex >= 0
+      ? `rest · set ${currentSetIndex + 1} next`
+      : nextExercise
+        ? `rest · ${nextExercise.name} next`
+        : 'rest'
+    : 'rest';
+
   return (
     <>
       <Screen
-        title="Workout"
-        pad={cell ? 'keypad' : 'none'}
+        title={programmedName ?? 'Workout'}
+        compactTitle
+        pad={cell ? 'keypad' : timer.running ? 'cta' : 'none'}
         trailing={
           <span className="flex items-center gap-2 pb-1">
-            <span className="text-[13px] font-medium text-text-dim">
-              {friendlyDate(draft.date)}
-            </span>
+            {!sessionId && (
+              <span className="text-[13px] font-semibold whitespace-nowrap text-text-dim tabular-nums">
+                {elapsedMin} min
+              </span>
+            )}
+            {(sessionId || loggedSets > 0) && (
+              <button
+                type="button"
+                onClick={() => {
+                  tap();
+                  setFinishOpen(true);
+                }}
+                className="relative rounded-full bg-surface px-3.5 py-1.5 text-[13px] font-bold"
+              >
+                {sessionId ? 'Details' : 'Finish'}
+                <HapticTick />
+              </button>
+            )}
             {/* No warning any more: the draft is on disk, so leaving costs
                 nothing and asking would be theatre. Discard is the button that
-                destroys work, and it lives at the bottom with Delete. */}
+                destroys work, and it lives behind Finish. */}
             <button
               type="button"
               onClick={onExit}
@@ -699,19 +787,14 @@ export function SessionScreen({
                 <p className="mt-0.5 text-[14px] font-medium">{effortCue}</p>
               </div>
             )}
-            <RestTimerBar
-              timer={timer}
-              /* The exercise's own rest, first among the chips: the timer
-                 counted 120 for everything, so a band walk and a heavy triple
-                 got the same two minutes. */
-              presets={restChoices(activeExercise?.restSeconds)}
-              onPresetChange={timer.setDuration}
-            />
             <ExerciseStrip
               exercises={stripExercises}
               activeId={activeId}
-              loggedCounts={loggedCounts}
-              onSelect={setActiveId}
+              progress={progress}
+              onSelect={(id) => {
+                setActiveId(id);
+                setRestOpen(false);
+              }}
               onAdd={() => setPicking(true)}
             />
           </>
@@ -738,70 +821,116 @@ export function SessionScreen({
             </button>
           </Card>
         ) : (
-          <Card
-            title={activeExercise.name}
-            trailing={
-              <span className="flex items-center gap-3">
-                {activeWarnings.length > 0 && (
+          <Card>
+            {/* The head: name, prescription, last time, and the body. */}
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <h2 className="font-display text-[24px] leading-[1.05] font-extrabold tracking-tight">
+                    {activeExercise.name}
+                  </h2>
+                  <span className="flex shrink-0 items-center gap-2.5 pt-1">
+                    {activeWarnings.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          tap();
+                          setNotesFor((prev) => (prev === activeExercise.id ? undefined : activeExercise.id));
+                        }}
+                        aria-label={`${activeWarnings.length} note${
+                          activeWarnings.length === 1 ? '' : 's'
+                        } about ${activeExercise.name}`}
+                        aria-expanded={notesFor === activeExercise.id}
+                        className="relative flex size-6 items-center justify-center"
+                      >
+                        <HapticTick radius={12} />
+                        <span
+                          className="size-2.5 rounded-full"
+                          style={{
+                            background: activeWarnings.some((w) => w.level === 'warn')
+                              ? 'var(--color-danger)'
+                              : 'var(--color-warn)',
+                          }}
+                          aria-hidden="true"
+                        />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setDetailId(activeExercise.id)}
+                      aria-label={`About ${activeExercise.name}`}
+                      className="text-text-dim"
+                    >
+                      <svg viewBox="0 0 24 24" className="size-5" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+                        <path d="M12 11v5.5M12 7.6v.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeExercise(activeExercise.id)}
+                      className="text-[12px] font-medium text-text-dim"
+                    >
+                      Remove
+                    </button>
+                  </span>
+                </div>
+                {/* The prescription, in one line: sets × reps, the station,
+                    the bar, and the rest, which opens the chips. */}
+                <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13.5px] font-semibold text-text-dim">
+                  <span className="text-text">
+                    {target
+                      ? `${activeDraftExercise.sets.length} × ${rangeLabel(activeExercise, target.repRangeLow, target.repRangeHigh)}`
+                      : `${activeDraftExercise.sets.length} set${activeDraftExercise.sets.length === 1 ? '' : 's'}`}
+                  </span>
+                  <span>· {STATION_LABEL[activeExercise.station].toLowerCase()}</span>
+                  {barWeightFor(activeExercise, inventory) !== undefined && (
+                    <span>· bar {barWeightFor(activeExercise, inventory)} kg</span>
+                  )}
+                  {hasLoadTranslation(activeExercise) && (
+                    <span className="text-strength">· ×{activeExercise.loadMultiplier.toFixed(2)} of {CABLE_STACK_KG} kg stack</span>
+                  )}
+                  {activeExercise.loadMode === 'band' && <span>· kg is the band's rating</span>}
+                  {activeExercise.isHinge && <span>· hinge, do it fresh</span>}
                   <button
                     type="button"
                     onClick={() => {
                       tap();
-                      setNotesFor((prev) => (prev === activeExercise.id ? undefined : activeExercise.id));
+                      setRestOpen((open) => !open);
                     }}
-                    aria-label={`${activeWarnings.length} note${
-                      activeWarnings.length === 1 ? '' : 's'
-                    } about ${activeExercise.name}`}
-                    aria-expanded={notesFor === activeExercise.id}
-                    className="relative flex size-6 items-center justify-center"
+                    aria-expanded={restOpen}
+                    aria-label={`Rest ${clock(timer.durationSec)}, tap to change`}
+                    className="relative"
                   >
-                    <HapticTick radius={12} />
-                    <span
-                      className="size-2.5 rounded-full"
-                      style={{
-                        background: activeWarnings.some((w) => w.level === 'warn')
-                          ? 'var(--color-danger)'
-                          : 'var(--color-warn)',
-                      }}
-                      aria-hidden="true"
-                    />
+                    · rest <span className="tabular-nums">{clock(timer.durationSec)}</span>
+                    <HapticTick radius={8} />
                   </button>
+                </p>
+                {lastTime && (
+                  <p className="mt-0.5 text-[12.5px] font-medium text-text-dim tabular-nums">{lastTime}</p>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setDetailId(activeExercise.id)}
-                  aria-label={`About ${activeExercise.name}`}
-                  className="text-text-dim"
-                >
-                  <svg viewBox="0 0 24 24" className="size-4.5" fill="none" aria-hidden="true">
-                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
-                    <path
-                      d="M12 11v5.5M12 7.6v.8"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removeExercise(activeExercise.id)}
-                  className="text-[12px] font-medium text-text-dim"
-                >
-                  Remove
-                </button>
-              </span>
-            }
-          >
-            {/* Above the set rows of the exercise it is about, rather than
-                stacked over the whole session. A note on the fifth exercise
-                used to sit on top of the first one's set rows, pushing the
-                work down the screen to say something about a lift twenty
-                minutes away — and by the time it mattered you had dismissed
-                it to get it out of the way.
+              </div>
+              <MiniMap
+                entries={[{ exerciseId: activeExercise.id, targetSets: activeDraftExercise.sets.length }]}
+                exercisesById={exercisesById}
+              />
+            </div>
 
-                Now behind a dot by the name: the sentence shows on a tap, so
-                the screen stays the work and the note stays one tap away. */}
+            {restOpen && (
+              <div className="mt-3">
+                <RestChips
+                  timer={timer}
+                  /* The exercise's own rest, first among the chips: the timer
+                     counted 120 for everything, so a band walk and a heavy
+                     triple got the same two minutes. */
+                  presets={restChoices(activeExercise.restSeconds)}
+                  onPresetChange={timer.setDuration}
+                />
+              </div>
+            )}
+
+            {/* Behind a dot by the name: the sentence shows on a tap, so the
+                screen stays the work and the note stays one tap away. */}
             {notesFor === activeId && activeWarnings.map((warning) => (
               <button
                 key={`${warning.exerciseId}:${warning.title}`}
@@ -809,7 +938,7 @@ export function SessionScreen({
                 onClick={() =>
                   setDismissed((prev) => [...prev, `${warning.exerciseId}:${warning.title}`])
                 }
-                className="mb-2.5 w-full rounded-xl px-3.5 py-2.5 text-left"
+                className="mt-3 w-full rounded-xl px-3.5 py-2.5 text-left"
                 style={
                   // The danger pair is themed: a dark red fill with white text
                   // in dark, a tinted fill with dark red text in light. --text
@@ -839,133 +968,57 @@ export function SessionScreen({
               </button>
             ))}
 
-            {/* What it trains, coloured by region. The one bit of colour on
-                this screen that is information rather than decoration: blue
-                is upper body, orange lower, cyan core. */}
-            <div className="mb-2.5 flex flex-wrap gap-1.5">
-              {activeExercise.primaryMuscles.map((muscle) => (
-                <span
-                  key={muscle}
-                  className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                  style={{
-                    color: colorForRegion(regionOf(muscle)),
-                    background: 'color-mix(in oklab, currentColor 14%, transparent)',
-                  }}
-                >
-                  {MUSCLE_BY_ID[muscle]?.name ?? muscle}
-                </span>
-              ))}
-              {activeExercise.secondaryMuscles.slice(0, 2).map((muscle) => (
-                <span
-                  key={muscle}
-                  className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-text-dim"
-                >
-                  {MUSCLE_BY_ID[muscle]?.name ?? muscle}
-                </span>
-              ))}
-            </div>
-
-            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <Label>{STATION_LABEL[activeExercise.station]}</Label>
-              {hasLoadTranslation(activeExercise) && (
-                <Label className="text-strength!">
-                  ×{activeExercise.loadMultiplier.toFixed(2)} · {CABLE_STACK_KG} kg stack
-                </Label>
-              )}
-              {/* From Settings, not from the seed. The ladder has always
-                  asked barWeightFor for the real bar; this line read the
-                  seeded 20 and went on saying it after the bar in the garage
-                  was set to 15 — so the weights you could pick were right and
-                  the caption above them was wrong. */}
-              {barWeightFor(activeExercise, inventory) !== undefined && (
-                <Label>bar {barWeightFor(activeExercise, inventory)} kg</Label>
-              )}
-              {activeExercise.loadMode === 'rpe_only' && (
-                <Label>no load — log RPE and reps only</Label>
-              )}
-              {/* The station label already says Band, so no "band —" prefix. */}
-              {activeExercise.loadMode === 'band' && (
-                <Label>kg is the rating on the band</Label>
-              )}
-              {activeExercise.isHinge && <Label>hinge — do this fresh</Label>}
-            </div>
-
             {/* The lifter's own cue, in their own words, where it is needed:
                 mid-set. One line; edited from the exercise detail sheet. */}
             {exerciseNotes[activeExercise.id] && (
-              <p className="-mt-1 mb-3 text-[13px] italic text-text-dim">
+              <p className="mt-3 text-[13px] italic text-text-dim">
                 &ldquo;{exerciseNotes[activeExercise.id]}&rdquo;
               </p>
             )}
 
+            {/* The coaching line: a tag and a sentence. Tapping it fills
+                every unlogged set with the suggested load. */}
             {suggestion && (
               <button
                 type="button"
                 onClick={() => applySuggestion(activeExercise.id, suggestion)}
-                className="mb-3 w-full rounded-xl bg-surface-2 px-3 py-2.5 text-left"
+                className="mt-3 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left"
+                style={{ background: `color-mix(in oklab, ${outcomeColor(suggestion.outcome)} 12%, transparent)` }}
               >
-                <span className="flex items-baseline justify-between gap-3">
-                  <span className="flex items-baseline gap-2">
-                    <span
-                      className="rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase text-bg"
-                      style={{ background: outcomeColor(suggestion.outcome) }}
-                    >
-                      {OUTCOME_LABEL[suggestion.outcome]}
-                    </span>
-                    <span className="text-[17px] font-semibold">
-                      {suggestion.suggestedKg === undefined
-                        ? `${repHigh} reps`
-                        : `${kg(suggestion.suggestedKg)} kg`}
-                    </span>
-                    <span className="label">
-                      × {repLow}-{repHigh}
-                    </span>
-                  </span>
+                <span
+                  className="shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-extrabold tracking-wide uppercase text-bg"
+                  style={{ background: outcomeColor(suggestion.outcome) }}
+                >
+                  {OUTCOME_LABEL[suggestion.outcome]}
+                </span>
+                <span className="min-w-0 flex-1 text-[13px] leading-snug font-medium">
                   {suggestion.suggestedKg !== undefined && (
-                    <span className="label whitespace-nowrap">tap to fill</span>
+                    <b className="font-semibold">
+                      {suggestion.suggestedKg !== undefined && activeExercise.loadMode === 'band'
+                        ? `${kg(suggestion.suggestedKg)} band`
+                        : `${kg(suggestion.suggestedKg)} kg`}{' '}
+                      × {rangeLabel(activeExercise, repLow, repHigh)}.{' '}
+                    </b>
+                  )}
+                  {suggestion.reason}
+                  {suggestion.microplateNote && (
+                    <span className="block text-[11.5px]" style={{ color: 'var(--color-warn)' }}>
+                      {suggestion.microplateNote}
+                    </span>
                   )}
                 </span>
-                <span className="mt-1 block text-[11px] leading-snug font-medium text-text-dim">
-                  {suggestion.reason}
-                </span>
-                {suggestion.microplateNote && (
-                  <span
-                    className="mt-1 block text-[11px] leading-snug font-medium"
-                    style={{ color: 'var(--color-warn)' }}
-                  >
-                    {suggestion.microplateNote}
-                  </span>
-                )}
               </button>
             )}
 
-            <div className="flex items-center gap-2 pb-1">
-              <span className="w-7 shrink-0" />
-              <span className="label w-14 shrink-0">{target ? 'target' : 'last time'}</span>
-              <span className="label flex-1 text-center">
-                {activeExercise.station === 'cable' ? 'stack' : 'weight'}
-              </span>
-              <span className="label flex-1 text-center">reps</span>
-              <span className="w-14 shrink-0" />
-              <span className="w-8 shrink-0" />
-            </div>
-
-            {activeDraftExercise.sets.map((set, index) => {
-              const prior = previous?.find((p) => p.setNo === set.setNo);
-              const targetText = prior
-                ? prior.weightKg === undefined
-                  ? `${prior.reps}`
-                  : `${kg(prior.weightKg)}×${prior.reps}`
-                : target
-                  ? rangeLabel(activeExercise, target.repRangeLow, target.repRangeHigh)
-                  : undefined;
-              return (
+            <div className="mt-3 flex flex-col gap-1.5">
+              {activeDraftExercise.sets.map((set, index) => (
                 <SetRow
                   key={set.setNo}
                   rowKey={`${activeExercise.id}:${index}`}
                   exercise={activeExercise}
                   set={set}
-                  target={targetText}
+                  ghost={set.done ? undefined : ghostFor(index)}
+                  current={index === currentSetIndex}
                   activeField={
                     cell?.exerciseId === activeExercise.id && cell.setIndex === index
                       ? cell.field
@@ -976,7 +1029,7 @@ export function SessionScreen({
                   }
                   onToggleDone={() => {
                     setCell(null);
-                    toggleDone(activeExercise.id, index, set);
+                    toggleDone(activeExercise.id, index, set, ghostFor(index));
                   }}
                   onRir={() => {
                     // Close the pad first: it is the thing that was covering
@@ -991,116 +1044,86 @@ export function SessionScreen({
                       : undefined
                   }
                 />
-              );
-            })}
+              ))}
+            </div>
 
             <button
               type="button"
               onClick={() => addSet(activeExercise.id)}
-              className="mt-2 w-full rounded-xl bg-surface-2 py-2.5 text-[13px] font-medium text-text-dim"
+              className="mt-1 w-full py-2 text-center text-[13px] font-semibold text-text-dim"
             >
-              + Add set
+              + add a set
             </button>
+
+            {/* On to the next one; black once this one is in. On the last
+                exercise it is Finish, which opens the sheet. */}
+            {nextExercise ? (
+              <button
+                type="button"
+                onClick={() => {
+                  tap();
+                  setActiveId(nextExercise.id);
+                  setRestOpen(false);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`relative mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-full text-[14px] font-bold ${
+                  activeDone ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
+                }`}
+              >
+                Next · {nextExercise.name}
+                <svg viewBox="0 0 16 16" className="size-3.5" fill="none" aria-hidden="true">
+                  <path d="m6 3 5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <HapticTick />
+              </button>
+            ) : loggedSets > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  tap();
+                  setFinishOpen(true);
+                }}
+                className={`relative mt-2 flex h-12 w-full items-center justify-center rounded-full text-[14px] font-bold ${
+                  activeDone ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
+                }`}
+              >
+                Finish workout
+                <HapticTick />
+              </button>
+            ) : null}
           </Card>
         )}
 
-        <Card title="Session details" className="mt-3">
-          {/* Read-only, and only when there is one. As a control it listed
-              all twelve workout ids including the ones that do not exist, to
-              change something you already chose when you started. As a line of
-              text it answers the one useful question: what is this being
-              logged against. A freestyle session is attributed to nothing and
-              says nothing. */}
-          {programmedName && (
-            <div className="mb-4 flex items-baseline justify-between gap-3">
-              <Label>Workout</Label>
-              <span className="truncate text-[14px] font-medium">{programmedName}</span>
-            </div>
-          )}
-
-          <div className="mt-4 flex gap-3">
-            <label className="flex-1">
-              <Label>Date</Label>
-              <input
-                type="date"
-                value={draft.date}
-                onChange={(event) => setDraft({ ...draft, date: event.target.value })}
-                className="mt-1.5 h-11 w-full rounded-xl bg-surface-2 px-3 text-[15px] font-medium"
-              />
-            </label>
-            <label className="w-28">
-              <Label>Minutes</Label>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                placeholder="--"
-                value={draft.durationMin ?? ''}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    durationMin: event.target.value === '' ? undefined : Number(event.target.value),
-                  })
-                }
-                className="mt-1.5 h-11 w-full rounded-xl bg-surface-2 px-3 text-[15px] font-medium placeholder:text-text-faint"
-              />
-            </label>
-          </div>
-
-          <label className="mt-4 block">
-            <Label>Notes</Label>
-            <textarea
-              rows={2}
-              value={draft.notes ?? ''}
-              onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
-              placeholder="--"
-              className="mt-1.5 w-full resize-none rounded-xl bg-surface-2 px-3 py-2.5 text-[15px] placeholder:text-text-faint"
-            />
-          </label>
-
-          {sessionId ? (
-            <button
-              type="button"
-              onClick={handleDelete}
-              className="mt-4 text-[13px] font-medium"
-              style={{ color: 'var(--color-rir-1)' }}
-            >
-              Delete session
-            </button>
-          ) : (
-            /* The one button that destroys work. Closing the screen no longer
-               does, so this has to exist and has to be findable. */
-            <button
-              type="button"
-              onClick={() => void handleDiscard()}
-              className="mt-4 text-[13px] font-medium"
-              style={{ color: 'var(--color-rir-1)' }}
-            >
-              Discard this workout
-            </button>
-          )}
-        </Card>
-
-        {/* At the end of the screen rather than pinned over it: a button that
-            is always in front of you is furniture, not a prompt. It appears
-            when there is something unsaved and goes away once there is not. */}
-        {dirty && loggedSets > 0 && (
+        {/* The one button that destroys an unstarted workout. With sets in it
+            the same button lives behind Finish. */}
+        {!sessionId && loggedSets === 0 && (
           <button
             type="button"
-            onClick={() => {
-              tap();
-              void handleSave();
-            }}
-            disabled={saving}
-            className="h-cta relative mt-3 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
+            onClick={() => void handleDiscard()}
+            className="mt-4 w-full py-2 text-center text-[13px] font-medium text-text-faint"
           >
-            {saving ? 'Saving…' : `Save · ${loggedSets} set${loggedSets === 1 ? '' : 's'}`}
-            <HapticTick />
+            Discard this workout
           </button>
         )}
       </Screen>
 
+      <RestBar timer={timer} caption={restCaption} />
 
+      {finishOpen && (
+        <FinishSheet
+          draft={draft}
+          workoutName={programmedName}
+          loggedSets={loggedSets}
+          saving={saving}
+          canSave={dirty && loggedSets > 0}
+          editing={Boolean(sessionId)}
+          onChange={(patch) => setDraft({ ...draft, ...patch })}
+          onSave={() => void handleSave()}
+          onDiscard={() => void handleDiscard()}
+          onDelete={() => void handleDelete()}
+          onClose={() => setFinishOpen(false)}
+        />
+      )}
 
       {padTarget && cell && (
         <NumberPad
@@ -1115,7 +1138,7 @@ export function SessionScreen({
         />
       )}
 
-      {effortCell && draft && (
+      {effortCell && (
         <EffortPicker
           rir={
             draft.exercises.find((e) => e.exerciseId === effortCell.exerciseId)?.sets[

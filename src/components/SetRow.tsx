@@ -7,48 +7,69 @@ import { tap } from '../lib/haptics';
 import { HapticTick } from './HapticTick';
 
 /* -------------------------------------------------------------------------- */
-/*  Set row — spec §4.                                                        */
-/*  set no. (circle) · target · kg · reps · checkbox, with the RIR badge       */
-/*  right-aligned. Completed rows drop to --text-faint.                        */
-/*  Thumb-reach beats density: every tappable cell is at least 44px tall.      */
+/*  Set row.                                                                   */
+/*  set no. · kg · reps · reps-in-reserve dots · tick.                         */
+/*                                                                            */
+/*  A set that went to plan is one tap: the row shows what it expects (last   */
+/*  time plus the step) in faint type, and the tick logs exactly that. The    */
+/*  numbers are only tapped when the set went differently. The row in hand    */
+/*  is outlined; a done row goes quiet. Every tappable cell is 44px tall.     */
 /* -------------------------------------------------------------------------- */
 
-/** Small filled circle, coloured by --rir-*. */
-export function RirBadge({
+/** Four dots, filled to the reps left in the tank. Colour is the RIR scale. */
+export function RirDots({
   rir,
   rpe,
   onClick,
+  dim = false,
 }: {
   rir?: number;
   rpe?: number;
   onClick?: () => void;
+  dim?: boolean;
 }) {
-  const token = rirToken(rir);
-  const empty = token === undefined;
-  const caption = rir !== undefined ? `RIR ${rir}` : rpe !== undefined ? `RPE ${rpe}` : 'RIR';
+  const value = rir ?? (rpe !== undefined ? Math.max(0, Math.round(10 - rpe)) : undefined);
+  const token = rirToken(value);
+  const caption = rir !== undefined ? `RIR ${rir}` : rpe !== undefined ? `RPE ${rpe}` : 'Reps in reserve, not set';
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      className="flex w-14 shrink-0 flex-col items-center gap-1"
+      className="flex h-11 w-12 shrink-0 items-center justify-center gap-[3px]"
       aria-label={caption}
     >
-      <span
-        className={`size-3.5 rounded-full ${empty ? 'border border-border' : ''}`}
-        style={empty ? undefined : { background: token }}
-      />
-      <span className="text-[10px] font-medium text-text-dim">{caption}</span>
+      {[1, 2, 3, 4].map((n) => {
+        const on = value !== undefined && n <= value;
+        return (
+          <span
+            key={n}
+            className="block size-[9px] rounded-full"
+            style={{
+              background: on ? token : 'transparent',
+              border: on ? undefined : `1.5px solid var(--color-${dim ? 'border' : 'text-faint'})`,
+              opacity: dim ? 0.7 : 1,
+            }}
+          />
+        );
+      })}
     </button>
   );
 }
 
 export type CellField = 'weight' | 'reps';
 
+/** What the row would log on a bare tick: last time plus the step. */
+export interface Ghost {
+  weightKg?: number;
+  reps?: number;
+}
+
 export function SetRow({
   exercise,
   set,
-  target,
+  ghost,
+  current = false,
   activeField,
   rowKey,
   onCell,
@@ -58,7 +79,9 @@ export function SetRow({
 }: {
   exercise: Exercise;
   set: DraftSet;
-  target?: string;
+  ghost?: Ghost;
+  /** The next set to do: outlined, so the eye lands on it. */
+  current?: boolean;
   activeField?: CellField;
   /** Lets the session screen scroll this row clear of the keypad. */
   rowKey: string;
@@ -68,7 +91,6 @@ export function SetRow({
   onRemove?: () => void;
 }) {
   const done = set.done;
-  const dim = done ? 'text-text-faint' : 'text-text';
   /* Bands take a weight now — the rating printed on the band — so only true
      no-load work keeps the cell shut. */
   const weightless = exercise.loadMode === 'bodyweight' || exercise.loadMode === 'rpe_only';
@@ -77,12 +99,14 @@ export function SetRow({
 
   const cell = (
     field: CellField,
-    value: string,
+    value: string | undefined,
     unit: string,
-    opts: { disabled?: boolean; sub?: string } = {},
+    opts: { disabled?: boolean; sub?: string; ghost?: string } = {},
   ) => {
     const active = activeField === field;
     const { disabled = false, sub } = opts;
+    const shown = value ?? opts.ghost;
+    const faint = value === undefined;
     return (
       <button
         type="button"
@@ -90,11 +114,23 @@ export function SetRow({
         onClick={() => onCell(field)}
         aria-label={`Set ${set.setNo} ${field === 'weight' ? 'weight' : 'reps'}`}
         className={`flex h-11 flex-1 flex-col items-center justify-center rounded-xl px-1 ${
-          active ? 'bg-cta text-bg' : 'bg-surface-2'
-        } ${disabled ? 'opacity-40' : ''}`}
+          active
+            ? 'bg-cta text-bg'
+            : done
+              ? 'border border-border bg-transparent'
+              : current
+                ? 'bg-surface'
+                : 'bg-surface-2'
+        } ${disabled ? 'opacity-50' : ''}`}
       >
         <span className="flex items-baseline gap-1 leading-none whitespace-nowrap">
-          <span className={`text-[17px] font-semibold ${active ? '' : dim}`}>{value}</span>
+          <span
+            className={`text-[18px] font-semibold ${
+              active ? '' : faint && !disabled ? 'text-text-faint' : done ? 'text-text-dim' : 'text-text'
+            }`}
+          >
+            {shown ?? '--'}
+          </span>
           <span className={`text-[11px] font-medium ${active ? 'text-bg/70' : 'text-text-dim'}`}>
             {unit}
           </span>
@@ -114,30 +150,36 @@ export function SetRow({
   };
 
   return (
-    <div className="flex items-center gap-2 py-1.5 scroll-mt-24" data-set-row={rowKey}>
+    <div
+      className={`flex items-center gap-2 rounded-2xl px-1.5 py-1 scroll-mt-24 ${
+        current ? 'outline-[1.5px] outline-volume' : ''
+      }`}
+      style={current ? { background: 'color-mix(in oklab, var(--color-volume) 9%, transparent)' } : undefined}
+      data-set-row={rowKey}
+    >
       <button
         type="button"
         onClick={onRemove}
         disabled={!onRemove}
-        className={`flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-2 text-xs font-semibold ${dim}`}
+        className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${
+          current ? 'text-volume' : done ? 'text-text-faint' : 'text-text-dim'
+        }`}
         aria-label={`Set ${set.setNo}`}
       >
         {set.setNo}
       </button>
 
-      <div className="w-14 shrink-0">
-        <div className="text-[11px] font-medium text-text-dim tabular-nums">{target ?? '--'}</div>
-      </div>
-
       {weightless
         ? cell('weight', exercise.loadMode === 'bodyweight' ? 'BW' : '--', '', { disabled: true })
-        : cell('weight', set.weightKg === undefined ? '--' : kg(set.weightKg), 'kg', {
-            sub:
-              showEffective && eff !== undefined ? `= ${kg(eff)} kg` : undefined,
+        : cell('weight', set.weightKg === undefined ? undefined : kg(set.weightKg), 'kg', {
+            sub: showEffective && eff !== undefined ? `= ${kg(eff)} kg` : undefined,
+            ghost: ghost?.weightKg === undefined ? undefined : kg(ghost.weightKg),
           })}
-      {cell('reps', set.reps === undefined ? '--' : String(set.reps), repUnitShort(exercise))}
+      {cell('reps', set.reps === undefined ? undefined : String(set.reps), repUnitShort(exercise), {
+        ghost: ghost?.reps === undefined ? undefined : String(ghost.reps),
+      })}
 
-      <RirBadge rir={set.rir} rpe={set.rpe} onClick={onRir} />
+      <RirDots rir={set.rir} rpe={set.rpe} onClick={onRir} dim={done} />
 
       <button
         type="button"
@@ -147,15 +189,16 @@ export function SetRow({
           tap();
           onToggleDone();
         }}
-        className={`relative flex size-8 shrink-0 items-center justify-center rounded-lg ${
-          done ? 'bg-cta text-bg' : 'bg-surface-2 text-text-faint'
+        className={`relative flex size-10 shrink-0 items-center justify-center rounded-full ${
+          done ? 'bg-cta text-bg' : current ? 'bg-surface text-text' : 'bg-surface-2 text-text-faint'
         }`}
         aria-label={done ? 'Mark set incomplete' : 'Mark set complete'}
       >
-        {done ? '✓' : ''}
-        <HapticTick radius={8} />
+        <svg viewBox="0 0 16 16" className="size-4" fill="none" aria-hidden="true">
+          <path d="m3 8.5 3.2 3L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <HapticTick radius={10} />
       </button>
-
     </div>
   );
 }

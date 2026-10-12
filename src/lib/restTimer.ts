@@ -47,6 +47,8 @@ export interface RestTimer {
   start: (sec?: number) => void;
   stop: () => void;
   setDuration: (sec: number) => void;
+  /** Pushes a running deadline out, for a set that wants a little longer. */
+  extend: (sec: number) => void;
 }
 
 /**
@@ -94,6 +96,16 @@ export function useRestTimer(defaultSec = 120): RestTimer {
     start: (sec = durationSec) =>
       setState((prev) => ({ ...prev, startedWith: sec, deadline: Date.now() + sec * 1000 })),
     stop: () => setState((prev) => ({ ...prev, deadline: undefined })),
+    extend: (sec: number) =>
+      setState((prev) =>
+        prev.deadline === undefined
+          ? prev
+          : {
+              ...prev,
+              startedWith: (prev.startedWith ?? defaultSec) + sec,
+              deadline: prev.deadline + sec * 1000,
+            },
+      ),
     setDuration: (sec: number) =>
       setState((prev) => ({
         chosen: sec,

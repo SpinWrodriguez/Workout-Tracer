@@ -69,6 +69,14 @@ function doneBox(setNo: number): HTMLElement {
   return box;
 }
 
+/** Saves the way a lifter does: Finish in the corner, then Save on the sheet. */
+async function save(ui: ReturnType<typeof user>, sets: number) {
+  await ui.click(await screen.findByRole('button', { name: 'Finish' }));
+  await ui.click(
+    await screen.findByRole('button', { name: new RegExp(`^Save · ${sets} set${sets === 1 ? '' : 's'}$`) }),
+  );
+}
+
 /** Taps the keypad the way a lifter does: pick the cell, then type. */
 async function typeInto(ui: ReturnType<typeof user>, cell: string, digits: string) {
   await ui.click(await screen.findByRole('button', { name: cell }));
@@ -93,7 +101,7 @@ describe('logging a set', () => {
     await ui.click(screen.getByRole('button', { name: 'Hide' }));
 
     await ui.click(doneBox(1));
-    await ui.click(await screen.findByRole('button', { name: /^Save · 1 set$/ }));
+    await save(ui, 1);
 
     await waitFor(async () => expect(await db.setLog.count()).toBe(1));
     const [row] = await db.setLog.toArray();
@@ -119,7 +127,7 @@ describe('logging a set', () => {
     await typeInto(ui, 'Set 1 reps', '15');
     await ui.click(screen.getByRole('button', { name: 'Hide' }));
     await ui.click(doneBox(1));
-    await ui.click(await screen.findByRole('button', { name: /^Save · 1 set$/ }));
+    await save(ui, 1);
 
     await waitFor(async () => expect(await db.setLog.count()).toBe(1));
     const [row] = await db.setLog.toArray();
@@ -141,7 +149,7 @@ describe('logging a set', () => {
     await typeInto(ui, 'Set 1 reps', '8');
     await ui.click(screen.getByRole('button', { name: 'Hide' }));
     await ui.click(doneBox(1));
-    await ui.click(await screen.findByRole('button', { name: /^Save · 1 set$/ }));
+    await save(ui, 1);
 
     await waitFor(async () => expect(await db.setLog.count()).toBe(1));
     const [row] = await db.setLog.toArray();
@@ -158,7 +166,7 @@ describe('logging a set', () => {
     await typeInto(ui, 'Set 3 reps', '6');
     await ui.click(screen.getByRole('button', { name: 'Hide' }));
 
-    await ui.click(await screen.findByRole('button', { name: /^Save · 2 sets$/ }));
+    await save(ui, 2);
 
     await waitFor(async () => expect(await db.setLog.count()).toBe(2));
     const rows = (await db.setLog.toArray()).sort((a, b) => a.setNo - b.setNo);
@@ -216,6 +224,7 @@ describe('leaving a workout and coming back', () => {
     view.unmount();
     draw(<SessionScreen daySlot="A" exercises={exercises} onExit={vi.fn()} />);
 
+    await ui.click(await screen.findByRole('button', { name: 'Finish' }));
     expect(await screen.findByRole('button', { name: /^Save · 1 set$/ })).toBeTruthy();
   });
 
@@ -245,7 +254,7 @@ describe('leaving a workout and coming back', () => {
 
     await typeInto(ui, 'Set 1 reps', '8');
     await ui.click(screen.getByRole('button', { name: 'Hide' }));
-    await ui.click(await screen.findByRole('button', { name: /^Save · 1 set$/ }));
+    await save(ui, 1);
 
     await waitFor(async () => expect(await db.session.get('s_resumed')).toBeDefined());
     const saved = await db.session.get('s_resumed');
@@ -259,7 +268,7 @@ describe('leaving a workout and coming back', () => {
     await ui.click(screen.getByRole('button', { name: 'Hide' }));
     await waitForDraft();
 
-    await ui.click(await screen.findByRole('button', { name: /^Save · 1 set$/ }));
+    await save(ui, 1);
 
     // Otherwise the app would offer to resume a workout already in History.
     await waitFor(async () => expect(await readActiveSession()).toBeUndefined(), {
@@ -274,8 +283,11 @@ describe('leaving a workout and coming back', () => {
     await ui.click(screen.getByRole('button', { name: 'Hide' }));
     await waitForDraft();
 
+    // With sets in it, Discard lives behind Finish with the other end-of-
+    // workout things, where it cannot be pressed by mistake mid-set.
+    await ui.click(screen.getByRole('button', { name: 'Finish' }));
     confirmWith(false);
-    await ui.click(screen.getByRole('button', { name: 'Discard this workout' }));
+    await ui.click(await screen.findByRole('button', { name: 'Discard this workout' }));
     expect(await readActiveSession()).toBeDefined();
     expect(onExit).not.toHaveBeenCalled();
 
@@ -288,20 +300,21 @@ describe('leaving a workout and coming back', () => {
   });
 });
 
-describe('the save button', () => {
+describe('the finish button', () => {
   it('is absent on a session with nothing logged', async () => {
     await openProgrammedDay();
     // Furniture, not a prompt: a button that is always there stops meaning
     // anything.
-    expect(screen.queryByRole('button', { name: /^Save · / })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Finish' })).toBeNull();
   });
 
-  it('appears once a set has reps against it', async () => {
+  it('appears once a set has reps against it, with Save behind it', async () => {
     const { ui } = await openProgrammedDay();
 
     await typeInto(ui, 'Set 1 reps', '8');
     await ui.click(screen.getByRole('button', { name: 'Hide' }));
 
+    await ui.click(await screen.findByRole('button', { name: 'Finish' }));
     expect(await screen.findByRole('button', { name: /^Save · 1 set$/ })).toBeTruthy();
   });
 
@@ -311,7 +324,7 @@ describe('the save button', () => {
     await typeInto(ui, 'Set 1 weight', '60');
     await ui.click(screen.getByRole('button', { name: 'Hide' }));
 
-    expect(screen.queryByRole('button', { name: /^Save · / })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Finish' })).toBeNull();
   });
 
   it('goes away after saving, because there is nothing left unsaved', async () => {
@@ -319,7 +332,7 @@ describe('the save button', () => {
 
     await typeInto(ui, 'Set 1 reps', '8');
     await ui.click(screen.getByRole('button', { name: 'Hide' }));
-    await ui.click(await screen.findByRole('button', { name: /^Save · 1 set$/ }));
+    await save(ui, 1);
 
     await waitFor(() => expect(onExit).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByRole('button', { name: /^Save · / })).toBeNull());
@@ -378,18 +391,23 @@ describe('the rest timer', () => {
   /* The strip button for an exercise. By its text rather than a regex: the
      names carry brackets, which a regex reads as a group. */
   const stripButton = (exerciseId: string) =>
-    screen.getByRole('button', {
+    screen.getByRole('tab', {
       name: (accessible: string) => accessible.includes(named(exerciseId)),
     });
 
-  /** A session of one exercise, opened and ready to log. */
+  /** The "rest 3:00" on the exercise, which opens the chips. */
+  const restButton = () => screen.getByRole('button', { name: /^Rest \d+:\d\d, tap to change$/ });
+
+  /** A session of one exercise, opened with the rest chips showing. */
   async function openWith(exerciseId: string) {
     await seedBlock();
     await seedSchedule({ A: { weekday: 1, intensity: 'heavy' } });
     await seedWorkout('A', [exerciseId], 3);
     const view = draw(<SessionScreen daySlot="A" exercises={exercises} onExit={vi.fn()} />);
     await screen.findByRole('button', { name: 'Set 1 weight' });
-    return { view, ui: user() };
+    const ui = user();
+    await ui.click(restButton());
+    return { view, ui };
   }
 
   it('counts the rest the exercise asks for, not a flat two minutes', async () => {
@@ -424,6 +442,7 @@ describe('the rest timer', () => {
     await screen.findByRole('button', { name: 'Set 1 weight' });
     const ui = user();
 
+    await ui.click(restButton());
     await ui.click(screen.getByRole('button', { name: '90s' }));
     await waitFor(() => expect(screen.getByText('1:30')).toBeTruthy());
 
@@ -462,7 +481,7 @@ describe('a rule note sits with the exercise it is about', () => {
     // the rule.
     expect(screen.queryByText(/is high grip load/)).toBeNull();
 
-    await ui.click(screen.getByRole('button', { name: new RegExp(named(PULL_UP)) }));
+    await ui.click(screen.getByRole('tab', { name: new RegExp(named(PULL_UP)) }));
     await screen.findByRole('heading', { name: named(PULL_UP) });
 
     // On the pull-up: a dot by the name, and the sentence only on a tap.
@@ -507,7 +526,7 @@ describe('the bar on the rack', () => {
     draw(<SessionScreen daySlot="A" exercises={exercises} onExit={vi.fn()} />);
     await screen.findByRole('heading', { name: named(SQUAT) });
 
-    await screen.findByText('bar 15 kg');
-    expect(screen.queryByText('bar 20 kg')).toBeNull();
+    await screen.findByText('· bar 15 kg');
+    expect(screen.queryByText('· bar 20 kg')).toBeNull();
   });
 });

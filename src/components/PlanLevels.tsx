@@ -119,7 +119,7 @@ export function MiniMap({
   entries,
   exercisesById,
 }: {
-  entries: BlockExercise[];
+  entries: { exerciseId: string; targetSets: number }[];
   exercisesById: Map<string, Exercise>;
 }) {
   if (entries.length === 0) return null;

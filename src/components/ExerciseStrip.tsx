@@ -1,29 +1,22 @@
 import type { Exercise } from '../db/types';
-import { STATION_LABEL } from '../db/seed/exercises';
 import { ExerciseThumb } from './ExerciseThumb';
-import { regionColor } from '../lib/region';
+import { tap } from '../lib/haptics';
+import { HapticTick } from './HapticTick';
 
 /* -------------------------------------------------------------------------- */
-/*  Horizontal exercise strip — spec §4: thumbnails at the top of the session  */
-/*  screen, tap to switch, never a dropdown.                                   */
+/*  Horizontal exercise strip — the whole workout in one row, tap to jump.    */
 /*                                                                            */
-/*  The thumbnail is the exercise's own photo — our illustration for the       */
-/*  eleven movements nothing upstream has, the cached reference photo for the  */
-/*  rest. Initials over a station glyph are the fallback, which is what this   */
-/*  showed for every exercise before there were any photos at all: a strip of  */
-/*  LS / CH / LL tells you nothing you cannot read in the label underneath.    */
+/*  Small on purpose: at 76 px with a station glyph under each, four fit and  */
+/*  the rest of the workout was off the edge. At 62 px the whole thing is in  */
+/*  view, so a superset is two taps back and forth and "what is left" is a    */
+/*  glance. Each tile carries its number; a finished one goes grey with a     */
+/*  tick, the one in hand gets the orange ring.                               */
 /* -------------------------------------------------------------------------- */
 
-const STATION_GLYPH: Record<Exercise['station'], string> = {
-  free_bar: 'BAR',
-  smith: 'SM',
-  cable: 'CBL',
-  kettlebell: 'KB',
-  dumbbell: 'DB',
-  bodyweight: 'BW',
-  band: 'BND',
-  landmine: 'LM',
-};
+export interface ExerciseProgress {
+  logged: number;
+  total: number;
+}
 
 function initials(name: string): string {
   return name
@@ -38,82 +31,87 @@ function initials(name: string): string {
 export function ExerciseStrip({
   exercises,
   activeId,
-  loggedCounts,
+  progress,
   onSelect,
   onAdd,
 }: {
   exercises: Exercise[];
   activeId: string | undefined;
-  loggedCounts: Record<string, number>;
+  progress: Record<string, ExerciseProgress>;
   onSelect: (id: string) => void;
   onAdd: () => void;
 }) {
   return (
-    <div className="no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1">
-      {exercises.map((exercise) => {
+    <div className="no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pt-1 pb-1" role="tablist" aria-label="Exercises">
+      {exercises.map((exercise, index) => {
         const active = exercise.id === activeId;
-        const logged = loggedCounts[exercise.id] ?? 0;
+        const { logged = 0, total = 0 } = progress[exercise.id] ?? {};
+        const done = total > 0 && logged >= total;
+        const started = logged > 0 && !done;
         return (
           <button
             key={exercise.id}
             type="button"
-            onClick={() => onSelect(exercise.id)}
-            className={`relative w-[76px] shrink-0 rounded-2xl p-2 text-left transition-transform active:scale-[0.97] ${
-              active ? 'bg-surface-2' : 'bg-surface'
-            }`}
+            role="tab"
+            aria-selected={active}
+            onClick={() => {
+              tap();
+              onSelect(exercise.id);
+            }}
+            className="relative w-[62px] shrink-0 text-left transition-transform active:scale-[0.97]"
+            aria-label={`${index + 1}. ${exercise.name}${done ? ', done' : started ? `, ${logged} of ${total} sets` : ''}`}
           >
+            <HapticTick radius={14} />
             <span
-              className="flex h-14 items-center justify-center overflow-hidden rounded-xl"
-              /* Tinted by what it trains, so the strip has some colour in it
-                 and the tint means something: upper, lower or core. */
+              className="relative flex size-[62px] items-center justify-center overflow-hidden rounded-2xl bg-surface-2"
               style={{
-                background: active ? regionColor(exercise) : 'var(--color-surface-2)',
-                boxShadow: active ? `0 0 0 2px ${regionColor(exercise)}` : undefined,
+                outline: active ? '2.5px solid var(--color-volume)' : undefined,
+                outlineOffset: 1.5,
+                filter: done ? 'grayscale(1) opacity(0.6)' : undefined,
               }}
             >
               <ExerciseThumb
                 exercise={exercise}
-                fallback={
-                  <span
-                    className={`text-base font-bold ${active ? 'text-bg' : 'text-text-dim'}`}
-                  >
-                    {initials(exercise.name)}
-                  </span>
-                }
+                fallback={<span className="text-[15px] font-bold text-text-dim">{initials(exercise.name)}</span>}
               />
+              {/* The number, or the tick once every set is in. Orange while
+                  it is half done, so the strip also says where you got to. */}
+              <span
+                className="absolute bottom-1 left-1 flex size-[18px] items-center justify-center rounded-full text-[10.5px] font-extrabold"
+                style={{
+                  background: done
+                    ? 'var(--color-cta)'
+                    : started
+                      ? 'var(--color-volume)'
+                      : 'var(--color-surface)',
+                  color: done || started ? 'var(--color-bg)' : 'var(--color-text)',
+                }}
+                aria-hidden="true"
+              >
+                {done ? '✓' : index + 1}
+              </span>
             </span>
             <span
-              className={`mt-1.5 block truncate text-[10px] leading-tight font-medium ${
-                active ? 'text-text' : 'text-text-dim'
+              className={`mt-1 block truncate text-[10.5px] leading-tight ${
+                active ? 'font-bold text-text' : done ? 'font-medium text-text-faint' : 'font-semibold text-text-dim'
               }`}
               title={exercise.name}
             >
               {exercise.name}
             </span>
-            <span className="mt-0.5 block text-[9px] font-medium text-text-faint">
-              {STATION_GLYPH[exercise.station]}
-            </span>
-            {logged > 0 && (
-              <span
-                className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full text-[9px] font-bold text-bg"
-                style={{ background: 'var(--color-volume)' }}
-              >
-                {logged}
-              </span>
-            )}
-            <span className="sr-only">{STATION_LABEL[exercise.station]}</span>
           </button>
         );
       })}
       <button
         type="button"
         onClick={onAdd}
-        className="flex w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl bg-surface"
+        className="w-[62px] shrink-0 text-left"
+        aria-label="Add an exercise"
       >
-        <span className="flex size-8 items-center justify-center rounded-full bg-surface-2 text-lg leading-none text-text-dim">
+        <span className="flex size-[62px] items-center justify-center rounded-2xl bg-surface text-2xl leading-none text-text-dim">
           +
         </span>
-        <span className="text-[10px] font-medium text-text-dim">Add</span>
+        <span className="mt-1 block text-[10.5px] font-semibold text-text-dim">Add</span>
       </button>
     </div>
   );

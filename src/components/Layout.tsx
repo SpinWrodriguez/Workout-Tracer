@@ -12,12 +12,15 @@ export function Screen({
   header,
   children,
   pad = 'nav',
+  compactTitle = false,
 }: {
   title: string;
   trailing?: ReactNode;
   header?: ReactNode;
   children: ReactNode;
   pad?: 'nav' | 'cta' | 'keypad' | 'none';
+  /** A title that is a name rather than a screen: smaller, one line, not shouted. */
+  compactTitle?: boolean;
 }) {
   /* 'keypad' clears the in-app number pad, which is far taller than the CTA:
      without it the rows in the bottom third of the list cannot be scrolled out
@@ -35,7 +38,15 @@ export function Screen({
     <div className="min-h-dvh bg-bg">
       <div className="px-4 pt-[calc(env(safe-area-inset-top)+20px)]">
         <div className="flex items-end justify-between gap-3">
-          <h1 className="screen-title">{title}</h1>
+          <h1
+            className={
+              compactTitle
+                ? 'line-clamp-2 min-w-0 flex-1 font-display text-[19px] leading-tight font-extrabold tracking-tight'
+                : 'screen-title'
+            }
+          >
+            {title}
+          </h1>
           {trailing}
         </div>
         {header}
