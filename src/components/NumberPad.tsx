@@ -98,7 +98,11 @@ export function NumberPad({
       return;
     }
     const next = `${base}${key}`;
-    if (next.length <= 6) write(next);
+    /* Reps are two digits; a hold in seconds can be three (a two-minute
+       plank is 120). A weight keeps room for a decimal. A thumb that keeps
+       tapping used to type 81111 reps, and the row took it. */
+    const limit = target.kind === 'reps' ? (target.unit === 's' ? 3 : 2) : 6;
+    if (next.replace('.', '').length <= limit) write(next);
   };
 
   const backspace = () => {

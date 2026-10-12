@@ -900,7 +900,7 @@ export function SessionScreen({
                     }}
                     aria-expanded={restOpen}
                     aria-label={`Rest ${clock(timer.durationSec)}, tap to change`}
-                    className="relative"
+                    className="relative whitespace-nowrap"
                   >
                     · rest <span className="tabular-nums">{clock(timer.durationSec)}</span>
                     <HapticTick radius={8} />
