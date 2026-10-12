@@ -1146,10 +1146,10 @@ describe('reading up on an exercise from the Program screen', () => {
       within(card).getByRole('button', { name: `About ${named('bb_back_squat')}` }),
     );
 
-    /* The cue is the part that is always there, mapped or not — so it is what
-       proves the sheet actually opened rather than a photo that may not have
-       been fetched. */
-    expect(await screen.findByText('In this gym')).toBeTruthy();
+    /* The muscles line is the part that is always there, mapped or not — so
+       it is what proves the sheet actually opened rather than a photo that
+       may not have been fetched. */
+    expect(await screen.findByText('Quads · Glutes')).toBeTruthy();
     expect(
       await screen.findByRole('heading', { name: named('bb_back_squat') }),
     ).toBeTruthy();
