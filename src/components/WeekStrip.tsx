@@ -51,9 +51,12 @@ export function WeekStrip({
   onMoveSlot,
   labelFor,
   shortLabelFor,
+  selected,
 }: {
   week: WeekStripDay[];
   onPickDay: (date: string) => void;
+  /** The day a panel under the strip is showing, outlined so the two read together. */
+  selected?: string;
   /** Moves a workout to another DATE — this week only, not every week. */
   /** Absent under a plan: the pills are forecasts, and dragging one would pin a date against the order. */
   onMoveSlot?: (slot: DaySlot, date: string) => void;
@@ -108,8 +111,9 @@ export function WeekStrip({
                 columns.current[index] = el;
               }}
               className={`flex-1 rounded-xl px-1 pt-2 pb-1.5 transition-colors ${
-                dropping ? 'bg-surface-2 outline-2 outline-cta' : 'bg-surface-2'
+                dropping || day.date === selected ? 'bg-surface-2 outline-2 outline-cta' : 'bg-surface-2'
               }`}
+              aria-current={day.date === selected ? 'date' : undefined}
             >
               <button
                 type="button"

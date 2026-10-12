@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useState } from 'react';
 import { db } from '../db/db';
 import { HapticTick } from '../components/HapticTick';
 import { tap } from '../lib/haptics';
@@ -6,7 +7,6 @@ import type { DaySlot, Exercise, MuscleId } from '../db/types';
 import {
   EM_WEIGHT,
   friendlyDate,
-  fromIsoDate,
   kg,
   rate,
   shiftIso,
@@ -14,8 +14,8 @@ import {
   weekStart,
 } from '../lib/format';
 import { linearTrend, rollingAverage, type DatedPoint } from '../lib/stats';
-import { WEEKDAY_LABEL, weekdayOf } from '../lib/golf';
-import { readWeekPlan } from '../lib/weekPlan';
+import { WEEKDAY_LABEL, buildWeek, weekdayOf } from '../lib/golf';
+import { readWeekPlan, type PlannedDay } from '../lib/weekPlan';
 import { WEEKLY_SET_TARGET, sessionMinutes } from '../lib/blockValidation';
 import { readTimeFactor, realMinutes } from '../lib/timeModel';
 import { readTraining } from '../db/settings';
@@ -25,7 +25,10 @@ import { BodyWeightChart } from '../components/LazyCharts';
 import { ThemeToggleButton } from '../components/ThemePicker';
 import { Ring } from '../components/Ring';
 import { SyncWarning } from '../components/SyncWarning';
-import { dayLabel, slotFallback } from '../lib/dayLabel';
+import { dayLabel, shortDayLabels, slotFallback } from '../lib/dayLabel';
+import { WeekStrip, type WeekStripDay } from '../components/WeekStrip';
+import { MiniMap } from '../components/PlanLevels';
+import { EFFORT_WORD } from '../lib/effort';
 import { caddieLine } from '../lib/caddie';
 import { describePr, prEvents, type PrEvent } from '../lib/prs';
 
@@ -43,6 +46,99 @@ const WEEKLY_FALLBACK = { exercises: 12, muscles: 10 };
 
 /** Height of the ring row, and the diameter of the emphasised centre ring. */
 const RING_ROW = 112;
+
+/**
+ * The one day the strip has picked, with the body map beside it. It used to
+ * be a list of every day, each with its own Start button, above a second card
+ * that said the next one again: a whole screen to answer what one row can.
+ */
+function DayPanel({
+  day,
+  date,
+  today,
+  golf,
+  isNext,
+  label,
+  names,
+  minutes,
+  exercisesById,
+  onStart,
+  onFreestyle,
+}: {
+  day?: PlannedDay;
+  date: string;
+  today: string;
+  golf: boolean;
+  isNext: boolean;
+  label: string;
+  names: string;
+  minutes?: number;
+  exercisesById: Map<string, Exercise>;
+  onStart: () => void;
+  onFreestyle?: () => void;
+}) {
+  const weekday = WEEKDAY_LABEL[weekdayOf(date)];
+  const when = date === today ? 'today' : weekday;
+  if (!day) {
+    return (
+      <div className="mt-3 flex items-center justify-between gap-3" data-testid="day-panel">
+        <p className="text-[13px] font-medium text-text-dim">
+          {golf ? `Golf ${when}, nothing planned around it.` : `Nothing planned ${when}.`}
+        </p>
+        {onFreestyle && (
+          <button
+            type="button"
+            onClick={() => {
+              tap();
+              onFreestyle();
+            }}
+            className="relative shrink-0 rounded-full bg-surface-2 px-4 py-1.5 text-[13px] font-semibold text-text-dim"
+          >
+            Freestyle
+            <HapticTick />
+          </button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 flex items-center gap-3" data-testid="day-panel">
+      <MiniMap entries={day.entries} exercisesById={exercisesById} />
+      <span className="min-w-0 flex-1">
+        <span className="card-title block truncate">{label}</span>
+        <Label>
+          {EFFORT_WORD[day.intensity]} · {when}
+          {minutes !== undefined ? ` · ${minutes} min` : ''}
+          {golf ? ' · golf' : ''}
+        </Label>
+        <p className="mt-0.5 truncate text-[12px] font-medium text-text-dim">{names || '---'}</p>
+      </span>
+      {day.done ? (
+        <span
+          className="shrink-0 rounded-full bg-surface-2 px-4 py-1.5 text-[13px] font-semibold text-text-faint"
+          aria-label={`${label} is done`}
+        >
+          Done
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            tap();
+            onStart();
+          }}
+          disabled={day.entries.length === 0}
+          className={`relative shrink-0 rounded-full px-4 py-1.5 text-[13px] font-semibold disabled:text-text-faint ${
+            isNext ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
+          }`}
+        >
+          Start
+          <HapticTick />
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function DashboardScreen({
   exercises,
@@ -104,6 +200,14 @@ export function DashboardScreen({
 
     return {
       from,
+      /* The sessions themselves, for the strip: which days were trained and
+         what each was called. */
+      sessions: sessions.map((session) => ({
+        id: session.id,
+        date: session.date,
+        name: session.daySlotName,
+        exerciseIds: [...new Set(logs.filter((l) => l.sessionId === session.id).map((l) => l.exerciseId))],
+      })),
       sessionCount: sessions.length,
       setCount: logs.length,
       exerciseCount: exerciseIds.size,
@@ -123,6 +227,8 @@ export function DashboardScreen({
     [exercises],
     undefined,
   );
+
+  const golfDays = useLiveQuery(() => db.golfDay.toArray(), [], undefined);
 
   const bodyWeight = useLiveQuery(
     () => db.sharedBodyWeight.orderBy('date').toArray(),
@@ -168,6 +274,68 @@ export function DashboardScreen({
   const latest = points.at(-1);
   const average = rollingAverage(points, 7);
   const trend = linearTrend(points);
+
+  /*
+   * The strip: the calendar week with this week's workouts on it, built the
+   * way Program builds it so the two read as one calendar. The dates come
+   * from the plan, which has already resolved the rotation's forecast.
+   */
+  const strip: WeekStripDay[] = (() => {
+    const today = program?.today ?? todayIso();
+    const base = buildWeek({
+      anchorDate: today,
+      golfDays: golfDays ?? [],
+      sessions: week?.sessions ?? [],
+      exercisesById: byId,
+    });
+    const kinds = program?.rotation?.kinds ?? {};
+    return base.map((day) => {
+      const planned = programDays.find((d) => d.date === day.date);
+      const kind = kinds[day.date];
+      return {
+        ...day,
+        plannedSlot: planned?.slot,
+        intensity: planned?.intensity,
+        forecast: kind === 'forecast' || kind === 'next',
+      };
+    });
+  })();
+
+  const labelFor = (slot: DaySlot): string => {
+    const day = program?.all.find((d) => d.slot === slot);
+    return dayLabel({
+      slot,
+      name: day?.name,
+      exercises: (day?.entries ?? [])
+        .map((entry) => byId.get(entry.exerciseId))
+        .filter((exercise): exercise is Exercise => exercise !== undefined),
+      intensity: day?.intensity,
+    });
+  };
+  const shortLabelFor = (() => {
+    const inWeek = strip
+      .map((day) => day.plannedSlot)
+      .filter((slot): slot is DaySlot => slot !== undefined);
+    const shorts = shortDayLabels(inWeek.map((slot) => labelFor(slot)));
+    const map = new Map(inWeek.map((slot, i) => [slot, shorts[i] as string]));
+    return (slot: DaySlot) => map.get(slot) ?? labelFor(slot);
+  })();
+
+  /*
+   * Which day the panel shows. Today, unless today has nothing on it and a
+   * later day does: then the next workout, which is what you came to see.
+   * A tap on the strip overrides either for as long as the screen is open.
+   */
+  const [tapped, setPicked] = useState<string | undefined>(undefined);
+  const picked = (() => {
+    if (tapped) return tapped;
+    const today = program?.today ?? todayIso();
+    const onToday = programDays.find((d) => d.date === today);
+    if (onToday && !onToday.done) return today;
+    const upcoming = programDays.find((d) => d.date !== undefined && d.date > today && !d.done);
+    return upcoming?.date ?? today;
+  })();
+  const pickedDay = programDays.find((d) => d.date === picked);
 
   /* The caddie line: one deterministic sentence about today, assembled from
      the plan, the log and the golf calendar. Never a model, never more than a
@@ -264,148 +432,54 @@ export function DashboardScreen({
         <p className="mb-3 text-[14px] leading-snug font-medium">{caddieText}</p>
       )}
 
-      {program?.rotation && (() => {
-        const r = program.rotation;
-        const next = program.all.find((day) => day.slot === r.next);
-        const nameOf = (slot: DaySlot) => {
-          const day = program.all.find((d) => d.slot === slot);
-          return day ? dayLabel({ slot, name: day.name, exercises: day.entries.map((e) => byId.get(e.exerciseId)).filter((e): e is Exercise => e !== undefined), intensity: day.intensity }) : slot;
-        };
-        const names = (next?.entries ?? [])
-          .map((entry) => byId.get(entry.exerciseId)?.name)
-          .filter(Boolean)
-          .slice(0, 4)
-          .join(' · ');
-        const week = r.week;
-        return (
-          <Card
-            title="Next up"
-            className="mb-3"
-            trailing={
-              <Label>
-                {week < 1 ? `starts ${WEEKDAY_LABEL[weekdayOf(r.plan.start)]}` : week > r.plan.weeks ? 'plan finished' : `week ${week} of ${r.plan.weeks}`}
-              </Label>
-            }
-          >
-            <p className="text-[20px] leading-tight font-semibold">{nameOf(r.next)}</p>
-            <p className="mt-0.5 truncate text-[12px] font-medium text-text-dim">{names || '---'}</p>
-            <button
-              type="button"
-              onClick={() => {
-                tap();
-                onStartDay(r.next);
-              }}
-              disabled={(next?.entries.length ?? 0) === 0}
-              className="h-cta relative mt-3 w-full rounded-full bg-cta font-semibold text-bg disabled:bg-surface-2 disabled:text-text-faint"
-            >
-              Start {nameOf(r.next)}
-              <HapticTick />
-            </button>
-            {r.then.length > 0 && (
-              <p className="mt-2 text-[12px] font-medium text-text-dim">
-                Then {r.then.map(nameOf).join(', then ')}. Whatever day you train, you get the next one.
-              </p>
-            )}
-          </Card>
-        );
-      })()}
-
       {programDays.length > 0 && (
-        <Card title="Your week" className="mb-3">
-          {programDays.map((day, i) => {
-            const isToday = day.date !== undefined && day.date === program?.today;
-            const isNext = day.slot === program?.next;
-            const label = dayLabel({
-              slot: day.slot,
-              name: day.name,
-              exercises: day.entries
-                .map((entry) => exercises.find((e) => e.id === entry.exerciseId))
-                .filter((exercise): exercise is Exercise => exercise !== undefined),
-              intensity: day.intensity,
-            });
-            const names = day.entries
-              .map((entry) => exercises.find((e) => e.id === entry.exerciseId)?.name)
+        <Card
+          title="Your week"
+          className="mb-3"
+          trailing={
+            program?.rotation ? (
+              <Label>
+                {program.rotation.week < 1
+                  ? `starts ${WEEKDAY_LABEL[weekdayOf(program.rotation.plan.start)]}`
+                  : program.rotation.week > program.rotation.plan.weeks
+                    ? 'plan finished'
+                    : `week ${program.rotation.week} of ${program.rotation.plan.weeks}`}
+              </Label>
+            ) : undefined
+          }
+        >
+          {/* The same strip as Program: the week in one row, a tap picks a
+              day, and the one day picked is the only one that takes up room. */}
+          <WeekStrip
+            week={strip}
+            labelFor={labelFor}
+            shortLabelFor={shortLabelFor}
+            selected={picked}
+            onPickDay={(date) => {
+              tap();
+              setPicked(date);
+            }}
+          />
+          <DayPanel
+            day={pickedDay}
+            date={picked}
+            today={program?.today ?? todayIso()}
+            golf={strip.find((d) => d.date === picked)?.golf !== undefined}
+            isNext={pickedDay !== undefined && pickedDay.slot === program?.next}
+            label={pickedDay ? labelFor(pickedDay.slot) : ''}
+            names={(pickedDay?.entries ?? [])
+              .map((entry) => byId.get(entry.exerciseId)?.name)
               .filter(Boolean)
-              .join(' · ');
-            return (
-              <div key={day.slot} className={i > 0 ? 'mt-2.5 border-t border-border pt-2.5' : ''}>
-                <div className="flex items-center gap-3">
-                  {/* The calendar column: which day of the week this is. */}
-                  <span
-                    className={`flex size-11 shrink-0 flex-col items-center justify-center rounded-xl ${
-                      isToday ? 'bg-cta text-bg' : 'bg-surface-2'
-                    }`}
-                  >
-                    <span
-                      className={`text-[9px] font-semibold tracking-wide uppercase ${
-                        isToday ? 'text-bg/70' : 'text-text-dim'
-                      }`}
-                    >
-                      {day.weekday ? WEEKDAY_LABEL[day.weekday] : '--'}
-                    </span>
-                    <span className="text-[15px] leading-none font-semibold tabular-nums">
-                      {day.date ? fromIsoDate(day.date).getDate() : '·'}
-                    </span>
-                  </span>
-
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline gap-2">
-                      <span className="card-title truncate">{label}</span>
-                      <Label>
-                        {day.intensity === 'light' ? 'light' : 'heavy'}
-                        {isToday ? ' · today' : ''}
-                        {day.entries.length > 0
-                          ? ` · ${realMinutes(
-                              sessionMinutes(day.entries, byId),
-                              timeFactor,
-                            )} min`
-                          : ''}
-                      </Label>
-                    </span>
-                    <p className="mt-0.5 truncate text-[12px] font-medium text-text-dim">
-                      {names || '---'}
-                    </p>
-                  </span>
-
-                  {/* A finished session is not something to start again. The
-                      button says so rather than going quietly missing, so the
-                      row still reads as a week you can see the shape of. */}
-                  {day.done ? (
-                    <span
-                      className="shrink-0 rounded-full bg-surface-2 px-4 py-1.5 text-[13px] font-semibold text-text-faint"
-                      aria-label={`${label} is done`}
-                    >
-                      Done
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        tap();
-                        onStartDay(day.slot);
-                      }}
-                      disabled={day.entries.length === 0}
-                      className={`relative shrink-0 rounded-full px-4 py-1.5 text-[13px] font-semibold disabled:text-text-faint ${
-                        isNext ? 'bg-cta text-bg' : 'bg-surface-2 text-text-dim'
-                      }`}
-                    >
-                      Start
-                      <HapticTick />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          {onFreestyle && (
-            <button
-              type="button"
-              onClick={onFreestyle}
-              className="mt-3 w-full rounded-full bg-surface-2 py-2 text-[12.5px] font-medium text-text-dim"
-            >
-              Freestyle session, no workout behind it
-            </button>
-          )}
+              .join(' · ')}
+            minutes={
+              pickedDay && pickedDay.entries.length > 0
+                ? realMinutes(sessionMinutes(pickedDay.entries, byId), timeFactor)
+                : undefined
+            }
+            exercisesById={byId}
+            onStart={() => onStartDay(pickedDay?.slot)}
+            onFreestyle={onFreestyle}
+          />
         </Card>
       )}
 

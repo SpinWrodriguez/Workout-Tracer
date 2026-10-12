@@ -218,7 +218,10 @@ describe('how long each day of the week takes', () => {
       await db.blockExercise.where('blockId').equals(BLOCK_ID).toArray(),
       exercisesById,
     );
-    const row = (await screen.findByText('Lower body')).closest('div') as HTMLElement;
-    await waitFor(() => expect(row.textContent).toContain(`${minutes} min`));
+    /* The name is on the strip's pill too; the panel under it is where the
+       minutes are. */
+    const panel = await screen.findByTestId('day-panel');
+    await waitFor(() => expect(panel.textContent).toContain('Lower body'));
+    expect(panel.textContent).toContain(`${minutes} min`);
   });
 });
