@@ -89,6 +89,22 @@ function activityName(daySlot: string): string {
 
 /* --- read ----------------------------------------------------------------- */
 
+/**
+ * The exercises of a saved session in the order they were done.
+ *
+ * The set logs carry no order of their own — the index hands them back by
+ * exercise id, which is alphabetical — so a reopened Back and Glutes read
+ * hip thrust, Copenhagen, face pull… when it was trained landmine rotation
+ * first. The plan stamped at save time (`plannedSets`) keeps the draft's
+ * order in its keys, so it leads; anything logged outside it trails.
+ */
+export function orderedExerciseIds(
+  session: Pick<Session, 'plannedSets'>,
+  logged: string[],
+): string[] {
+  return [...new Set([...Object.keys(session.plannedSets ?? {}), ...logged])];
+}
+
 export async function loadDraft(sessionId: string): Promise<SessionDraft | undefined> {
   const session = await db.session.get(sessionId);
   if (!session) return undefined;
@@ -115,7 +131,7 @@ export async function loadDraft(sessionId: string): Promise<SessionDraft | undef
    * what was skipped the moment the session was saved again.
    */
   const planned = session.plannedSets ?? {};
-  const exerciseIds = [...new Set([...byExercise.keys(), ...Object.keys(planned)])];
+  const exerciseIds = orderedExerciseIds(session, [...byExercise.keys()]);
 
   return {
     id: session.id,
@@ -170,7 +186,7 @@ export async function listSessionSummaries(): Promise<SessionSummary[]> {
     return {
       session,
       setCount: list.length,
-      exerciseIds: [...logged],
+      exerciseIds: orderedExerciseIds(session, [...logged]).filter((id) => logged.has(id)),
       volumeKg: list.reduce((sum, s) => sum + (s.effectiveKg ?? 0) * s.reps, 0),
       /* Falls back to what was logged on sessions saved before plannedSets
          existed, so those read as finished rather than as nothing planned. */

@@ -333,7 +333,11 @@ export function DashboardScreen({
     const onToday = programDays.find((d) => d.date === today);
     if (onToday && !onToday.done) return today;
     const upcoming = programDays.find((d) => d.date !== undefined && d.date > today && !d.done);
-    return upcoming?.date ?? today;
+    if (upcoming?.date) return upcoming.date;
+    /* Nothing ahead this week: the last day that had something, so the
+       week still has a face on a Sunday or a rest day at its end. */
+    const latest = [...programDays].reverse().find((d) => d.date !== undefined);
+    return latest?.date ?? today;
   })();
   const pickedDay = programDays.find((d) => d.date === picked);
 

@@ -129,6 +129,37 @@ describe('what a session left behind', () => {
   });
 });
 
+describe('the order a session was done in', () => {
+  it('reopens in the order it was trained, not alphabetically', async () => {
+    /* The set logs come back by exercise id, which is alphabetical: a Back
+       and Glutes trained landmine rotation first reopened hip thrust first.
+       The plan stamped at save time keeps the real order. */
+    await saveSession(
+      {
+        id: 's_order',
+        blockId: 'block_1',
+        daySlot: 'B',
+        date: '2026-10-14',
+        exercises: [
+          { exerciseId: 'lm_rotation', sets: [{ setNo: 1, weightKg: 20, reps: 6, done: true }] },
+          { exerciseId: 'bw_copenhagen_plank', sets: [{ setNo: 1, reps: 20, done: true }] },
+          { exerciseId: 'bb_hip_thrust', sets: [{ setNo: 1, weightKg: 40, reps: 10, done: true }] },
+        ],
+      },
+      byId,
+    );
+
+    const draft = await loadDraft('s_order');
+    expect(draft?.exercises.map((e) => e.exerciseId)).toEqual([
+      'lm_rotation',
+      'bw_copenhagen_plank',
+      'bb_hip_thrust',
+    ]);
+    const summary = (await listSessionSummaries()).find((s) => s.session.id === 's_order');
+    expect(summary?.exerciseIds).toEqual(['lm_rotation', 'bw_copenhagen_plank', 'bb_hip_thrust']);
+  });
+});
+
 describe('the name a session was saved under', () => {
   /*
    * The name is a stamp, not a lookup: slot letters get reused every block,
