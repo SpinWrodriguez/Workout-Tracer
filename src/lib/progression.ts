@@ -1,4 +1,4 @@
-import { atCeiling, microplateHint, nextRung, snapToLadder } from './loadable';
+import { atCeiling, microplateHint, nextRung, prevRung, snapToLadder } from './loadable';
 
 /* -------------------------------------------------------------------------- */
 /*  Progression suggestion — spec Phase 2.                                    */
@@ -6,6 +6,12 @@ import { atCeiling, microplateHint, nextRung, snapToLadder } from './loadable';
 /*    hit top of rep range at RIR ≥ 2  → next rung up                         */
 /*    hit rep range at RIR 0–1         → repeat the same weight               */
 /*    missed the rep range twice       → hold, flag for review                */
+/*                                                                            */
+/*  And the bridge, for a ladder with gaps. Adjustable dumbbells go 15 then    */
+/*  18: a 20% jump that turns 12 shoulder-press reps into 6. Above            */
+/*  BRIDGE_JUMP the step starts as one set at the new weight and the rest at   */
+/*  the old one; a missed step up, of any size, does the same instead of      */
+/*  repeating a weight that was just failed.                                  */
 /*                                                                            */
 /*  The suggestion always lands on a real rung, so it can never prescribe a    */
 /*  weight the rack cannot make.                                              */
@@ -46,7 +52,19 @@ export interface Progression {
   reason: string;
   /** Set when the step up is large enough to want microplates. */
   microplateNote?: string;
+  /**
+   * Bridging a big jump: the first set at `suggestedKg`, every set after it
+   * at this lighter weight.
+   */
+  backOffKg?: number;
 }
+
+/**
+ * A step up bigger than this (as a fraction of the load) is bridged with one
+ * set at the new weight. 15 to 18 kg is 20%; a barbell's 2.5 kg at 20 kg is
+ * 12.5% and steps up whole, as before.
+ */
+export const BRIDGE_JUMP = 0.15;
 
 /** Heaviest set; ties broken by reps. Bodyweight sets fall back to reps. */
 export function topSet(sets: HistorySet[]): HistorySet | undefined {
@@ -140,6 +158,29 @@ export function suggestProgression({
 
   const missedRange = latest.reps < repRangeLow;
 
+  /*
+   * Building into a heavier weight: this session had sets below its top
+   * weight, or the session before was lighter. Either way the weight below is
+   * where the other sets belong until the top set reaches the range.
+   */
+  const below = prevRung(loaded, ladder);
+  const previousTop = sessions[1] ? topSet(sessions[1]) : undefined;
+  const bridging = sessions[0]?.some((set) => (set.weightKg ?? loaded) < loaded - 1e-9) ?? false;
+  const steppedUp =
+    previousTop?.weightKg !== undefined && previousTop.weightKg < loaded - 1e-9;
+
+  if (missedRange && !band && below !== undefined && (bridging || steppedUp)) {
+    return {
+      ...base,
+      outcome: 'repeat',
+      suggestedKg: snapToLadder(loaded, ladder),
+      backOffKg: below,
+      reason: `${latest.reps} ${unit} at ${named(loaded)} — one set there, the rest at ${named(below)}. Add a ${
+        timed ? 'second' : 'rep'
+      } to the first set each time; at ${repRangeLow}, move every set up.`,
+    };
+  }
+
   if (missedRange) {
     const previous = sessions[1] ? topSet(sessions[1]) : undefined;
     const missedTwice =
@@ -180,6 +221,16 @@ export function suggestProgression({
       };
     }
     const up = nextRung(loaded, ladder);
+    if (!band && up !== undefined && (up - loaded) / loaded > BRIDGE_JUMP) {
+      const pct = Math.round(((up - loaded) / loaded) * 100);
+      return {
+        ...base,
+        outcome: 'increase',
+        suggestedKg: up,
+        backOffKg: loaded,
+        reason: `Hit ${repRangeHigh} ${unit}${rir === undefined ? '' : ` at RIR ${rir}`} — ${named(up)} is a ${pct}% jump. One set at ${named(up)}, the rest at ${named(loaded)}.`,
+      };
+    }
     return {
       ...base,
       outcome: 'increase',

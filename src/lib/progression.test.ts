@@ -266,3 +266,68 @@ describe('advice in the exercise\'s own units', () => {
     expect(got.reason).toContain('Hit 10 reps — add a rep');
   });
 });
+
+describe('bridging a big dumbbell jump', () => {
+  /* The adjustable dumbbells go 15 then 18: a 20% jump on a shoulder press
+     turned 12 clean reps into 6, and the app then said to repeat 18 kg on
+     every set. The bridge is one set at the new weight, the rest at the old. */
+  const DUMBBELLS = ladderFor(find('db_shoulder_press'), DEFAULT_INVENTORY);
+
+  it('starts a jump over 15% as one set at the new weight', () => {
+    const history = session('s1', '2026-10-29', [
+      { weightKg: 15, reps: 12, rir: 2 },
+      { weightKg: 15, reps: 12, rir: 2 },
+      { weightKg: 15, reps: 12, rir: 2 },
+    ]);
+    const result = suggestProgression({ ladder: DUMBBELLS, history, repRangeLow: 8, repRangeHigh: 12 });
+    expect(result.outcome).toBe('increase');
+    expect(result.suggestedKg).toBe(18);
+    expect(result.backOffKg).toBe(15);
+    expect(result.reason).toMatch(/20% jump/);
+    // The bridge is the answer to the gap; microplates on a dial dumbbell are not.
+    expect(result.microplateNote).toBeUndefined();
+  });
+
+  it('keeps bridging, not repeating the failed weight, after a missed step up', () => {
+    const history = [
+      ...session('s1', '2026-10-29', [{ weightKg: 15, reps: 12, rir: 2 }]),
+      ...session('s2', '2026-11-05', [
+        { weightKg: 18, reps: 6, rir: 0 },
+        { weightKg: 18, reps: 6, rir: 0 },
+        { weightKg: 18, reps: 6, rir: 0 },
+      ]),
+    ];
+    const result = suggestProgression({ ladder: DUMBBELLS, history, repRangeLow: 8, repRangeHigh: 12 });
+    expect(result.outcome).toBe('repeat');
+    expect(result.suggestedKg).toBe(18);
+    expect(result.backOffKg).toBe(15);
+  });
+
+  it('carries on bridging from a session that was already split', () => {
+    const history = session('s2', '2026-11-05', [
+      { weightKg: 18, reps: 7, rir: 1 },
+      { weightKg: 15, reps: 11, rir: 2 },
+      { weightKg: 15, reps: 10, rir: 2 },
+    ]);
+    const result = suggestProgression({ ladder: DUMBBELLS, history, repRangeLow: 8, repRangeHigh: 12 });
+    expect(result.backOffKg).toBe(15);
+    expect(result.outcome).not.toBe('hold_review');
+  });
+
+  it('moves every set up once the top set reaches the range', () => {
+    const history = session('s3', '2026-11-12', [
+      { weightKg: 18, reps: 8, rir: 1 },
+      { weightKg: 15, reps: 12, rir: 2 },
+    ]);
+    const result = suggestProgression({ ladder: DUMBBELLS, history, repRangeLow: 8, repRangeHigh: 12 });
+    expect(result.outcome).toBe('repeat');
+    expect(result.suggestedKg).toBe(18);
+    expect(result.backOffKg).toBeUndefined();
+  });
+
+  it('leaves a small barbell step whole', () => {
+    const history = session('s1', '2026-08-30', [{ weightKg: 50, reps: 10, rir: 3 }]);
+    const result = suggestProgression({ ladder: FREE_BAR, history, repRangeLow: 8, repRangeHigh: 10 });
+    expect(result.backOffKg).toBeUndefined();
+  });
+});

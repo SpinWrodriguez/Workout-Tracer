@@ -438,8 +438,14 @@ export function SessionScreen({
               e.exerciseId === exerciseId
                 ? {
                     ...e,
-                    sets: e.sets.map((set) =>
-                      isLoggable(set) ? set : { ...set, weightKg: next.suggestedKg },
+                    sets: e.sets.map((set, index) =>
+                      isLoggable(set)
+                        ? set
+                        : {
+                            ...set,
+                            weightKg:
+                              next.backOffKg !== undefined && index > 0 ? next.backOffKg : next.suggestedKg,
+                          },
                     ),
                   }
                 : e,
@@ -706,7 +712,11 @@ export function SessionScreen({
       .find((set) => set.weightKg !== undefined);
     const weightKg = weightless
       ? undefined
-      : (suggestion?.suggestedKg ?? above?.weightKg ?? prior?.weightKg);
+      : suggestion?.backOffKg !== undefined
+        ? setIndex === 0
+          ? suggestion.suggestedKg
+          : suggestion.backOffKg
+        : (suggestion?.suggestedKg ?? above?.weightKg ?? prior?.weightKg);
     const reps = prior?.reps ?? (target ? repHigh : undefined);
     return weightKg === undefined && reps === undefined ? undefined : { weightKg, reps };
   };
@@ -994,10 +1004,9 @@ export function SessionScreen({
                 <span className="min-w-0 flex-1 text-[13px] leading-snug font-medium">
                   {suggestion.suggestedKg !== undefined && (
                     <b className="font-semibold">
-                      {suggestion.suggestedKg !== undefined && activeExercise.loadMode === 'band'
-                        ? `${kg(suggestion.suggestedKg)} band`
-                        : `${kg(suggestion.suggestedKg)} kg`}{' '}
-                      × {rangeLabel(activeExercise, repLow, repHigh)}.{' '}
+                      {suggestion.backOffKg !== undefined
+                        ? `${kg(suggestion.suggestedKg)} kg × 1 set, then ${kg(suggestion.backOffKg)} kg.`
+                        : `${activeExercise.loadMode === 'band' ? `${kg(suggestion.suggestedKg)} band` : `${kg(suggestion.suggestedKg)} kg`} × ${rangeLabel(activeExercise, repLow, repHigh)}.`}{' '}
                     </b>
                   )}
                   {suggestion.reason}
