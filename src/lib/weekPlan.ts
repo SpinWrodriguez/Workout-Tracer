@@ -62,6 +62,7 @@ export interface WeekPlan {
     /** Workouts left, and how many no longer fit before the end. */
     remaining: number;
     behind: number;
+    dropped: number;
     /** How each date in this week got its workout. */
     kinds: Record<string, DayKind>;
   };
@@ -215,8 +216,8 @@ export async function readWeekPlan(anchorDate?: string): Promise<WeekPlan | unde
             then: queueFrom(rotation, rotationNext).slice(1),
             week: rotationWeekOf(rotation, today),
             ...(() => {
-              const { remaining, behind } = planBalance(rotation, rotationSessions, plan.dates, today);
-              return { remaining, behind };
+              const { remaining, behind, dropped } = planBalance(rotation, rotationSessions, plan.dates, today);
+              return { remaining, behind, dropped };
             })(),
             kinds,
           },

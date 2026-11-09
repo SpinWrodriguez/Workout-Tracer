@@ -225,8 +225,11 @@ describe('what the coach is sent', () => {
        sent, because it reasoned from its own narrative instead of re-reading.
        It is a budget, not a target — raise it when a rule earns it and not to
        make room for prose. Sixth raise: the plan, so the coach reads the
-       week's dates as a forecast and the order as the thing that matters. */
-    expect(system.length).toBeLessThan(8700);
+       week's dates as a forecast and the order as the thing that matters.
+       Seventh: what today's screen shows and how a skip is counted, after
+       it named a different workout for today and called a tired lifter
+       ill. */
+    expect(system.length).toBeLessThan(9000);
   });
 
   it('licenses general training knowledge, not just a read of the data', async () => {
@@ -564,9 +567,18 @@ describe('which week the question is about', () => {
     const plan = context.payload.plan as Record<string, unknown>;
     expect(plan).toMatchObject({ weekOf: 1, weeks: 8, order: ['Lower', 'Push'], next: 'Lower', then: ['Push'], usualDays: ['Mon', 'Wed', 'Fri'] });
     expect(plan.starts).toBe(`Mon ${start}`);
+    /* What today's screen says, and the count of skipped workouts: the two
+       facts it argued with the screen about. 'rest' on a day the plan has
+       nothing for; both are numbers it must read, not work out. */
+    expect(['Lower', 'Push', 'rest']).toContain(plan.today);
+    expect(typeof plan.behind).toBe('number');
+    expect(plan.dropped).toBe(0);
     // And the prompt says how to read it.
     const { sent } = await ask([says('ok')]);
-    expect(sent[0]?.system[0]?.text ?? '').toMatch(/plan\.next is what they do next/);
+    const system = sent[0]?.system[0]?.text ?? '';
+    expect(system).toMatch(/plan\.next is what they do next/);
+    expect(system).toMatch(/plan\.today is what the app shows for today/);
+    expect(system).toMatch(/ill or tired only when they or memory said so/);
   });
 
   it('is the current week when nothing is open', async () => {
