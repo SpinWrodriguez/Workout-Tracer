@@ -10,6 +10,7 @@ import {
   queueFrom,
   readRotation,
   readRotationSessions,
+  planBalance,
   rotationWeekOf,
   type DayKind,
   type Rotation,
@@ -58,6 +59,9 @@ export interface WeekPlan {
     /** The ones after it, in order. */
     then: DaySlot[];
     week: number;
+    /** Workouts left, and how many no longer fit before the end. */
+    remaining: number;
+    behind: number;
     /** How each date in this week got its workout. */
     kinds: Record<string, DayKind>;
   };
@@ -199,6 +203,10 @@ export async function readWeekPlan(anchorDate?: string): Promise<WeekPlan | unde
             next: rotationNext,
             then: queueFrom(rotation, rotationNext).slice(1),
             week: rotationWeekOf(rotation, today),
+            ...(() => {
+              const { remaining, behind } = planBalance(rotation, rotationSessions, plan.dates, today);
+              return { remaining, behind };
+            })(),
             kinds,
           },
         }

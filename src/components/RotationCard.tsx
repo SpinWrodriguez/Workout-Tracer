@@ -4,6 +4,7 @@ import { longDate, todayIso, weekStart } from '../lib/format';
 import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
 import { tap } from '../lib/haptics';
 import {
+  planBalance,
   nextFrom,
   rotationEnd,
   rotationWeekOf,
@@ -14,6 +15,7 @@ import { HapticTick } from './HapticTick';
 import { Card, Label, SegmentedToggle } from './Layout';
 import { Sheet } from './Sheet';
 import type { WorkoutGuide } from '../lib/workoutGuide';
+import type { DatePlan } from '../lib/program';
 import type { BlockExercise, Exercise } from '../db/types';
 import { MiniMap, PlanLevels } from './PlanLevels';
 import { workoutTopMuscles } from '../lib/planLevels';
@@ -47,9 +49,12 @@ export function RotationCard({
   entries,
   exercisesById,
   golfWeekdays,
+  dates = {},
 }: {
   block: Block;
   rotation: Rotation | undefined;
+  /** This block's moved and cleared days, which change how many days are left. */
+  dates?: DatePlan;
   sessions: { date: string; slot: DaySlot }[];
   /** Every workout the block defines, in slot order. */
   slots: DaySlot[];
@@ -110,12 +115,17 @@ export function RotationCard({
 
   const week = rotationWeekOf(rotation, today);
   const next = nextFrom(rotation, sessions, today);
-  const finished = week > rotation.weeks;
+  const balance = planBalance(rotation, sessions, dates, today);
+  const past = week > rotation.weeks;
+  /* Past the last week with workouts still to do is catch-up, not done. */
+  const finished = past && balance.remaining === 0;
   const title = finished
     ? 'Plan finished'
-    : week < 1
-      ? `Plan starts ${longDate(rotation.start)}`
-      : `Plan · Week ${week} of ${rotation.weeks}`;
+    : past
+      ? `Plan · catch-up · ${balance.remaining} to go`
+      : week < 1
+        ? `Plan starts ${longDate(rotation.start)}`
+        : `Plan · Week ${week} of ${rotation.weeks}`;
 
   return (
     <Card title={title} className="mb-3">
@@ -140,9 +150,21 @@ export function RotationCard({
         ))}
       </div>
       <p className="mt-1 text-[12px] font-medium text-text-dim">
-        {longDate(rotation.start)} to {longDate(rotationEnd(rotation))}. After that the calendar
-        is empty until the next plan.
+        {longDate(rotation.start)} to {longDate(rotationEnd(rotation))}.{' '}
+        {balance.behind > 0
+          ? past
+            ? 'Catching up the skipped workouts, then the calendar is empty.'
+            : ''
+          : 'After that the calendar is empty until the next plan.'}
       </p>
+      {/* A skip pushes the plan on rather than dropping a workout, so say
+          what that costs and how to win it back. */}
+      {balance.behind > 0 && !past && (
+        <p className="mt-1.5 text-[12.5px] font-semibold" style={{ color: 'var(--color-warn)' }}>
+          {balance.behind} workout{balance.behind === 1 ? '' : 's'} behind, so the plan runs into
+          week {rotation.weeks + 1}. An extra day in any week catches one up.
+        </p>
+      )}
 
       <Label className="mt-3 block">In order</Label>
       <ol className="mt-1.5 flex flex-col gap-1.5" aria-label="Workouts in order">

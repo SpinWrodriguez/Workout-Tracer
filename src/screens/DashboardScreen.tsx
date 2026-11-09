@@ -446,7 +446,9 @@ export function DashboardScreen({
                 {program.rotation.week < 1
                   ? `starts ${WEEKDAY_LABEL[weekdayOf(program.rotation.plan.start)]}`
                   : program.rotation.week > program.rotation.plan.weeks
-                    ? 'plan finished'
+                    ? program.rotation.remaining > 0
+                      ? `catch-up · ${program.rotation.remaining} to go`
+                      : 'plan finished'
                     : `week ${program.rotation.week} of ${program.rotation.plan.weeks}`}
               </Label>
             ) : undefined

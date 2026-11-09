@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EXERCISES } from '../db/seed/exercises';
 import type { BlockExercise, DaySlot } from '../db/types';
 import { shiftIso } from './format';
-import { forecastWeek, nextAfter, nextFrom, offerFor, queueFrom, rotationEnd, rotationWeekOf, type Rotation } from './rotation';
+import { forecastWeek, nextAfter, nextFrom, offerFor, planBalance, queueFrom, rotationEnd, rotationWeekOf, type Rotation } from './rotation';
 
 const byId = new Map(EXERCISES.map((e) => [e.id, e]));
 const MON = '2026-10-12';
@@ -92,7 +92,8 @@ describe('the week', () => {
     expect(forecastWeek(input({ rotation: late }))[MON]).toBeUndefined();
     expect(forecastWeek(input({ rotation: late }))[shiftIso(MON, 2)]?.slot).toBe('A');
     const after = Array.from({ length: 7 }, (_, i) => shiftIso(rotationEnd(plan), 1 + i));
-    expect(forecastWeek(input({ weekDates: after, today: after[0] }))).toEqual({});
+    // On track: nothing after the end. A plan behind runs on; see below.
+    expect(forecastWeek(input({ weekDates: after }))).toEqual({});
   });
 
   it('counts weeks from the Monday of the start week', () => {
@@ -109,5 +110,46 @@ describe('the day sheet offer', () => {
     const base = { rotation: plan, sessions: [], dates: {}, entries, exercisesById: byId, golf, today: MON };
     expect(offerFor(shiftIso(MON, 1), base)).toMatchObject({ first: 'A', golfEve: false });
     expect(offerFor(shiftIso(MON, 4), base)).toMatchObject({ first: 'C', golfEve: true });
+  });
+});
+
+describe('a skip pushes the plan on, and says so', () => {
+  /* 8 weeks of Monday, Wednesday and Friday is 24 workouts. A skipped day
+     drops nothing: the end date simply has room for one fewer, and that one
+     runs on into week 9 until an extra day wins it back. */
+  const END = rotationEnd(plan);
+  const nextMonday = shiftIso(END, 1);
+  const lastWeek = Array.from({ length: 7 }, (_, i) => shiftIso(nextMonday, i));
+
+  it('is nothing behind with every usual day still ahead', () => {
+    expect(planBalance(plan, [], {}, MON)).toMatchObject({ target: 24, done: 0, daysLeft: 24, behind: 0 });
+  });
+
+  it('is one behind after a skipped day', () => {
+    const balance = planBalance(plan, [], {}, shiftIso(MON, 1));
+    expect(balance).toMatchObject({ remaining: 24, daysLeft: 23, behind: 1 });
+  });
+
+  it('wins it back with a workout moved onto a spare day', () => {
+    const balance = planBalance(plan, [], { [shiftIso(MON, 1)]: 'A' }, shiftIso(MON, 1));
+    expect(balance.behind).toBe(0);
+  });
+
+  it('loses a day to a cleared one', () => {
+    expect(planBalance(plan, [], { [shiftIso(MON, 2)]: null }, MON).behind).toBe(1);
+  });
+
+  it('forecasts the behind workouts into week 9, and nothing past them', () => {
+    // Two usual days skipped in week 1.
+    const today = shiftIso(MON, 3);
+    const out = forecastWeek(input({ weekDates: lastWeek, today, golf: [] }));
+    const placed = lastWeek.filter((date) => out[date] !== undefined);
+    expect(placed).toEqual([nextMonday, shiftIso(nextMonday, 2)]);
+    expect(out[shiftIso(nextMonday, 4)]).toBeUndefined();
+  });
+
+  it('shows nothing after the end when the plan is on track', () => {
+    const out = forecastWeek(input({ weekDates: lastWeek, golf: [] }));
+    expect(lastWeek.some((date) => out[date] !== undefined)).toBe(false);
   });
 });

@@ -28,8 +28,9 @@ import { sessionMinutes } from '../lib/blockValidation';
 import { shiftIso, todayIso, weekStart } from '../lib/format';
 import { realMinutes, timeFactor } from '../lib/timeModel';
 import { WEEKDAY_LABEL, weekdayOf } from '../lib/golf';
-import { readPlans, readSchedules } from '../lib/program';
+import { readPlans, readSchedules, writePlan } from '../lib/program';
 import { readRetiredExercises, setExerciseRetired } from '../db/settings';
+import { writeRotation } from '../lib/rotation';
 import { ProgramScreen } from './ProgramScreen';
 
 /*
@@ -524,6 +525,34 @@ describe('a plan as a rotation', () => {
     await ui.click(days.getByRole('button', { name: 'Thu' }));
     await waitFor(() => expect(dayButton(thu).getAttribute('aria-label')).toMatch(/Push/));
     expect(dayButton(fri).getAttribute('aria-label')).toMatch(/Push/);
+  });
+});
+
+describe('putting a week back to the plan', () => {
+  it('takes out the days moved by hand, so the order lays the week out again', async () => {
+    await seedSchedule({
+      A: { intensity: 'heavy', name: 'Lower' },
+      B: { intensity: 'heavy', name: 'Pull' },
+    });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedWorkout('B', ['bw_pull_up']);
+    const nextMonday = shiftIso(MONDAY, 7);
+    await writeRotation(BLOCK_ID, { order: ['A', 'B'], trainingDays: [1, 3, 5], start: MONDAY, weeks: 8 });
+    // Next Monday moved to Pull, Wednesday cleared.
+    await writePlan(BLOCK_ID, { [nextMonday]: 'B', [shiftIso(nextMonday, 2)]: null });
+    const { ui } = await openProgram();
+    confirmWith(true);
+
+    await ui.click(await screen.findByRole('button', { name: 'Next week' }));
+    await ui.click(await screen.findByRole('button', { name: 'Back to the plan' }));
+
+    await waitFor(async () => {
+      const dates = (await readPlans())[BLOCK_ID] ?? {};
+      expect(dates[nextMonday]).toBeUndefined();
+      expect(dates[shiftIso(nextMonday, 2)]).toBeUndefined();
+    });
+    // Nothing left to undo, so the button goes.
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Back to the plan' })).toBeNull());
   });
 });
 

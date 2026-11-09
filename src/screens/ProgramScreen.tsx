@@ -374,6 +374,27 @@ export function ProgramScreen({
     await writePlan(block.id, next);
   };
 
+  /*
+   * Under a plan: the days of this week you moved or cleared, from today on.
+   * Taking them out puts the week back to the order, starting from whatever
+   * is next after the last workout logged.
+   */
+  const movedThisWeek = rotation
+    ? week
+        .map((day) => day.date)
+        .filter((date) => date >= todayIso() && datePlan?.[date] !== undefined)
+    : [];
+  const resetWeek = async () => {
+    if (!block || movedThisWeek.length === 0) return;
+    if (!window.confirm('Put this week back to the plan? The days you moved or cleared go back to the order.')) {
+      return;
+    }
+    const current = (await readPlans())[block.id] ?? {};
+    const next = { ...current };
+    for (const date of movedThisWeek) delete next[date];
+    await writePlan(block.id, next);
+  };
+
   /** Promotes where a workout sits this week into where it always sits. */
   const makeUsual = async (slot: DaySlot, date: string) => {
     if (!block) return;
@@ -1118,6 +1139,7 @@ export function ProgramScreen({
           entries={slots ?? []}
           exercisesById={byId}
           golfWeekdays={training.golfWeekdays as never}
+          dates={datePlan ?? {}}
         />
       )}
       <Card
@@ -1160,6 +1182,19 @@ export function ProgramScreen({
         {/* Under the strip and off to the side, away from the week arrows:
             next to them it was pressed by mistake, and a cleared week is
             seven taps to put back. */}
+        {/* Under a plan the strip's only reset: undo what was moved, so the
+            order lays the week out again. */}
+        {rotation && movedThisWeek.length > 0 && (
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={() => void resetWeek()}
+              className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-text-faint"
+            >
+              Back to the plan
+            </button>
+          </div>
+        )}
         {!rotation && week.some((day) => day.plannedSlot && day.sessionIds.length === 0) && (
           <div className="mt-3 flex justify-end">
             <button

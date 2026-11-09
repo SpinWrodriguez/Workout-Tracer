@@ -174,6 +174,54 @@ export function nextFrom(rotation: Rotation, sessions: ForecastInput['sessions']
   return nextAfter(rotation, lastDoneBefore(rotation, sessions, date));
 }
 
+/* --- keeping count ------------------------------------------------------------ */
+
+/** Where the plan stands: workouts it holds, done, and days left to do them. */
+export interface PlanBalance {
+  /** Workouts the plan holds: one for every usual day of every week. */
+  target: number;
+  done: number;
+  remaining: number;
+  /** Days from today to the plan's end that will get a workout. */
+  daysLeft: number;
+  /** Workouts that no longer fit before the end: they run on past it. */
+  behind: number;
+}
+
+/** A date gets a workout: a moved one, or a usual day nobody cleared. */
+function trainsOn(rotation: Rotation, dates: DatePlan, date: string): boolean {
+  const pinned = dates[date];
+  if (pinned === null) return false;
+  if (pinned !== undefined) return true;
+  return rotation.trainingDays.includes(weekdayOf(date));
+}
+
+/**
+ * Skips push the plan forward rather than dropping workouts, so a skipped
+ * day is a workout the end date no longer has room for. That number is what
+ * runs on into week 9; an extra day in any week takes one back.
+ */
+export function planBalance(
+  rotation: Rotation,
+  sessions: ForecastInput['sessions'],
+  dates: DatePlan,
+  today = todayIso(),
+): PlanBalance {
+  const target = rotation.weeks * rotation.trainingDays.length;
+  const ours = sessions.filter((s) => s.date >= rotation.start && rotation.order.includes(s.slot));
+  const done = ours.length;
+  const remaining = Math.max(0, target - done);
+  const end = rotationEnd(rotation);
+  const trainedToday = ours.some((s) => s.date === today);
+  let date = trainedToday ? shiftIso(today, 1) : today;
+  if (date < rotation.start) date = rotation.start;
+  let daysLeft = 0;
+  for (; date <= end; date = shiftIso(date, 1)) {
+    if (trainsOn(rotation, dates, date)) daysLeft += 1;
+  }
+  return { target, done, remaining, daysLeft, behind: Math.max(0, remaining - daysLeft) };
+}
+
 /**
  * The week, date by date. Days gone by show what was logged. From today on,
  * each usual training day takes the next workout in the queue; the day before
@@ -197,6 +245,19 @@ export function forecastWeek(input: ForecastInput): Record<string, RotationDay> 
     return queue.splice(at, 1)[0];
   };
   const doneOn = new Map(sessions.map((s) => [s.date, s.slot]));
+  /* Past the end, the usual days carry on for as many workouts as the plan
+     is behind by, and then the calendar is empty. */
+  const { behind } = planBalance(rotation, sessions, dates, today);
+  const trainedToday = sessions.some(
+    (s) => s.date === today && s.date >= rotation.start && rotation.order.includes(s.slot),
+  );
+  const startOfToday = trainedToday ? shiftIso(today, 1) : today;
+  const catchUpFrom = shiftIso(end, 1) > startOfToday ? shiftIso(end, 1) : startOfToday;
+  const catchUpOrdinal = (date: string): number => {
+    let n = 0;
+    for (let d = catchUpFrom; d <= date; d = shiftIso(d, 1)) if (trainsOn(rotation, dates, d)) n += 1;
+    return n;
+  };
   let marked = false;
   for (const date of weekDates) {
     const done = doneOn.get(date);
@@ -214,8 +275,9 @@ export function forecastWeek(input: ForecastInput): Record<string, RotationDay> 
       if (at !== -1) queue.splice(at, 1);
       continue;
     }
-    if (date < rotation.start || date > end) continue;
+    if (date < rotation.start) continue;
     if (!rotation.trainingDays.includes(weekdayOf(date))) continue;
+    if (date > end && catchUpOrdinal(date) > behind) continue;
     const slot = take(date);
     if (!slot) continue;
     out[date] = { slot, kind: marked ? 'forecast' : 'next' };
