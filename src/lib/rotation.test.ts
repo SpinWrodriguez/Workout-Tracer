@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EXERCISES } from '../db/seed/exercises';
 import type { BlockExercise, DaySlot } from '../db/types';
 import { shiftIso } from './format';
-import { forecastWeek, nextAfter, nextFrom, offerFor, planBalance, queueFrom, rotationEnd, rotationWeekOf, type Rotation } from './rotation';
+import { CATCH_UP_WEEKS, catchUpsIn, forecastWeek, nextAfter, nextFrom, offerFor, planBalance, queueFrom, rotationEnd, rotationWeekOf, type Rotation } from './rotation';
 
 const byId = new Map(EXERCISES.map((e) => [e.id, e]));
 const MON = '2026-10-12';
@@ -151,5 +151,51 @@ describe('a skip pushes the plan on, and says so', () => {
   it('shows nothing after the end when the plan is on track', () => {
     const out = forecastWeek(input({ weekDates: lastWeek, golf: [] }));
     expect(lastWeek.some((date) => out[date] !== undefined)).toBe(false);
+  });
+});
+
+describe('each workout once a week', () => {
+  const five: Rotation = { ...plan, trainingDays: [1, 2, 3, 4, 5] };
+
+  it('leaves a fifth usual day empty rather than going round again', () => {
+    const out = forecastWeek(input({ rotation: five, golf: [] }));
+    expect(week.map((d) => out[d]?.slot)).toEqual(['A', 'B', 'C', 'D', undefined, undefined, undefined]);
+  });
+
+  it('does not forecast a workout the week already logged', () => {
+    const sessions = [{ date: MON, slot: 'A' as DaySlot }];
+    const out = forecastWeek(input({ rotation: five, sessions, today: shiftIso(MON, 1), golf: [] }));
+    expect(week.map((d) => out[d]?.slot)).toEqual(['A', 'B', 'C', 'D', undefined, undefined, undefined]);
+  });
+
+  it('marks a second copy placed by hand as a catch-up, after the usual one', () => {
+    const fri = shiftIso(MON, 4);
+    const out = forecastWeek(input({ dates: { [fri]: 'A' }, golf: [] }));
+    expect(out[MON]).toEqual({ slot: 'A', kind: 'next' });
+    expect(out[fri]).toEqual({ slot: 'A', kind: 'catchup' });
+    expect(catchUpsIn(out, week)).toEqual([fri]);
+  });
+
+  it('treats a copy placed before the usual day as the week\'s one copy', () => {
+    // A on Monday by hand when Wednesday would have had it: Wednesday moves on.
+    const late: Rotation = { ...plan, trainingDays: [3, 5] };
+    const out = forecastWeek(input({ rotation: late, dates: { [MON]: 'A' }, golf: [] }));
+    expect(out[MON]).toEqual({ slot: 'A', kind: 'next' });
+    expect(out[shiftIso(MON, 2)]?.slot).toBe('B');
+    expect(catchUpsIn(out, week)).toEqual([]);
+  });
+});
+
+describe('the catch-up tail has a limit', () => {
+  const END = rotationEnd(plan);
+
+  it('runs no more than the catch-up weeks past the end, and counts what is dropped', () => {
+    // Behind by more than two weeks of usual days can hold.
+    const today = shiftIso(MON, 7 * 4);
+    const balance = planBalance(plan, [], {}, today);
+    expect(balance.behind).toBe(12);
+    expect(balance.dropped).toBe(12 - CATCH_UP_WEEKS * 3);
+    const beyond = Array.from({ length: 7 }, (_, i) => shiftIso(END, CATCH_UP_WEEKS * 7 + 1 + i));
+    expect(forecastWeek(input({ weekDates: beyond, today, golf: [] }))).toEqual({});
   });
 });

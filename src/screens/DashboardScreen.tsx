@@ -57,6 +57,7 @@ function DayPanel({
   date,
   today,
   golf,
+  catchUp = false,
   isNext,
   label,
   names,
@@ -69,6 +70,8 @@ function DayPanel({
   date: string;
   today: string;
   golf: boolean;
+  /** A second go at a workout the week already holds. */
+  catchUp?: boolean;
   isNext: boolean;
   label: string;
   names: string;
@@ -110,6 +113,7 @@ function DayPanel({
           {EFFORT_WORD[day.intensity]} · {when}
           {minutes !== undefined ? ` · ${minutes} min` : ''}
           {golf ? ' · golf' : ''}
+          {catchUp ? ' · catch-up' : ''}
         </Label>
         <p className="mt-0.5 truncate text-[12px] font-medium text-text-dim">{names || '---'}</p>
       </span>
@@ -297,6 +301,7 @@ export function DashboardScreen({
         plannedSlot: planned?.slot,
         intensity: planned?.intensity,
         forecast: kind === 'forecast' || kind === 'next',
+        catchUp: kind === 'catchup',
       };
     });
   })();
@@ -471,6 +476,7 @@ export function DashboardScreen({
             date={picked}
             today={program?.today ?? todayIso()}
             golf={strip.find((d) => d.date === picked)?.golf !== undefined}
+            catchUp={program?.rotation?.kinds[picked] === 'catchup'}
             isNext={pickedDay !== undefined && pickedDay.slot === program?.next}
             label={pickedDay ? labelFor(pickedDay.slot) : ''}
             names={(pickedDay?.entries ?? [])

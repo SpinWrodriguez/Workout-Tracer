@@ -134,7 +134,11 @@ export function golfSafeSlot(
 
 /* --- the week ---------------------------------------------------------------- */
 
-export type DayKind = 'done' | 'pinned' | 'next' | 'forecast';
+/** How a date got its workout. 'catchup' is a second copy placed by hand. */
+export type DayKind = 'done' | 'pinned' | 'next' | 'forecast' | 'catchup';
+
+/** The plan may run this long past its end to catch up, and no longer. */
+export const CATCH_UP_WEEKS = 2;
 
 export interface RotationDay {
   slot: DaySlot;
@@ -186,6 +190,8 @@ export interface PlanBalance {
   daysLeft: number;
   /** Workouts that no longer fit before the end: they run on past it. */
   behind: number;
+  /** Of those, the ones that do not fit in the catch-up weeks either: lost. */
+  dropped: number;
 }
 
 /** A date gets a workout: a moved one, or a usual day nobody cleared. */
@@ -219,7 +225,13 @@ export function planBalance(
   for (; date <= end; date = shiftIso(date, 1)) {
     if (trainsOn(rotation, dates, date)) daysLeft += 1;
   }
-  return { target, done, remaining, daysLeft, behind: Math.max(0, remaining - daysLeft) };
+  const behind = Math.max(0, remaining - daysLeft);
+  let tail = 0;
+  const lastDay = shiftIso(end, CATCH_UP_WEEKS * 7);
+  for (let d = shiftIso(end, 1); d <= lastDay; d = shiftIso(d, 1)) {
+    if (trainsOn(rotation, dates, d)) tail += 1;
+  }
+  return { target, done, remaining, daysLeft, behind, dropped: Math.max(0, behind - tail) };
 }
 
 /**
@@ -234,10 +246,17 @@ export function forecastWeek(input: ForecastInput): Record<string, RotationDay> 
   const out: Record<string, RotationDay> = {};
   const end = rotationEnd(rotation);
   const first = weekDates[0] as string;
-  // Two rounds, so a week with more training days than workouts goes round
-  // again rather than running dry.
+  const last = weekDates[weekDates.length - 1] as string;
+  /*
+   * One round, and never a workout the week already holds: each workout
+   * once a week is the rule, so a fifth usual day stays empty rather than
+   * starting the order again. A second copy is only ever placed by hand,
+   * and that one is marked a catch-up.
+   */
   const from = nextFrom(rotation, sessions, today < first ? first : today);
-  const queue = [...queueFrom(rotation, from), ...queueFrom(rotation, from)];
+  const held = new Set<DaySlot>();
+  for (const s of sessions) if (s.date >= first && s.date <= last && rotation.order.includes(s.slot)) held.add(s.slot);
+  const queue = queueFrom(rotation, from).filter((s) => !held.has(s));
   const take = (date: string): DaySlot | undefined => {
     const eve = golfEveOn(date, golf, golfWeekdays);
     const at = eve ? queue.findIndex((s) => golfSafeSlot(s, entries, exercisesById)) : 0;
@@ -271,19 +290,35 @@ export function forecastWeek(input: ForecastInput): Record<string, RotationDay> 
     if (pinned !== undefined) {
       out[date] = { slot: pinned, kind: marked ? 'forecast' : 'next' };
       marked = true;
+      /* Placed before the forecast reached it: the week's one copy. Placed
+         after, it is a second copy, marked a catch-up below. */
       const at = queue.indexOf(pinned);
       if (at !== -1) queue.splice(at, 1);
       continue;
     }
     if (date < rotation.start) continue;
     if (!rotation.trainingDays.includes(weekdayOf(date))) continue;
+    if (date > shiftIso(end, CATCH_UP_WEEKS * 7)) continue;
     if (date > end && catchUpOrdinal(date) > behind) continue;
     const slot = take(date);
     if (!slot) continue;
     out[date] = { slot, kind: marked ? 'forecast' : 'next' };
     marked = true;
   }
+  /* A workout on two days of one week: the later one is the catch-up. */
+  const seen = new Set<DaySlot>();
+  for (const date of weekDates) {
+    const day = out[date];
+    if (!day) continue;
+    if (seen.has(day.slot) && day.kind !== 'done') day.kind = 'catchup';
+    seen.add(day.slot);
+  }
   return out;
+}
+
+/** The dates of a week that hold a workout the week already has. */
+export function catchUpsIn(week: Record<string, RotationDay>, weekDates: string[]): string[] {
+  return weekDates.filter((date) => week[date]?.kind === 'catchup');
 }
 
 /** The slot a day sheet should offer first, and the rest in order behind it. */

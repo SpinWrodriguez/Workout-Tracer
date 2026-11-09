@@ -294,6 +294,7 @@ export function ProgramScreen({
         // What colours the chip, now that "light" is no longer a word on it.
         intensity: plannedSlot ? (schedule?.[plannedSlot]?.intensity ?? 'heavy') : undefined,
         forecast: fc?.kind === 'forecast' || fc?.kind === 'next',
+        catchUp: fc?.kind === 'catchup',
       };
     });
   }, [anchor, golfDays, weekHistory, byId, schedule, datePlan, block, rotation, rotationSessions, slots, golfDateList, training.golfWeekdays]);
@@ -468,25 +469,36 @@ export function ProgramScreen({
         })
       : undefined;
   const editorOrder = offer ? [offer.first, ...offer.rest, ...definedSlots.filter((s) => !rotation?.order.includes(s))] : definedSlots;
+  /* One catch-up a week: a second copy of a workout the week already holds
+     can be placed by hand once, and the sheet says why a third cannot. */
+  const weekHasCatchUp = week.some((day) => day.catchUp);
   const editorSlots: DayEditorSlot[] = editorOrder.filter((s, i, a) => a.indexOf(s) === i && definedSlots.includes(s)).map((slot) => {
     const list = entriesForSlot(slots ?? [], slot);
     const onDate = dateFor(slot);
     const inPlan = rotation?.order.includes(slot) ?? false;
     const extra = rotation !== null && !inPlan;
-    const tag = !offer
-      ? undefined
-      : slot === offer.first
-        ? offer.golfEve
-          ? 'golf-safe first'
-          : 'next'
-        : inPlan && offer.golfEve
-          ? 'not before golf'
-          : inPlan && slot === offer.rest[0]
-            ? 'skip ahead'
-            : undefined;
+    const elsewhereThisWeek =
+      inPlan && week.some((day) => day.plannedSlot === slot && day.date !== editingDate);
+    const disabled = elsewhereThisWeek && weekHasCatchUp;
+    const tag = disabled
+      ? 'one catch-up a week'
+      : elsewhereThisWeek
+        ? 'catch-up'
+        : !offer
+          ? undefined
+          : slot === offer.first
+            ? offer.golfEve
+              ? 'golf-safe first'
+              : 'next'
+            : inPlan && offer.golfEve
+              ? 'not before golf'
+              : inPlan && slot === offer.rest[0]
+                ? 'skip ahead'
+                : undefined;
     return {
       ...(tag ? { tag } : {}),
       ...(extra ? { extra: true } : {}),
+      ...(disabled ? { disabled: true } : {}),
       slot,
       label: labelFor(slot),
       intensity: schedule?.[slot]?.intensity ?? 'heavy',

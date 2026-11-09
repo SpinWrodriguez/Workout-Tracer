@@ -4,6 +4,7 @@ import { longDate, todayIso, weekStart } from '../lib/format';
 import { WEEKDAY_LABEL, type Weekday } from '../lib/golf';
 import { tap } from '../lib/haptics';
 import {
+  CATCH_UP_WEEKS,
   planBalance,
   nextFrom,
   rotationEnd,
@@ -161,8 +162,12 @@ export function RotationCard({
           what that costs and how to win it back. */}
       {balance.behind > 0 && !past && (
         <p className="mt-1.5 text-[12.5px] font-semibold" style={{ color: 'var(--color-warn)' }}>
-          {balance.behind} workout{balance.behind === 1 ? '' : 's'} behind, so the plan runs into
-          week {rotation.weeks + 1}. An extra day in any week catches one up.
+          {balance.behind} workout{balance.behind === 1 ? '' : 's'} behind, so the plan runs to week{' '}
+          {Math.min(rotation.weeks + CATCH_UP_WEEKS, rotation.weeks + Math.ceil(balance.behind / Math.max(1, rotation.trainingDays.length)))}
+          . A catch-up day in any week wins one back.
+          {balance.dropped > 0
+            ? ` ${CATCH_UP_WEEKS} weeks over is the limit, so ${balance.dropped} will be dropped.`
+            : ''}
         </p>
       )}
 

@@ -27,6 +27,8 @@ export interface WeekStripDay extends WeekDay {
   intensity?: Intensity;
   /** A plan's forecast for this day, not a booking: drawn dashed. */
   forecast?: boolean;
+  /** A second copy of a workout the week already holds, placed by hand. */
+  catchUp?: boolean;
 }
 
 /*
@@ -124,6 +126,8 @@ export function WeekStrip({
                     ? `, ${labelFor(day.plannedSlot)}, ${
                         day.sessionIds.length > 0
                           ? 'done'
+                          : day.catchUp
+                          ? 'catch-up'
                           : day.forecast
                             ? 'forecast'
                             : EFFORT_WORD[day.intensity ?? 'heavy']
@@ -159,11 +163,13 @@ export function WeekStrip({
                      then, rust heavy and teal light. */
                   className={`mt-1.5 ${onMoveSlot ? 'cursor-grab' : ''} touch-none rounded-lg px-0.5 py-1 text-center text-[9px] leading-[1.15] font-bold break-words hyphens-auto select-none ${
                     drag?.slot === day.plannedSlot ? 'opacity-30' : ''
-                  } ${done ? 'bg-cta text-bg' : day.forecast ? 'text-text-dim' : ''}`}
+                  } ${done ? 'bg-cta text-bg' : day.catchUp ? 'text-volume' : day.forecast ? 'text-text-dim' : ''}`}
                   style={
                     done
                       ? undefined
-                      : day.forecast
+                      : day.catchUp
+                        ? { outline: '1.5px solid var(--color-volume)', outlineOffset: '-1.5px' }
+                        : day.forecast
                         ? { outline: '1.5px dashed var(--color-text-faint)', outlineOffset: '-1.5px' }
                         : {
                             background: EFFORT_COLOR[day.intensity ?? 'heavy'],

@@ -518,13 +518,13 @@ describe('a plan as a rotation', () => {
     expect(screen.queryByRole('button', { name: /^Do this every/ })).toBeNull();
     await ui.click(screen.getByRole('button', { name: 'Done' }));
 
-    // Adding a training day redraws the forecast: four days, three workouts,
-    // so the order goes round again. Friday is the eve of Saturday golf, so
-    // it takes the golf-safe one (bench) from the second round, not the squat.
+    // Adding a training day redraws the forecast: four days, three workouts.
+    // Each workout once a week, so Thursday takes Push and Friday stays
+    // empty rather than starting the order again.
     const days = within(screen.getByRole('group', { name: 'Days I usually train' }));
     await ui.click(days.getByRole('button', { name: 'Thu' }));
     await waitFor(() => expect(dayButton(thu).getAttribute('aria-label')).toMatch(/Push/));
-    expect(dayButton(fri).getAttribute('aria-label')).toMatch(/Push/);
+    expect(dayButton(fri).getAttribute('aria-label')).not.toMatch(/Lower|Pull|Push/);
   });
 });
 
@@ -580,8 +580,16 @@ describe('placing a workout twice in a plan week', () => {
       await within(sheet.parentElement as HTMLElement).findByRole('button', { name: /^Lower, heavy,/ }),
     );
 
-    await waitFor(() => expect(dayButton(fri).getAttribute('aria-label')).toContain('Lower'));
+    await waitFor(() => expect(dayButton(fri).getAttribute('aria-label')).toContain('Lower, catch-up'));
     expect(dayButton(mon).getAttribute('aria-label')).toContain('Lower');
+
+    // One catch-up a week: a third copy is offered greyed out, and says why.
+    await ui.click(dayButton(shiftIso(MONDAY, 10)));
+    const thuSheet = await screen.findByRole('heading', { name: 'Thu' });
+    const lower = await within(thuSheet.parentElement as HTMLElement).findByRole('button', { name: /^Lower, heavy,/ });
+    expect(lower.hasAttribute('disabled')).toBe(true);
+    expect(lower.textContent).toContain('one catch-up a week');
+    await ui.click(screen.getByRole('button', { name: 'Done' }));
     // Only the placed day is written; the rest of the week stays a forecast.
     expect(Object.keys((await readPlans())[BLOCK_ID] ?? {})).toEqual([fri]);
   });

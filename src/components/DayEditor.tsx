@@ -35,6 +35,8 @@ export interface DayEditorSlot {
   tag?: string;
   /** Outside the plan's order: listed after the plan's workouts, under a heading. */
   extra?: boolean;
+  /** Cannot go on this day, and the tag says why. */
+  disabled?: boolean;
   /**
    * The weekday this workout already occupies in the week BEING VIEWED, if it
    * is in it. Resolved from that week's plan, not the standing weekday: the
@@ -51,6 +53,7 @@ function Tile({
   tag,
   warnings,
   active,
+  disabled = false,
   onClick,
   ariaLabel,
 }: {
@@ -62,6 +65,7 @@ function Tile({
   /** A short fact worth seeing at a glance — the day this already sits on. */
   tag?: string;
   active: boolean;
+  disabled?: boolean;
   onClick: () => void;
   ariaLabel?: string;
 }) {
@@ -69,9 +73,10 @@ function Tile({
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-pressed={active}
       aria-label={ariaLabel}
-      className={`flex w-full items-stretch gap-3 overflow-hidden rounded-xl text-left ${
+      className={`flex w-full items-stretch gap-3 overflow-hidden rounded-xl text-left disabled:opacity-45 ${
         active ? 'bg-cta text-bg' : 'bg-surface-2'
       }`}
     >
@@ -207,6 +212,7 @@ export function DayEditor({
             )}
             <Tile
               accent={EFFORT_COLOR[row.intensity]}
+              disabled={row.disabled}
               title={row.label}
               detail={
                 row.exercises === 0
