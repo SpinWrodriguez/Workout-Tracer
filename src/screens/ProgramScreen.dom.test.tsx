@@ -556,6 +556,37 @@ describe('putting a week back to the plan', () => {
   });
 });
 
+describe('placing a workout twice in a plan week', () => {
+  it('keeps the first day when the same workout is put on a second', async () => {
+    /* Catching up: the plan's forecast is Monday Lower, Wednesday Pull, and
+       Friday Lower again by hand. Placing it used to take it off Monday. */
+    await seedSchedule({
+      A: { intensity: 'heavy', name: 'Lower' },
+      B: { intensity: 'heavy', name: 'Pull' },
+    });
+    await seedWorkout('A', ['bb_back_squat']);
+    await seedWorkout('B', ['bw_pull_up']);
+    await writeRotation(BLOCK_ID, { order: ['A', 'B'], trainingDays: [1, 3], start: MONDAY, weeks: 8 });
+    const { ui } = await openProgram();
+    await workoutCard('Lower');
+    await ui.click(await screen.findByRole('button', { name: 'Next week' }));
+    const mon = shiftIso(MONDAY, 7);
+    const fri = shiftIso(MONDAY, 11);
+    await waitFor(() => expect(dayButton(mon).getAttribute('aria-label')).toContain('Lower'));
+
+    await ui.click(dayButton(fri));
+    const sheet = await screen.findByRole('heading', { name: 'Fri' });
+    await ui.click(
+      await within(sheet.parentElement as HTMLElement).findByRole('button', { name: /^Lower, heavy,/ }),
+    );
+
+    await waitFor(() => expect(dayButton(fri).getAttribute('aria-label')).toContain('Lower'));
+    expect(dayButton(mon).getAttribute('aria-label')).toContain('Lower');
+    // Only the placed day is written; the rest of the week stays a forecast.
+    expect(Object.keys((await readPlans())[BLOCK_ID] ?? {})).toEqual([fri]);
+  });
+});
+
 describe('the starter week', () => {
   it('is gone — the screen is workouts and a calendar', async () => {
     await openProgram();

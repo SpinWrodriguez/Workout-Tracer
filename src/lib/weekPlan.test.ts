@@ -2,7 +2,8 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
 import type { BlockExercise, DaySlot } from '../db/types';
-import { writeSchedule } from './program';
+import { writePlan, writeSchedule } from './program';
+import { writeRotation } from './rotation';
 import { readWeekPlan } from './weekPlan';
 import { dateOfWeekday, type Weekday } from './golf';
 
@@ -163,5 +164,23 @@ describe('whose sessions count as done', () => {
     });
     const plan = await readWeekPlan();
     expect(plan?.days.find((day) => day.slot === 'A')?.done).toBe(true);
+  });
+});
+
+describe('a plan week that holds a workout twice', () => {
+  it('lists both days, and ticks off only the one that was done', async () => {
+    /* A catch-up week: A on Monday as usual, and A again on Friday by hand.
+       The week used to be read per workout, so Friday vanished from the
+       dashboard and, once Monday was logged, read as done too. */
+    await writeRotation(BLOCK, { order: ['A', 'B', 'C'], trainingDays: [1, 3, 4], start: '2026-08-31', weeks: 8 });
+    await writePlan(BLOCK, { [dateOf(5)]: 'A' });
+    await db.session.put({ id: 's1', blockId: BLOCK, daySlot: 'A', date: dateOf(1) });
+
+    const plan = await readWeekPlan();
+    const fridays = plan?.days.filter((day) => day.slot === 'A') ?? [];
+    expect(fridays.map((day) => day.date)).toEqual([dateOf(1), dateOf(5)]);
+    expect(fridays.map((day) => day.done)).toEqual([true, false]);
+    // Every workout still appears once in the shelf.
+    expect(plan?.all.filter((day) => day.slot === 'A')).toHaveLength(1);
   });
 });

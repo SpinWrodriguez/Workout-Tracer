@@ -111,7 +111,11 @@ export async function readWeekPlan(anchorDate?: string): Promise<WeekPlan | unde
    * cannot.
    */
   const weekDates = Array.from({ length: 7 }, (_, i) => shiftIso(from, i));
+  /* Where each workout first falls this week, and what each date holds. The
+     second is the one the week is read from: a catch-up week can hold the
+     same workout twice, and both days are days. */
   const dateOf = new Map<DaySlot, string>();
+  const slotOn = new Map<string, DaySlot>();
   /* A rotation forecasts the week from the order and the usual days; the
      usual-weekday pattern is only read when there is no plan. */
   const rotation = await readRotation(plan.block.id);
@@ -134,42 +138,49 @@ export async function readWeekPlan(anchorDate?: string): Promise<WeekPlan | unde
     });
     for (const date of weekDates) {
       const day = week[date];
-      if (day && !dateOf.has(day.slot)) {
-        dateOf.set(day.slot, date);
-        kinds[date] = day.kind;
-      }
+      if (!day) continue;
+      kinds[date] = day.kind;
+      slotOn.set(date, day.slot);
+      if (!dateOf.has(day.slot)) dateOf.set(day.slot, date);
     }
   } else {
     for (const date of weekDates) {
       const slot = slotForDate(plan.schedule, date, plan.dates, plan.block);
-      if (slot !== undefined && !dateOf.has(slot)) dateOf.set(slot, date);
+      if (slot === undefined) continue;
+      slotOn.set(date, slot);
+      if (!dateOf.has(slot)) dateOf.set(slot, date);
     }
   }
 
+  const dayOf = (slot: DaySlot, date: string | undefined): PlannedDay => {
+    const scheduled = plan.schedule[slot];
+    return {
+      slot,
+      // Where it is THIS week if it is in it, otherwise where it usually is.
+      weekday: date ? weekdayOf(date) : scheduled?.weekday,
+      intensity: scheduled?.intensity ?? ('heavy' as Intensity),
+      entries: entriesForSlot(plan.entries, slot),
+      date,
+      /* Done on this date under a plan, which can hold a workout twice; the
+         weekday pattern holds each once, so there it is done for the week. */
+      done: rotation ? (date !== undefined && kinds[date] === 'done') : loggedSlots.has(slot),
+      name: scheduled?.name,
+    };
+  };
+
   const all: PlannedDay[] = slots
-    .map((slot) => {
-      const scheduled = plan.schedule[slot];
-      const date = dateOf.get(slot);
-      return {
-        slot,
-        // Where it is THIS week if it is in it, otherwise where it usually is.
-        weekday: date ? weekdayOf(date) : scheduled?.weekday,
-        intensity: scheduled?.intensity ?? ('heavy' as Intensity),
-        entries: entriesForSlot(plan.entries, slot),
-        date,
-        done: loggedSlots.has(slot),
-        name: scheduled?.name,
-      };
-    })
+    .map((slot) => dayOf(slot, dateOf.get(slot)))
     // This week in date order; anything not in it trails behind.
     .sort((a, b) => (a.weekday ?? 99) - (b.weekday ?? 99) || a.slot.localeCompare(b.slot));
 
   /*
-   * The dashboard is a view of THIS week. A workout with no day in it is a
-   * thing you own, not a thing you are doing — listing it beside Monday's
-   * session says the week contains something it does not.
+   * The dashboard is a view of THIS week, date by date. A workout with no
+   * day in it is a thing you own, not a thing you are doing — and one on two
+   * days is two days.
    */
-  const days = all.filter((day) => day.date !== undefined);
+  const days = weekDates
+    .filter((date) => slotOn.has(date))
+    .map((date) => dayOf(slotOn.get(date) as DaySlot, date));
 
   /*
    * The soonest unfinished session from today onward. Falling back to any
@@ -183,7 +194,7 @@ export async function readWeekPlan(anchorDate?: string): Promise<WeekPlan | unde
   const todaySlotOf = (): DaySlot | undefined => {
     if (!rotation) return slotForDate(plan.schedule, today, plan.dates, plan.block);
     // Today's forecast if there is one; otherwise simply the next in order.
-    const onToday = [...dateOf.entries()].find(([, date]) => date === today)?.[0];
+    const onToday = slotOn.get(today);
     if (onToday && kinds[today] === 'done') return undefined;
     return onToday ?? rotationNext;
   };

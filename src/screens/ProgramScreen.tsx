@@ -351,6 +351,17 @@ export function ProgramScreen({
   const movePlanned = async (slot: DaySlot | undefined, date: string) => {
     if (!block) return;
     const current = (await readPlans())[block.id] ?? {};
+    /*
+     * Under a plan a placed day is a booking and nothing more: the forecast
+     * lays the other days out around it. The weekday-pattern write pinned
+     * the rest of the week from the OLD usual days and took the workout off
+     * any other day it sat on, so a catch-up week could never hold the same
+     * workout twice, and one move shuffled days nobody had touched.
+     */
+    if (rotation) {
+      await writePlan(block.id, { ...current, [date]: slot ?? null });
+      return;
+    }
     await writePlan(block.id, planDate(current, schedule ?? {}, weekDates, slot, date, block));
   };
 
