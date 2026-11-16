@@ -201,14 +201,14 @@ export function suggestProgression({
         ...base,
         outcome: 'hold_review',
         suggestedKg: back,
-        reason: `Missed ${repRangeLow} ${unit} twice at ${named(loaded)} — hold here and review the exercise.`,
+        reason: `Missed ${repRangeLow} ${unit} twice — hold here and review the exercise.`,
       };
     }
     return {
       ...base,
       outcome: 'repeat',
       suggestedKg: snapToLadder(loaded, ladder),
-      reason: `Short of ${repRangeLow} ${unit} — repeat ${named(loaded)}.`,
+      reason: `Short of ${repRangeLow} ${unit} — same weight again.`,
     };
   }
 
@@ -242,7 +242,7 @@ export function suggestProgression({
         outcome: 'increase',
         suggestedKg: up,
         backOffKg: loaded,
-        reason: `${hit}${rir === undefined ? '' : ` at RIR ${rir}`} — ${named(up)} is a ${pct}% jump. One set at ${named(up)}, the rest at ${named(loaded)}.`,
+        reason: `${hit}${rir === undefined ? '' : ` at RIR ${rir}`}, and the next step is a ${pct}% jump — one set at the new weight, the rest at the old.`,
       };
     }
     return {
@@ -251,8 +251,8 @@ export function suggestProgression({
       suggestedKg: up,
       reason:
         rir === undefined
-          ? `${hit} — go to ${named(up)}. No RIR logged, so this assumes it was not a grinder.`
-          : `${hit} at RIR ${rir} — go to ${named(up)}.`,
+          ? `${hit}. No RIR logged, so this assumes it was not a grinder.`
+          : `${hit} at RIR ${rir}.`,
       // Between bands a 50% jump is the product, not a gap microplates can fill.
       microplateNote: band || !plates ? undefined : microplateHint(loaded, ladder),
     };
@@ -263,8 +263,8 @@ export function suggestProgression({
     outcome: 'repeat',
     suggestedKg: snapToLadder(loaded, ladder),
     reason: hitTop
-      ? `${hit} but at RIR ${rir} — repeat ${named(loaded)} until it is not a grinder.`
-      : `In range at ${latest.reps} ${unit} — repeat ${named(loaded)} and work toward ${repRangeHigh}.`,
+      ? `${hit} but at RIR ${rir} — same weight until it is not a grinder.`
+      : `In range at ${latest.reps} ${unit} — same weight, work toward ${repRangeHigh}.`,
   };
 }
 

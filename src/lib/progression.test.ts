@@ -94,7 +94,8 @@ describe('progression along the band drawer', () => {
     });
     expect(result.outcome).toBe('increase');
     expect(result.suggestedKg).toBe(17);
-    expect(result.reason).toMatch(/the 17 kg band/);
+    // The screen names the band from suggestedKg; the reason is the why.
+    expect(result.reason).toBe('Hit 20 reps at RIR 3.');
     /* 11 → 17 is a 55% jump, which on a bar would demand microplates. Between
        bands it is just the next band; the note would be nonsense. */
     expect(result.microplateNote).toBeUndefined();
@@ -338,7 +339,9 @@ describe('what the advice says they did', () => {
     const history = session('s1', '2026-11-09', [{ weightKg: 40, reps: 12, rir: 2 }]);
     const result = suggestProgression({ ladder: [35, 40, 45, 50], history, repRangeLow: 5, repRangeHigh: 6 });
     expect(result.outcome).toBe('increase');
-    expect(result.reason).toMatch(/^Hit 12 reps, above the 5-6 range at RIR 2 — go to 45 kg/);
+    // The weight is in suggestedKg and said once by the screen; the reason is the why.
+    expect(result.suggestedKg).toBe(45);
+    expect(result.reason).toBe('Hit 12 reps, above the 5-6 range at RIR 2.');
   });
 
   it('keeps microplates for bars only', () => {
