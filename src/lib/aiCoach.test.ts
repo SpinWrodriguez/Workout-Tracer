@@ -228,8 +228,9 @@ describe('what the coach is sent', () => {
        week's dates as a forecast and the order as the thing that matters.
        Seventh: what today's screen shows and how a skip is counted, after
        it named a different workout for today and called a tired lifter
-       ill. */
-    expect(system.length).toBeLessThan(9000);
+       ill. Eighth: the weight log as weekly averages, after it said "no
+       weight history" to a lifter with a hundred weigh-ins. */
+    expect(system.length).toBeLessThan(9300);
   });
 
   it('licenses general training knowledge, not just a read of the data', async () => {
@@ -740,5 +741,32 @@ describe('binning dates into weeks, so the model never has to', () => {
     expect(weekLabelOf('2026-09-19', today)).toBe('2 weeks ago'); // the golf+gardening weekend
     expect(weekLabelOf('2026-10-05', today)).toBe('next week');
     expect(weekLabelOf('2026-10-12', today)).toBe('in 2 weeks');
+  });
+});
+
+describe('what the coach knows about body weight', () => {
+  it('sees the log as weekly averages and the four-week move, not one weigh-in', async () => {
+    const monday = weekStart(todayIso());
+    const rows = [];
+    for (let back = 0; back < 6; back += 1) {
+      const kg = 81.5 + back * 0.5; // heavier further back: a steady loss
+      rows.push({ date: shiftIso(monday, -7 * back), kg });
+      rows.push({ date: shiftIso(monday, -7 * back + 1), kg: kg + 0.2 });
+    }
+    await db.sharedBodyWeight.bulkPut(rows);
+
+    const context = await buildCoachContext(EXERCISES);
+    const weight = context.payload.bodyWeight as {
+      latestKg: number;
+      weeks: { week: string; avgKg: number; entries: number }[];
+      changeKg4w: number;
+    };
+    expect(weight.latestKg).toBe(81.7);
+    expect(weight.weeks[0]).toEqual({ week: 'this week', avgKg: 81.6, entries: 2 });
+    expect(weight.weeks[1]?.week).toBe('last week');
+    expect(weight.weeks).toHaveLength(6);
+    expect(weight.changeKg4w).toBe(-2);
+    const { sent } = await ask([says('ok')]);
+    expect(sent[0]?.system[0]?.text ?? '').toMatch(/bodyWeight\.weeks is their weigh-ins as a weekly average/);
   });
 });

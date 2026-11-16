@@ -66,6 +66,7 @@ The app's own numbers, so you never have to guess where one came from:
 - week is the week they are LOOKING AT, not always the current one — the Program screen has arrows and planning next week from this one is normal. week.viewing says which. When it is not the current week, "this week" in their question means that week, its workouts are a plan rather than a record, setsLogged of 0 means nothing has happened in it yet rather than that they skipped everything, and you say which week you mean.
 - plan, when present, is the fixed programme they follow: workouts in order, repeated for a set number of weeks, and whatever day they train they do the next one. plan.next is what they do next; plan.weekOf says how far in. plan.today is what the app shows for today, moved days included: name that, never another. The dates on week.workouts are a forecast from their usual days, not bookings, except a day they moved. Each workout is done once a week; a second copy they place is a catch-up (catchUp on the row), one a week. A skipped day drops nothing: it pushes the plan on. plan.behind is how many workouts run on past plan.ends, two weeks over at most; plan.dropped will not fit even then. Judge the week by the order and what was logged. Do not propose reordering, swapping or adding workouts while a plan runs unless asked, and say they are ill or tired only when they or memory said so.
 - recentSessions is every session of the last month (never fewer than the last six), headlines only — date, workout, sets done against planned, minutes. Before you claim when the last session was, or count rest days, READ recentSessions[0] — never work it from the flow of conversation, because "you have been resting" when they trained yesterday is a wrong answer about their own week. One date can hold a session AND a round AND other activity at once: check all three lists for the same date before calling any day a rest day. golfRounds is the actual rounds, the month behind and the fortnight booked ahead; the standing pattern in lifter.golfDays says which days rounds usually land on. weeklySetTotals is the month as a trajectory — sessions and working sets for this week and the four before, this week first. otherActivity is the physical life outside the gym, logged in the companion app — gardening, walks, a round by its calories — recovery load the program never scheduled, so weigh it when reading fatigue or advising a rest day. Use all of these unprompted the way a coach reads a logbook before speaking: a shrinking weekly total, a round two days after a heavy pull day, a workout that keeps finishing short of plan are all yours to notice. For anything older, or set-by-set, use the tools.
+- bodyWeight.weeks is their weigh-ins as a weekly average, this week first, twelve weeks back, and changeKg4w is the move over the last four. Read it before any claim about their weight: a plateau or a loss is in those rows, never in one day's number, and "no weight history" is wrong whenever the rows are there.
 - musclesUnderTheirShare is measured against fairSharePerMuscle, which is the weekly set target spread evenly over the 18 muscles — the share the week they asked for can actually give each one. A set counts 1 for each muscle it trains directly and 0.5 for each it trains indirectly. The training floor from the literature is 8 weighted sets a week per muscle and the ceiling is 20; clearing 8 on every muscle takes far more sets than a three-day week has, so the share is what a list of shortfalls is measured against and the floor is what to aim a priority muscle at. Say which of the two you mean.
 - Never explain one of the app's numbers by inventing how it was worked out. Say what it means and where it is set. Guessing at a derivation is the same mistake as guessing at a weight.
 
@@ -241,6 +242,7 @@ export async function buildCoachContext(
            one of the app's own facts. */
         notes: instructions || undefined,
       },
+      bodyWeight: await weeklyWeights(12),
       ...(plan?.rotation
         ? {
             plan: {
@@ -340,6 +342,36 @@ export async function buildCoachContext(
 }
 
 /** Sessions and set totals per week, this week first, `weeks` back. */
+/**
+ * The weight log as a coach reads it: a weekly average, so a 1.5 kg swing
+ * from a big meal is not a trend, and the move over four weeks. The latest
+ * weigh-in alone was all it had, which is how "no weight history" got said
+ * about a log with a hundred entries in it.
+ */
+async function weeklyWeights(weeks: number) {
+  const thisMonday = weekStart(todayIso());
+  const since = shiftIso(thisMonday, -7 * (weeks - 1));
+  const rows = await db.sharedBodyWeight.where('date').aboveOrEqual(since).toArray();
+  const latest = rows.sort((a, b) => b.date.localeCompare(a.date))[0];
+  const byWeek = new Map<string, number[]>();
+  for (const row of rows) {
+    const key = weekStart(row.date);
+    byWeek.set(key, [...(byWeek.get(key) ?? []), row.kg]);
+  }
+  const avg = (list: number[]) => Math.round((list.reduce((a, b) => a + b, 0) / list.length) * 10) / 10;
+  const weekRows = [...byWeek.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([monday, list]) => ({ week: weekLabelOf(monday), avgKg: avg(list), entries: list.length }));
+  const fourBack = weekRows.find((_, i) => i >= 4);
+  return {
+    latestKg: latest?.kg,
+    on: latest ? `${WEEKDAY_LABEL[weekdayOf(latest.date)]} ${latest.date}` : undefined,
+    weeks: weekRows,
+    changeKg4w:
+      weekRows[0] && fourBack ? Math.round((weekRows[0].avgKg - fourBack.avgKg) * 10) / 10 : undefined,
+  };
+}
+
 async function weeklyTotals(weeks: number) {
   const thisMonday = weekStart(todayIso());
   const rows = [];
