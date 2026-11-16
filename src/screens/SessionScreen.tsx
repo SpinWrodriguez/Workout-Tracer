@@ -694,6 +694,8 @@ export function SessionScreen({
           timed: isTimed(activeExercise),
           // And a band's advice names the next band, never microplates.
           band: activeExercise.loadMode === 'band',
+          // Only a bar takes microplates; a stack or a dial has fixed steps.
+          plates: activeExercise.station === 'free_bar' || activeExercise.station === 'smith',
         })
       : undefined;
 
@@ -717,7 +719,11 @@ export function SessionScreen({
           ? suggestion.suggestedKg
           : suggestion.backOffKg
         : (suggestion?.suggestedKg ?? above?.weightKg ?? prior?.weightKg);
-    const reps = prior?.reps ?? (target ? repHigh : undefined);
+    /* Never above the range top: a chop done for 12 last time is a power
+       move done wrong, and the row should ask for 6 fast ones, not 12. The
+       range is only known under a target; otherwise last time stands. */
+    const reps =
+      prior?.reps === undefined ? (target ? repHigh : undefined) : target ? Math.min(prior.reps, repHigh) : prior.reps;
     return weightKg === undefined && reps === undefined ? undefined : { weightKg, reps };
   };
 

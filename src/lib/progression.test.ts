@@ -331,3 +331,21 @@ describe('bridging a big dumbbell jump', () => {
     expect(result.backOffKg).toBeUndefined();
   });
 });
+
+describe('what the advice says they did', () => {
+  it('names the reps done, not the range top, and says when they were over it', () => {
+    // A chop for 5-6 fast reps, done for 12: the old line said "Hit 6 reps".
+    const history = session('s1', '2026-11-09', [{ weightKg: 40, reps: 12, rir: 2 }]);
+    const result = suggestProgression({ ladder: [35, 40, 45, 50], history, repRangeLow: 5, repRangeHigh: 6 });
+    expect(result.outcome).toBe('increase');
+    expect(result.reason).toMatch(/^Hit 12 reps, above the 5-6 range at RIR 2 — go to 45 kg/);
+  });
+
+  it('keeps microplates for bars only', () => {
+    const history = session('s1', '2026-11-09', [{ weightKg: 40, reps: 12, rir: 2 }]);
+    const stack = suggestProgression({ ladder: [35, 40, 45, 50], history, repRangeLow: 5, repRangeHigh: 6, plates: false });
+    expect(stack.microplateNote).toBeUndefined();
+    const bar = suggestProgression({ ladder: [35, 40, 45, 50], history, repRangeLow: 5, repRangeHigh: 6 });
+    expect(bar.microplateNote).toMatch(/microplates/);
+  });
+});

@@ -108,6 +108,12 @@ export interface ProgressionInput {
    * bands is normal — suggesting microplates for it would be nonsense.
    */
   band?: boolean;
+  /**
+   * False for a cable stack or dial dumbbells, where nothing can be added
+   * between the rungs: a microplate note there is advice about a bar the
+   * exercise does not use.
+   */
+  plates?: boolean;
 }
 
 export function suggestProgression({
@@ -117,6 +123,7 @@ export function suggestProgression({
   repRangeHigh = DEFAULT_REP_RANGE.high,
   timed = false,
   band = false,
+  plates = true,
 }: ProgressionInput): Progression {
   /** How a load reads back: "17 kg" on a bar, "the 17 kg band" in a drawer. */
   const named = (value: number | undefined) =>
@@ -208,6 +215,13 @@ export function suggestProgression({
   const hitTop = latest.reps >= repRangeHigh;
   const rir = latest.rir ?? (latest.rpe !== undefined ? 10 - latest.rpe : undefined);
   const fresh = rir === undefined || rir >= 2;
+  /* What they did, said as they did it: "Hit 12 reps, above the 5-6 range"
+     on a chop done for endurance, not "Hit 6 reps", which is the range top
+     and not what happened. */
+  const hit =
+    latest.reps > repRangeHigh
+      ? `Hit ${latest.reps} ${unit}, above the ${repRangeLow}-${repRangeHigh} range`
+      : `Hit ${latest.reps} ${unit}`;
 
   if (hitTop && fresh) {
     if (atCeiling(loaded, ladder)) {
@@ -228,7 +242,7 @@ export function suggestProgression({
         outcome: 'increase',
         suggestedKg: up,
         backOffKg: loaded,
-        reason: `Hit ${repRangeHigh} ${unit}${rir === undefined ? '' : ` at RIR ${rir}`} — ${named(up)} is a ${pct}% jump. One set at ${named(up)}, the rest at ${named(loaded)}.`,
+        reason: `${hit}${rir === undefined ? '' : ` at RIR ${rir}`} — ${named(up)} is a ${pct}% jump. One set at ${named(up)}, the rest at ${named(loaded)}.`,
       };
     }
     return {
@@ -237,10 +251,10 @@ export function suggestProgression({
       suggestedKg: up,
       reason:
         rir === undefined
-          ? `Hit ${repRangeHigh} ${unit} — go to ${named(up)}. No RIR logged, so this assumes it was not a grinder.`
-          : `Hit ${repRangeHigh} ${unit} at RIR ${rir} — go to ${named(up)}.`,
+          ? `${hit} — go to ${named(up)}. No RIR logged, so this assumes it was not a grinder.`
+          : `${hit} at RIR ${rir} — go to ${named(up)}.`,
       // Between bands a 50% jump is the product, not a gap microplates can fill.
-      microplateNote: band ? undefined : microplateHint(loaded, ladder),
+      microplateNote: band || !plates ? undefined : microplateHint(loaded, ladder),
     };
   }
 
@@ -249,7 +263,7 @@ export function suggestProgression({
     outcome: 'repeat',
     suggestedKg: snapToLadder(loaded, ladder),
     reason: hitTop
-      ? `Hit ${repRangeHigh} ${unit} but at RIR ${rir} — repeat ${named(loaded)} until it is not a grinder.`
+      ? `${hit} but at RIR ${rir} — repeat ${named(loaded)} until it is not a grinder.`
       : `In range at ${latest.reps} ${unit} — repeat ${named(loaded)} and work toward ${repRangeHigh}.`,
   };
 }
