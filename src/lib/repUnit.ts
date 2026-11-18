@@ -22,14 +22,25 @@ export function isTimed(exercise: Exercise | undefined): boolean {
   return exercise?.repUnit === 'seconds';
 }
 
-/** The short unit for a value already on screen: "12 reps" / "45 s". */
-export function repUnitShort(exercise: Exercise | undefined): string {
-  return isTimed(exercise) ? 's' : 'reps';
+/** True when the count is per side: one leg, one arm, one direction. */
+export function isPerSide(exercise: Exercise | undefined): boolean {
+  return exercise?.perSide === true;
 }
 
-/** The word for prose and labels: "reps" / "seconds". */
+/** " each side" where it applies, so a prescription can say it in one place. */
+export function sideSuffix(exercise: Exercise | undefined): string {
+  return isPerSide(exercise) ? ' each side' : '';
+}
+
+/** The short unit for a value already on screen: "12 reps" / "45 s" / "8 /side". */
+export function repUnitShort(exercise: Exercise | undefined): string {
+  const unit = isTimed(exercise) ? 's' : 'reps';
+  return isPerSide(exercise) ? `${unit}/side` : unit;
+}
+
+/** The word for prose and labels: "reps" / "seconds" / "reps each side". */
 export function repUnitWord(exercise: Exercise | undefined): string {
-  return isTimed(exercise) ? 'seconds' : 'reps';
+  return `${isTimed(exercise) ? 'seconds' : 'reps'}${sideSuffix(exercise)}`;
 }
 
 /** The most a prescription may be set to, in whatever unit it is counted. */
@@ -72,5 +83,5 @@ export function prescription(
   low: number,
   high: number,
 ): string {
-  return `${sets} × ${rangeLabel(exercise, low, high)}`;
+  return `${sets} × ${rangeLabel(exercise, low, high)}${sideSuffix(exercise)}`;
 }

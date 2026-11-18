@@ -250,7 +250,12 @@ export function ExerciseDetail({
         {[
           STATION_LABEL[exercise.station],
           bar !== undefined ? `bar ${bar} kg` : undefined,
-          hasLoadTranslation(exercise) ? `×${exercise.loadMultiplier.toFixed(2)} of ${CABLE_STACK_KG} kg stack` : undefined,
+          hasLoadTranslation(exercise)
+            ? exercise.station === 'cable'
+              ? `×${exercise.loadMultiplier.toFixed(2)} of ${CABLE_STACK_KG} kg stack`
+              : `×${exercise.loadMultiplier.toFixed(2)} at the hand`
+            : undefined,
+          exercise.perSide ? 'counted each side' : undefined,
           exercise.loadMode === 'band' ? 'kg is the band rating' : undefined,
           exercise.restSeconds ? `rest ${clock(exercise.restSeconds)}` : undefined,
         ]

@@ -54,7 +54,7 @@ import { SetRow, type CellField, type Ghost } from '../components/SetRow';
 import { MiniMap } from '../components/PlanLevels';
 import { FinishSheet } from '../components/FinishSheet';
 import { dayLabel } from '../lib/dayLabel';
-import { isTimed, rangeLabel, repUnitWord, stepFor } from '../lib/repUnit';
+import { isPerSide, isTimed, prescription, rangeLabel, repUnitWord, stepFor } from '../lib/repUnit';
 
 
 function outcomeColor(outcome: Progression['outcome']): string {
@@ -696,6 +696,7 @@ export function SessionScreen({
           band: activeExercise.loadMode === 'band',
           // Only a bar takes microplates; a stack or a dial has fixed steps.
           plates: activeExercise.station === 'free_bar' || activeExercise.station === 'smith',
+          perSide: isPerSide(activeExercise),
         })
       : undefined;
 
@@ -896,7 +897,7 @@ export function SessionScreen({
                 <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13.5px] font-semibold text-text-dim">
                   <span className="text-text">
                     {target
-                      ? `${activeDraftExercise.sets.length} × ${rangeLabel(activeExercise, target.repRangeLow, target.repRangeHigh)}`
+                      ? prescription(activeExercise, activeDraftExercise.sets.length, target.repRangeLow, target.repRangeHigh)
                       : `${activeDraftExercise.sets.length} set${activeDraftExercise.sets.length === 1 ? '' : 's'}`}
                   </span>
                   <span>· {STATION_LABEL[activeExercise.station].toLowerCase()}</span>
@@ -904,7 +905,10 @@ export function SessionScreen({
                     <span>· bar {barWeightFor(activeExercise, inventory)} kg</span>
                   )}
                   {hasLoadTranslation(activeExercise) && (
-                    <span className="text-strength">· ×{activeExercise.loadMultiplier.toFixed(2)} of {CABLE_STACK_KG} kg stack</span>
+                    <span className="text-strength">
+                      · ×{activeExercise.loadMultiplier.toFixed(2)}
+                      {activeExercise.station === 'cable' ? ` of ${CABLE_STACK_KG} kg stack` : ' at the hand'}
+                    </span>
                   )}
                   {activeExercise.loadMode === 'band' && <span>· kg is the band's rating</span>}
                   {activeExercise.isHinge && <span>· hinge, do it fresh</span>}

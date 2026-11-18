@@ -114,6 +114,8 @@ export interface ProgressionInput {
    * exercise does not use.
    */
   plates?: boolean;
+  /** Counted one side at a time, so the advice says "reps each side". */
+  perSide?: boolean;
 }
 
 export function suggestProgression({
@@ -124,6 +126,7 @@ export function suggestProgression({
   timed = false,
   band = false,
   plates = true,
+  perSide = false,
 }: ProgressionInput): Progression {
   /** How a load reads back: "17 kg" on a bar, "the 17 kg band" in a drawer. */
   const named = (value: number | undefined) =>
@@ -143,7 +146,7 @@ export function suggestProgression({
 
   const base = { lastKg: latest.weightKg, lastReps: latest.reps, lastRir: latest.rir };
   const loaded = latest.weightKg;
-  const unit = timed ? 'seconds' : 'reps';
+  const unit = `${timed ? 'seconds' : 'reps'}${perSide ? ' each side' : ''}`;
 
   // Unloaded work (pull-ups, planks) has no rung to move to; the rep range is
   // the progression. A band set logged without its kg lands here too, and the

@@ -135,6 +135,13 @@ export interface Exercise {
    * reps, so every existing row keeps its meaning.
    */
   repUnit?: 'reps' | 'seconds';
+  /**
+   * Done one side at a time, so the count is per side: a split squat for
+   * 8 is 8 each leg, a Pallof press for 10 is 10 each way. The prescription
+   * and the log say so, and the rep range is read per side. Absent means
+   * both sides at once, which every bilateral row already is.
+   */
+  perSide?: boolean;
   /** Drives the real time estimate, not a flat per-exercise guess. */
   restSeconds: number;
   skillLevel: SkillLevel;

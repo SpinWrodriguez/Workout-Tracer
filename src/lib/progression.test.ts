@@ -352,3 +352,12 @@ describe('what the advice says they did', () => {
     expect(bar.microplateNote).toMatch(/microplates/);
   });
 });
+
+describe('advice for a per-side exercise', () => {
+  it('counts the reps each side', () => {
+    // A scoop toss for 5-7 each side, logged as 10 a side.
+    const history = session('s1', '2026-11-16', [{ weightKg: 40, reps: 10, rir: 1 }]);
+    const result = suggestProgression({ ladder: [35, 40, 45], history, repRangeLow: 5, repRangeHigh: 7, perSide: true });
+    expect(result.reason).toMatch(/^Hit 10 reps each side, above the 5-7 range but at RIR 1/);
+  });
+});

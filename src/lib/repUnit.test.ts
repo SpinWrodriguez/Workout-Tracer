@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EXERCISES } from '../db/seed/exercises';
-import { formatDuration, isTimed, maxPrescription, prescription, stepFor } from './repUnit';
+import type { Exercise } from '../db/types';
+import { formatDuration, isTimed, maxPrescription, prescription, repUnitShort, repUnitWord, stepFor } from './repUnit';
 
 const byId = new Map(EXERCISES.map((e) => [e.id, e]));
 const find = (id: string) => {
@@ -44,5 +45,24 @@ describe('how a prescription reads', () => {
     expect(isTimed(find('bw_plank'))).toBe(true);
     expect(isTimed(find('kb_suitcase_carry'))).toBe(true);
     expect(isTimed(find('bb_back_squat'))).toBe(false);
+  });
+});
+
+describe('counted each side', () => {
+  const split = { repUnit: undefined, perSide: true } as unknown as Exercise;
+  const plank = { repUnit: 'seconds', perSide: true } as unknown as Exercise;
+
+  it('says so on the prescription, the unit and the word', () => {
+    expect(prescription(split, 3, 8, 12)).toBe('3 × 8-12 each side');
+    expect(repUnitShort(split)).toBe('reps/side');
+    expect(repUnitWord(split)).toBe('reps each side');
+    expect(prescription(plank, 2, 20, 30)).toBe('2 × 20-30 s each side');
+    expect(repUnitShort(plank)).toBe('s/side');
+  });
+
+  it('leaves a bilateral lift exactly as it was', () => {
+    const squat = {} as Exercise;
+    expect(prescription(squat, 3, 8, 10)).toBe('3 × 8-10');
+    expect(repUnitShort(squat)).toBe('reps');
   });
 });

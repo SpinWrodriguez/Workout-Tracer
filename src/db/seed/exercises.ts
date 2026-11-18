@@ -353,6 +353,7 @@ export const EXERCISES: Exercise[] = [
   /* --- Cable, single pulley (×0.49) -------------------------------------- */
   {
     id: 'cb_chop',
+    perSide: true,
     freeDbId: 'Standing_Cable_Wood_Chop',
     name: 'Chop (high→low)',
     station: 'cable',
@@ -374,6 +375,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_lift',
+    perSide: true,
     freeDbId: 'Standing_Cable_Lift',
     name: 'Lift (low→high)',
     station: 'cable',
@@ -395,6 +397,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_pallof_press',
+    perSide: true,
     freeDbId: 'Pallof_Press',
     name: 'Pallof press',
     station: 'cable',
@@ -416,6 +419,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_single_arm_row',
+    perSide: true,
     freeDbId: 'Seated_One-arm_Cable_Pulley_Rows',
     name: 'Single-arm cable row',
     station: 'cable',
@@ -765,6 +769,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'kb_single_leg_rdl',
+    perSide: true,
     freeDbId: 'Kettlebell_One-Legged_Deadlift',
     name: 'Single-leg RDL',
     station: 'kettlebell',
@@ -805,6 +810,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'kb_suitcase_carry',
+    perSide: true,
     freeDbId: 'Farmers_Walk',
     name: 'Suitcase carry',
     station: 'kettlebell',
@@ -929,6 +935,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'bw_side_plank',
+    perSide: true,
     freeDbId: 'Side_Bridge',
     name: 'Side plank',
     station: 'bodyweight',
@@ -970,6 +977,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'bw_split_squat',
+    perSide: true,
     freeDbId: 'Split_Squats',
     name: 'Split squat',
     station: 'kettlebell',
@@ -1072,6 +1080,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'bd_lateral_walk',
+    perSide: true,
     freeDbId: 'Monster_Walk',
     name: 'Band lateral walk',
     station: 'band',
@@ -1096,6 +1105,7 @@ export const EXERCISES: Exercise[] = [
      sequence, which is the one thing this app exists to protect. */
   {
     id: 'lm_rotational_press',
+    perSide: true,
     name: 'Landmine rotational press',
     station: 'landmine',
     attachment: 'landmine_handle',
@@ -1117,6 +1127,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'lm_scoop',
+    perSide: true,
     name: 'Landmine scoop toss',
     station: 'landmine',
     attachment: 'landmine_handle',
@@ -1138,6 +1149,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_rotational_row',
+    perSide: true,
     name: 'Cable row with rotation',
     station: 'cable',
     attachment: 'single_arm',
@@ -1158,6 +1170,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_pallof_rotation',
+    perSide: true,
     freeDbId: 'Pallof_Press_With_Rotation',
     name: 'Pallof press-out to rotation',
     station: 'cable',
@@ -1179,6 +1192,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_punch',
+    perSide: true,
     name: 'Standing cable punch',
     station: 'cable',
     attachment: 'single_arm',
@@ -1219,6 +1233,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'bw_side_plank_reach',
+    perSide: true,
     name: 'Side plank with reach-through',
     station: 'bodyweight',
     primaryMuscles: ['obliques'],
@@ -1348,6 +1363,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'kb_bulgarian_split',
+    perSide: true,
     name: 'Bulgarian split squat',
     station: 'kettlebell',
     primaryMuscles: ['quads', 'glutes'],
@@ -1429,6 +1445,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'kb_reverse_lunge',
+    perSide: true,
     freeDbId: 'Dumbbell_Rear_Lunge',
     name: 'Reverse lunge',
     station: 'kettlebell',
@@ -1449,6 +1466,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'kb_step_up',
+    perSide: true,
     freeDbId: 'Dumbbell_Step_Ups',
     name: 'Step-up',
     station: 'kettlebell',
@@ -1508,6 +1526,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'kb_overhead_carry',
+    perSide: true,
     name: 'Single-arm overhead carry',
     station: 'kettlebell',
     primaryMuscles: ['side_delts', 'obliques'],
@@ -1582,6 +1601,7 @@ export const EXERCISES: Exercise[] = [
    */
   {
     id: 'bw_copenhagen_plank',
+    perSide: true,
     name: 'Copenhagen plank',
     station: 'bodyweight',
     primaryMuscles: ['adductors'],
@@ -1605,6 +1625,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'kb_cossack_squat',
+    perSide: true,
     name: 'Cossack squat',
     station: 'kettlebell',
     primaryMuscles: ['adductors', 'quads'],
@@ -1633,6 +1654,7 @@ export const EXERCISES: Exercise[] = [
    * much that logging them under the parent would poison its progression.   */
   {
     id: 'lm_lunge_press',
+    perSide: true,
     name: 'Landmine lunge to press',
     station: 'landmine',
     attachment: 'landmine_handle',
@@ -1654,6 +1676,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'kb_single_leg_chop',
+    perSide: true,
     name: 'Single-leg plate chop',
     station: 'kettlebell',
     primaryMuscles: ['obliques'],
@@ -1695,6 +1718,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_split_squat_fly',
+    perSide: true,
     name: 'Split squat reverse fly',
     station: 'cable',
     attachment: 'single_arm',
@@ -1715,6 +1739,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_split_pull_through',
+    perSide: true,
     name: 'Split-stance pull-through',
     station: 'cable',
     attachment: 'single_arm',
@@ -1735,6 +1760,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_9090_row',
+    perSide: true,
     name: '90/90 single-arm row',
     station: 'cable',
     attachment: 'single_arm',
@@ -1805,6 +1831,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'db_one_arm_row',
+    perSide: true,
     freeDbId: 'One-Arm_Dumbbell_Row',
     name: 'One-arm dumbbell row',
     station: 'dumbbell',
@@ -1850,6 +1877,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'db_split_squat',
+    perSide: true,
     freeDbId: 'Split_Squat_with_Dumbbells',
     name: 'Dumbbell split squat',
     station: 'dumbbell',
@@ -2007,6 +2035,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'cb_hip_adduction',
+    perSide: true,
     freeDbId: 'Cable_Hip_Adduction',
     name: 'Cable hip adduction',
     station: 'cable',
@@ -2069,6 +2098,7 @@ export const EXERCISES: Exercise[] = [
   },
   {
     id: 'db_single_leg_calf_raise',
+    perSide: true,
     freeDbId: 'Calf_Raise_On_A_Dumbbell',
     name: 'Single-leg calf raise',
     station: 'dumbbell',
